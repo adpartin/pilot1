@@ -1,0 +1,507 @@
+# L1000 genes: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GPL20573
+rm(list=ls())
+library(tictoc)
+library(glue)
+library(dplyr)
+library(ggplot2)
+library(gplots)
+library(pheatmap)
+library(org.Hs.eg.db)
+library(reshape2)
+library(tibble)
+library(DESeq2)
+
+basedir <- "/Users/apartin/Dropbox/work/pilot1/cell-line"
+outdir <- file.path(basedir, "ccle_preproc")
+setwd(basedir)
+list.files()
+
+if (!dir.exists(outdir)) {dir.create(outdir)}
+
+datadir <- "/Users/apartin/work/jdacs/cell-line-data/ccle/from_broad_institute"
+datadir_molecular <- file.path(datadir, "current_data_11-08-2018")
+datadir_cellmeta <- file.path(datadir, "cell_line_annotations")
+datadir_drugmeta <- file.path(datadir, "pharmacological_profiling")
+
+
+# ==================
+# Load cell metadata
+# ==================
+cellmeta <- read.table(file.path(datadir_cellmeta, "CCLE_sample_info_file_2012-10-18.txt"),
+                       sep="\t", header=1, na.strings=c("NA", ""))
+# dim(cellmeta)
+# colnames(cellmeta)
+# cellmeta[1:3,]
+cellmeta <- dplyr::rename(cellmeta, "CCLEName"="CCLE.name", "CellName"="Cell.line.primary.name",
+                          "CellNameAliases"="Cell.line.aliases", "SitePrimary"="Site.Primary",
+                          "HistSubtype1"="Hist.Subtype1", "ExpressionArrays"="Expression.arrays",
+                          "SNPArrays"="SNP.arrays", "HybridCaptureSequencing"="Hybrid.Capture.Sequencing")
+# sapply(cellmeta, FUN=function(x) length(unique(x)))
+# apply(cellmeta, MARGIN=2, FUN=function(x) length(unique(x)))
+
+
+# ==================
+# Load drug metadata
+# ==================
+drugmeta <- read.table(file.path(datadir_drugmeta, "CCLE_NP24.2009_profiling_2012.02.20.csv"),
+                       sep=",", header=1, na.strings=c("NA", ""))
+# dim(drugmeta)
+# colnames(drugmeta)
+# drugmeta[1:3,]
+drugmeta <- dplyr::rename(drugmeta, "Drug"="Compound..code.or.generic.name.",
+                          "DrugBrandName"="Compound..brand.name.", "Traget"="Target.s.",
+                          "MechOfAction"="Mechanism.of.action",	"HighestPhase"="Highest.Phase")
+# apply(drugmeta, MARGIN=2, FUN=function(x) length(unique(x)))
+
+
+# ==================
+# Load response data
+# ==================
+rspdata <- read.table(file.path(datadir_drugmeta, "CCLE_NP24.2009_Drug_data_2015.02.24.csv"),
+                                sep=",", header=1, na.strings=c("NA", ""))
+# dim(rspdata)
+# colnames(rspdata)
+# rspdata[1:2,]
+rspdata <- dplyr::rename(rspdata, "CCLEName"="CCLE.Cell.Line.Name", "CellName"="Primary.Cell.Line.Name",
+                         "Drug"="Compound", "Dose_um"="Doses..uM.", "ActivityMedian"="Activity.Data..median.",
+                         "ActivitySD"="Activity.SD", "nDataPoints"="Num.Data", "EC50um"="EC50..uM.",
+                         "IC50um"="IC50..uM.")
+# apply(dplyr::select(rspdata, CCLEName, CellName, Drug), MARGIN=2,
+#       FUN=function(x) length(unique(x)))
+
+
+# ============
+# Load RNA-Seq
+# ============
+rna <- read.table(file.path(datadir_molecular, "CCLE_DepMap_18q3_RNAseq_reads_20180718.gct.txt"),
+                  sep="\t", skip=2, header=3, na.strings=c("NA", ""), check.names=F)
+dim(rna)
+colnames(rna)[1:4]
+rna[1:2, 1:4]
+# rna <- dplyr::rename(rna, "ENSG"="Name", "GeneName"="Description")
+rownames(rna) <- rna$Name
+rna <- rna[,3:ncol(rna)]
+
+# Rename ENSG genes (drop the ".") and reorder by ENSG
+# rna$ENSG <- sapply(rna$ENSG, FUN=function(s) unlist(strsplit(as.character(s), split=".", fixed=T))[1])
+# rna <- dplyr::arrange(rna, ENSG)
+rownames(rna) <- sapply(rownames(rna), FUN=function(s) unlist(strsplit(as.character(s), split=".", fixed=T))[1])
+rna <- rna[order(rownames(rna)),]
+
+# Rename samples (drop the parenthesis)
+# colnames(rna)[3:ncol(rna)] <- sapply(colnames(rna)[3:ncol(rna)],
+#                                      FUN=function(s) unlist(strsplit(s, split=" "))[1])
+colnames(rna) <- sapply(colnames(rna),
+                        FUN=function(s) unlist(strsplit(s, split=" "))[1])
+
+# library(magrittr)
+# ll <- "a-b-c-d"
+# strsplit(ll, "-") %>% sapply(extract2, 1)
+
+# Keep cell lines that were actually screened and have RNA-Seq
+cells_screened <- unique(as.vector(rspdata$CCLEName))
+cells_screened[1:5]
+usecells <- intersect(cells_screened, colnames(rna))
+# rna <- dplyr::select(rna, ENSG, GeneName, usecells)
+rna <- dplyr::select(rna, usecells)
+message("Cells screend: ", length(cells_screened))
+message("Cells screened and have RNA-Seq: ", length(usecells))
+
+# Drop genes with all zero counts
+# tmp = rna[rowSums(rna[,3:ncol(rna)])==0,]; sum(tmp[,3:ncol(tmp)])
+# rna <- rna[rowSums(rna[,3:ncol(rna)])>0,]
+rna <- rna[rowSums(rna)>0,]
+
+# Seems like we don't have meta for one cell line --> what should we do??
+# Thus, extract tissue from cell name
+colnames(rna)[1:5]
+cellmeta$CCLEName[1:5]
+message("Cells sequenced: ", ncol(rna))
+message("Cells with metadata: ", nrow(cellmeta))
+message("Intersect btw rna cells and meta cells: ", length(intersect(colnames(rna), cellmeta$CCLEName)))
+message("Cell that doesn't appear in meta: ", setdiff(colnames(rna), cellmeta$CCLEName))
+tissuetype <- sapply(colnames(rna),
+                     function(s) paste(unlist(strsplit(s, "_"))[-1], collapse="_"))
+
+
+# =============
+# Gene mappings
+# =============
+# ----------------------------------------------------------------------------------------------
+# # Example in: https://bioconductor.org/packages/release/bioc/manuals/AnnotationDbi/man/AnnotationDbi.pdf
+# # https://www.r-bloggers.com/converting-gene-names-in-r-with-annotationdbi/
+# # http://bioinfoblog.it/2015/12/tutorial-on-working-with-genomics-data-with-bioconductor-part-i/
+# AnnotationDbi::columns(org.Hs.eg.db)
+# AnnotationDbi::keytypes(org.Hs.eg.db)
+# keys <- AnnotationDbi::keys(org.Hs.eg.db, "ENTREZID")[1:5]  # get the 1st 5 possible keys (these Entrez gene IDs)
+# length(AnnotationDbi::keys(org.Hs.eg.db, "ENTREZID"))
+# # lookup gene SYMBOL and ENSEMBL ID for the 1st 5 keys
+# AnnotationDbi::select(org.Hs.eg.db, keys=keys, columns=c("SYMBOL","ENSEMBL"))
+# 
+# # get keys based on ENSEMBL
+# keyensg <- AnnotationDbi::keys(org.Hs.eg.db, keytype="ENSEMBL")
+# length(keyensg)
+# keyensg[1:5]
+# 
+# keysymbl <- AnnotationDbi::keys(org.Hs.eg.db, keytype="SYMBOL")
+# length(keysymbl)
+# keysymbl[1:5]
+# 
+# # lookup gene ENTREZID, SYMBOL, and ENSEMBL ID based on ENSEMBL IDs
+# gene_mapping <- AnnotationDbi::select(org.Hs.eg.db,
+#                                       keys=keyensg,
+#                                       columns=c("ENTREZID","ENSEMBL","SYMBOL"),
+#                                       keytype="ENSEMBL")
+# 
+# keys <- head(AnnotationDbi::keys(org.Hs.eg.db, "ENTREZID"))
+# keys
+# 
+# # get a default result (captures only the 1st element)
+# mapIds(org.Hs.eg.db, keys=keys, column='ALIAS', keytype='ENTREZID')
+# # or use a different option
+# mapIds(org.Hs.eg.db, keys=keys, column='ALIAS', keytype='ENTREZID',
+#        multiVals="ChcterList")
+# # or define your own function
+# last <- function(x) {x[[length(x)]]}
+# mapIds(org.Hs.eg.db, keys=keys, column='ALIAS', keytype='ENTREZID',
+#        multiVals=last)
+# ----------------------------------------------------------------------------------------------
+
+# lookup gene ENTREZID, SYMBOL, and ENSEMBL ID based on ENSEMBL IDs
+gene_mapping <- AnnotationDbi::select(org.Hs.eg.db,
+                                      keys=AnnotationDbi::keys(org.Hs.eg.db, keytype="ENSEMBL"),
+                                      columns=c("ENTREZID","ENSEMBL","SYMBOL"),
+                                      keytype="ENSEMBL")
+gene_mapping <- dplyr::arrange(gene_mapping, ENSEMBL)
+gene_mapping[1:3,]
+sapply(gene_mapping, FUN=function(x) length(unique(x)))
+
+idx <- !(duplicated(gene_mapping$ENSEMBL) | duplicated(gene_mapping$ENTREZID))
+gene_mapping <- gene_mapping[idx,]
+sapply(gene_mapping, FUN=function(x) length(unique(x)))
+
+# Extract genes that have gene mapping
+# gene_subset <- intersect(rna$ENSG, gene_mapping$ENSEMBL)
+gene_subset <- intersect(rownames(rna), gene_mapping$ENSEMBL)
+
+# Keep the subset of uniquely mapped genes
+# rownames(rna) <- rna$ENSG
+# # rna$ENSG <- NULL
+# rna <- rna[,3:ncol(rna)]
+rna <- rna[gene_subset,]
+
+
+# ===========
+# L1000 genes
+# ===========
+l1k <- read.table(file.path(basedir, "L1000.txt"), sep="\t", header=1)
+l1k <- dplyr::rename(l1k, "ENTREZID"="ID", "SymbolLINCS"="pr_gene_symbol")
+l1k <- dplyr::select(l1k, ENTREZID, SymbolLINCS)
+l1k <- l1k[order(l1k$ENTREZID),]
+l1k <- merge(l1k, gene_mapping, by="ENTREZID")
+l1k_ <- l1k[!(l1k$SymbolLINCS==l1k$SYMBOL),]
+ldata <- rna[l1k$ENSEMBL,]
+
+
+# ========================================
+# Filter genes on expression (count) level
+# ========================================
+top_genes <- 978
+x <- apply(rna, MARGIN=1, FUN=quantile, 0.25)
+y <- x[order(x, decreasing=T)][1:top_genes]
+qdata <- rna[names(y),]
+
+rna <- qdata
+
+
+# =====================================
+# Normalize the data and apply some EDA
+# =====================================
+# Reorder the samples based on tissue type (for plotting)
+idx <- c(order(tissuetype)); tissuetype <- tissuetype[idx]
+table(tissuetype)
+rna <- rna[,idx]
+
+# Get a subset of samples
+# set.seed(0)
+# dfrna <- rna[,sample(ncol(rna), 20)]
+# dfrna <- rna[,1:50]
+
+# Boxplot
+# https://stackoverflow.com/questions/27109347/building-a-box-plot-from-all-columns-of-data-frame-with-column-names-on-x-in-ggp?lq=1
+# https://www.data-to-viz.com/caveat/boxplot.html
+# https://www.r-graph-gallery.com/264-control-ggplot2-boxplot-colors/
+# https://cran.r-project.org/web/packages/viridis/vignettes/intro-to-viridis.html
+# https://ggplot2.tidyverse.org/reference/scale_brewer.html
+# https://plot.ly/ggplot2/facet/ --> facets
+# Reshape the log scaled count data, and create colors vector
+df1 <- stack(log2(rna+1))
+df1$clrs <- as.vector(tissuetype[df1$ind])
+# df2 <- reshape2::melt(log2(rna))
+df1[1:3,]
+
+# par(mfrow=c(1,1))
+par(mfrow=c(1,1)); pdf(file.path(outdir, 'boxplot_raw_log2(counts).pdf'), width=100)
+# pdf(file.path(outdir, 'boxplot_raw_log2(counts)_facets.pdf'), width=20)
+ggplot(df1, aes(x=ind, y=values)) +  
+  # geom_violin(width=1.4) +
+  geom_boxplot(aes(fill=factor(clrs)), alpha=0.9) +
+  # geom_jitter(color="grey", size=0.7, alpha=0.5) +
+  # scale_fill_viridis(discrete=T, option="magma") +
+  ggtitle("CCLE samples (raw)") +
+  xlab("") +
+  ylab("log2(read count+1)") +
+  theme_dark() + 
+  scale_colour_brewer(palette="Set1") +
+  # theme(legend.position="bottom",
+  #       legend.direction="horizontal",
+  #       plot.title=element_text(size=11),
+  #       axis.text.x=element_text(angle=60, hjust=1))
+  theme(axis.text.x=element_text(angle=60, hjust=1))
+  # facet_wrap(~clrs)
+dev.off()
+
+
+# 
+sort(colSums(rna)[1:3])/1e6
+
+# Create DESeqDataSet object
+# I don't create coldata from cellmeta because one sample is missing in the cellmeta
+coldata <- as.data.frame(tissuetype)
+dds <- DESeq2::DESeqDataSetFromMatrix(countData = rna,
+                                      colData = coldata,
+                                      # rowRanges = 
+                                      design = ~1)  # design = ~batch + condition
+print(dds)
+is(dds) # type of object
+class(dds)
+slotNames(dds) # list of slot names
+assayNames(dds)
+
+
+# Subset the dataset
+# dds <- subset(dds, select=colData(dds)$tissuetype %in% c("BONE", "KIDNEY"))
+
+
+# ----------------------------------
+# Normalization for sequencing depth
+# ----------------------------------
+# Compute size factors
+dds <- DESeq2::estimateSizeFactors(dds)
+DESeq2::sizeFactors(dds)[1:3]  # access and print the size factors
+plot(sizeFactors(dds), colSums(counts(dds)), cex=0.1)
+abline(lm(colSums(counts(dds)) ~ sizeFactors(dds) + 0))
+
+# Compute dfs
+cnts <- DESeq2::counts(dds)
+logcnts <- log2(DESeq2::counts(dds) + 1)
+lognormcnts <- log2(DESeq2::counts(dds, normalized=TRUE) + 1)
+
+# We can also get the counts normalized with sizeFactors and log using normTransform
+# Note that assay(lognorm) and lognormcnts are the same
+lognorm <- normTransform(dds, f=log2, pc=1)
+assay(lognorm)[1:2, 1:4]
+
+# Plot raw counts of 2 samples
+plot(cnts[,1], cnts[,2], cex=0.1,
+     xlab=colnames(cnts)[1], ylab=colnames(cnts)[2], main="Raw count")
+abline(lm(cnts[,2] ~ cnts[,1] + 0))
+
+# Plot counts of 2 samples normalized with log
+plot(logcnts[,1], logcnts[,2], cex=0.1,
+     xlab=colnames(logcnts)[1], ylab=colnames(logcnts)[2], main="Log normalized count")
+abline(lm(logcnts[,2] ~ logcnts[,1] + 0))
+
+# Plot counts of 2 samples normalized with log and SizeFactors
+plot(lognormcnts[,1], lognormcnts[,2], cex=0.1,
+     xlab=colnames(lognormcnts)[1], ylab=colnames(lognormcnts)[2], main="sizeFactors normalized count")
+abline(lm(lognormcnts[,2] ~ lognormcnts[,1] + 0))
+
+
+# --- Does it show difference ---
+# Plot the same sample counts: normalized using log2 vs normalized using SizeFactors
+" We don't see much different between log2 and log2 with sizeFactors "
+logcnts[1:2, 1:4]
+lognormcnts[1:2, 1:4]
+plot(logcnts[,1], lognormcnts[,1], cex=0.1)
+abline(lm(lognormcnts[,1] ~ logcnts[,1] + 0))
+
+# Plot boxplots of a few samples
+par(mfrow=c(1,2))
+boxplot(logcnts[,1:10], main="log2(counts+1)", cex=0.1) # not normalized
+boxplot(lognormcnts[,1:10], main="norm sizeFactors", cex=0.1) # normalized  
+# -------------------------------
+
+# --------------------------
+# Stabilizing count variance
+# --------------------------
+t0 <- Sys.time()
+vsd <- varianceStabilizingTransformation(dds)
+vsd_runtime <- Sys.time() - t0
+glue("vsd run time: {vsd_runtime/60} mins")
+par(mfrow=c(1,1))
+plot(assay(vsd)[,1], assay(vsd)[,2], cex=0.1, main="VSD")
+abline(lm(assay(vsd)[,2] ~ assay(vsd)[,1] + 0))
+
+write.table(assay(vsd), file.path(outdir, "qdata_ccle_vsd.txt"), sep="\t")
+write.table(colData(vsd), file.path(outdir, "qdata_ccle_meta.txt"), sep="\t")
+
+
+pdf(file.path(outdir, "sample_vs_sample.pdf"), width=20)
+par(mfrow=c(1,3))
+xlim <- c(-0.5, 20)
+ylim <- c(-0.5, 20)  
+
+plot(logcnts[,1], logcnts[,2], cex=0.1, main="log2(counts+1)",
+     xlim=xlim, ylim=ylim, panel.first = grid())
+abline(lm(logcnts[,2] ~ logcnts[,1] + 0))
+
+plot(lognormcnts[,1], lognormcnts[,2], cex=0.1, main="sizeFactors on counts",
+     xlim=xlim, ylim=ylim, panel.first = grid())
+abline(lm(lognormcnts[,2] ~ lognormcnts[,1] + 0))
+
+plot(assay(vsd)[,1], assay(vsd)[,2], cex=0.1, main="VSD",
+     xlim=xlim, ylim=ylim, panel.first = grid())
+abline(lm(assay(vsd)[,2] ~ assay(vsd)[,1] + 0))
+dev.off()
+
+
+# t0 <- Sys.time()
+# rld <- rlog(dds)
+# rlog_runtime <- Sys.time() - t0
+# # https://stackoverflow.com/questions/46085274/is-there-a-string-formatting-operator-in-r-similar-to-pythons
+# glue("rlog run time: {rlog_runtime/60} mins")
+# plot(assay(rld)[,1], assay(rld)[,2], cex=0.1)
+# abline(lm(assay(rld)[,2] ~ assay(rld)[,1] + 0))
+
+
+# Subset the DESeqTransform
+# !!!SUPER USEFUL!!! --> that's what I tried to implement with Python
+# sf_sub <- subset(lognorm, select=colData(lognorm)$tissuetype %in% c("BONE", "KIDNEY"))
+# vsd_sub <- subset(vsd, select=colData(vsd)$tissuetype %in% c("BONE", "KIDNEY"))
+
+
+# ---
+# PCA
+# ---
+plotPCA(vsd, intgroup="tissuetype")
+# pca_data <- plotPCA(lognorm, intgroup="tissuetype", returnData=T)
+# pca_data <- plotPCA(vsd, intgroup="tissuetype", returnData=T)
+# pca_data[1:3,]
+
+
+# ----------
+# Clustering
+# ----------
+par(mfrow=c(1, 2))
+plot(hclust(dist(t(assay(vsd)))), labels=colData(vsd)$tissuetype)
+plot(hclust(dist(t(assay(rld)))), labels=colData(rld)$tissuetype)
+
+
+# -------
+# Heatmap
+# -------
+# https://davetang.org/muse/2018/05/15/making-a-heatmap-in-r-with-the-pheatmap-package/
+heatmap.2(as.matrix(assay(vsd)), 
+          scale="row", 
+          hclust=function(x) hclust(x, method="average"), 
+          distfun=function(x) as.dist((1-cor(t(x)))/2), 
+          trace="none", 
+          density="none", 
+          labRow="",
+          cexCol=0.7)
+
+topgenes <- head(rownames(resSort), 20)
+mat <- assay(rld)[topgenes,]
+mat <- mat - rowMeans(mat)
+df <- as.data.frame(colData(dds)[,c("dex","cell")])
+pheatmap(mat, annotation_col=df)
+
+pheatmap(assay(vsd))
+
+# SVA
+
+
+
+# summary(rna[,1:4])
+# stats.per.sample <- data.frame(t(do.call(cbind, lapply(rna, FUN = summary))))
+# # Add some columns to the stats per sample
+# stats.per.sample$libsum <- apply(rna, 2, sum)  # sum of the library
+# stats.per.sample$perc05 <- apply(rna, 2, quantile, 0.05)
+# stats.per.sample$perc10 <- apply(rna, 2, quantile, 0.10)
+# stats.per.sample$perc90 <- apply(rna, 2, quantile, 0.90)
+# stats.per.sample$perc95 <- apply(rna, 2, quantile, 0.95)
+# stats.per.sample$zeros <- apply(rna==0, 2, sum)
+# stats.per.sample$percent.zeros <- 100*stats.per.sample$zeros/nrow(rna)
+
+# par(mfrow=c(3,1))
+# hist(as.matrix(dfrna), col="blue", border="white", breaks=100)
+# 
+# hist(as.matrix(dfrna), col="blue", border="white",
+#      breaks=20000, xlim=c(0,2000), main="Counts per gene",
+#      xlab="Counts (truncated axis)", ylab="Number of genes", 
+#      las=1, cex.axis=0.7)
+# 
+# epsilon <- 1 # pseudo-count to avoid problems with log(0)
+# hist(as.matrix(log2(dfrna + epsilon)), breaks=100, col="blue", border="white",
+#      main="Log2-transformed counts per gene", xlab="log2(counts+1)", ylab="Number of genes", 
+#      las=1, cex.axis=0.7)
+
+
+
+# =========================================================
+# =========================================================
+# Inconsistensy btw Broad and Ours data - fibroblast
+# =========================================================
+# =========================================================
+rna <- read.table(file.path(datadir_molecular, "CCLE_DepMap_18q3_RNAseq_reads_20180718.gct.txt"),
+                  sep="\t", skip=2, header=3, na.strings=c("NA", ""), check.names=F)
+dim(rna)
+colnames(rna)[1:4]
+rna[1:2, 1:4]
+rownames(rna) <- rna$Name
+rna <- rna[,3:ncol(rna)]
+
+rownames(rna) <- sapply(rownames(rna), FUN=function(s) unlist(strsplit(as.character(s), split=".", fixed=T))[1])
+rna <- rna[order(rownames(rna)),]
+
+colnames(rna) <- sapply(colnames(rna),
+                        FUN=function(s) unlist(strsplit(s, split=" "))[1])
+# -------------------------------------------------------
+ll1 = c('HS229T', 'HS739T', 'HS840T', 'HS895T', 'RKN')
+ll2 = c('COLO699', 'COV504', 'OC316')
+# 'HS229T_LUNG'
+# 'HS729_SOFT_TISSUE'
+# 'HS840T_UPPER_AERODIGESTIVE_TRACT'
+# 'HS895T_SKIN'
+# 'RKN_OVARY'
+func <- function(x) {
+  for (i in ll1) {
+    if (grepl(i, x))
+      return(T)
+  }
+  return(F)
+}
+func('HS840T_UPPER_AERODIGESTIVE_TRACT')  
+
+# Values in rna
+colnames(rna)[sapply(colnames(rna), FUN=function(x) func(x))]
+
+# Values in response
+length(unique(rspdata$CCLEName))
+unique(rspdata$CCLEName[sapply(rspdata$CCLEName, FUN=function(x) func(x))])
+
+# Fibro
+sum(sapply(cellmeta$Histology, FUN=function(x) grepl(tolower('fib'), tolower(x))))
+# sum(sapply(cellmeta$HistSubtype1, FUN=function(x) grepl(tolower('fib'), tolower(x))))
+cellmeta[sapply(cellmeta$Histology, FUN=function(x) grepl(tolower('fib'), tolower(x))),]
+
+# RNA fibroblast
+sum(sapply(colnames(rna), FUN=function(x) grepl(tolower('fib'), tolower(x))))
+rna_fibro <- rna[,sapply(colnames(rna), FUN=function(x) grepl(tolower('fib'), tolower(x)))]
+colnames(rna_fibro)
+
+# Response fibroblast
+sum(sapply(rspdata$CCLEName, FUN=function(x) grepl(tolower('fib'), tolower(x))))
+
+
