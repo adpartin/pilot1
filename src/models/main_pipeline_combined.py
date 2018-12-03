@@ -38,7 +38,8 @@ http://blog.kaggle.com/2015/07/27/taxi-trajectory-winners-interview-1st-place-te
 - Apply clustering to rna-seq. The clusters vector will become a categorical variable. In this case
   we avoid using tissue type labels but rather use proximity in the actual feature space.
 """
-from __future__ import division, print_function
+from __future__ import division
+from __future__ import print_function
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -50,11 +51,16 @@ import datetime
 import logging
 import argparse
 import psutil
+from collections import OrderedDict
 import numpy as np
 import pandas as pd
+
+import matplotlib
+matplotlib.use('TkAgg')
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
 import seaborn as sns
-from collections import OrderedDict
 from pprint import pprint
 
 from scipy import stats
@@ -63,15 +69,19 @@ from sklearn.model_selection import train_test_split, learning_curve, KFold, Str
 
 # Utils
 file_path = os.getcwd()
-# os.path.dirname(os.path.relpath(__file__))
-utils_path = os.path.abspath(os.path.join(file_path, 'utils_py'))
-sys.path.append(utils_path)
-# import utils_all as utils
-import utils 
+file_path = os.path.join(file_path, 'src/models')
+os.chdir(file_path)
 
-DATADIR = './tidy_data_from_combined'
-FILENAME = 'tidy_data.prqt'
-OUTDIR = os.path.join(file_path, 'ml_tidy_combined')
+# DATADIR = './tidy_data_from_combined'
+# FILENAME = 'tidy_data.parquet'
+# OUTDIR = os.path.join(file_path, 'ml_tidy_combined')
+# os.makedirs(OUTDIR, exist_ok=True)
+
+# file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
+import utils_models as utils
+
+DATADIR = os.path.join(file_path, '../../data/processed')
+OUTDIR = os.path.join(file_path, '../../models/from_combined')
 os.makedirs(OUTDIR, exist_ok=True)
 
 SEED = 0
@@ -103,9 +113,9 @@ fea_prefix = {'rnaseq': 'cell_rna',
 t = datetime.datetime.now()
 t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
 t = ''.join([str(i) for i in t])
-runoutdir = os.path.join(OUTDIR, 'run_'+t)
-os.makedirs(runoutdir)
-logfilename = os.path.join(runoutdir, 'logfile.log')
+run_outdir = os.path.join(OUTDIR, 'run_'+t)
+os.makedirs(run_outdir)
+logfilename = os.path.join(run_outdir, 'logfile.log')
 logger = utils.setup_logger(logfilename=logfilename)
 
 logger.info(f'Num of system CPUs: {psutil.cpu_count()}')
@@ -155,11 +165,11 @@ data = data.sample(frac=1.0, axis=0, random_state=SEED).reset_index(drop=True)
 
 # Plots
 utils.boxplot_rsp_per_drug(df=data, target_name=target_name,
-                           path=os.path.join(runoutdir, f'{target_name}_per_drug_boxplot.png'))
+                           path=os.path.join(run_outdir, f'{target_name}_per_drug_boxplot.png'))
 utils.plot_hist(x=data[target_name], var_name=target_name,
-                path=os.path.join(runoutdir, target_name+'_hist.png'))
-utils.plot_qq(x=data[target_name], var_name=target_name, path=os.path.join(runoutdir, target_name+'_qqplot.png'))
-utils.plot_hist_drugs(x=data['DRUG'], path=os.path.join(runoutdir, 'drugs_hist.png'))
+                path=os.path.join(run_outdir, target_name+'_hist.png'))
+utils.plot_qq(x=data[target_name], var_name=target_name, path=os.path.join(run_outdir, target_name+'_qqplot.png'))
+utils.plot_hist_drugs(x=data['DRUG'], path=os.path.join(run_outdir, 'drugs_hist.png'))
 
 
 # Transform the target
@@ -273,7 +283,7 @@ plt.title(target_name+' hist')
 plt.tight_layout()
 plt.grid(True)
 plt.legend()
-plt.savefig(os.path.join(runoutdir, target_name+'_ytr_yvl_hist.png'), bbox_inches='tight')
+plt.savefig(os.path.join(run_outdir, target_name+'_ytr_yvl_hist.png'), bbox_inches='tight')
 
 
 
@@ -335,18 +345,18 @@ logger.info('Runtime: {:.2f} mins'.format(ml_runtime['rf_reg_gridsearch']/60))
 
 # Save best model
 rf_reg = rf_reg_gridsearch.best_estimator_
-joblib.dump(rf_reg, filename=os.path.join(runoutdir, 'rf_reg_hypsearch_best_model.pkl'))
+joblib.dump(rf_reg, filename=os.path.join(run_outdir, 'rf_reg_hypsearch_best_model.pkl'))
 
 # Save resutls
 rf_reg_hypsearch = pd.DataFrame(rf_reg_gridsearch.cv_results_)
-rf_reg_hypsearch.to_csv(os.path.join(runoutdir, 'rf_reg_hypsearch_summary.csv'))  # save hyperparam search results
+rf_reg_hypsearch.to_csv(os.path.join(run_outdir, 'rf_reg_hypsearch_summary.csv'))  # save hyperparam search results
 
 logger.info(f'rf_reg best score (random search): {rf_reg_gridsearch.best_score_:.3f}')
 logger.info('rf_reg best params (random search): \n{}'.format(rf_reg_gridsearch.best_params_))
 
 # Dump preds
 utils.dump_preds(model=rf_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                 path=os.path.join(runoutdir, 'rf_pred_vl_preds.csv'))
+                 path=os.path.join(run_outdir, 'rf_pred_vl_preds.csv'))
 
 
 # ------------
@@ -379,9 +389,9 @@ ml_runtime['xgb_reg'] = time.time() - t0
 logger.info('Runtime: {:.2f} mins'.format(ml_runtime['xgb_reg']/60))
 
 # Save model
-# xgb_reg.save_model(os.path.join(runoutdir, 'xgb_reg.model'))
-joblib.dump(xgb_reg, filename=os.path.join(runoutdir, 'xgb_reg_model.pkl'))
-# xgb_reg_ = joblib.load(filename=os.path.join(runoutdir, 'xgb_reg_model.pkl'))
+# xgb_reg.save_model(os.path.join(run_outdir, 'xgb_reg.model'))
+joblib.dump(xgb_reg, filename=os.path.join(run_outdir, 'xgb_reg_model.pkl'))
+# xgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'xgb_reg_model.pkl'))
 
 # Print preds
 # utils.print_scores(model=xgb_reg, xdata=xtr, ydata=ytr)
@@ -390,12 +400,12 @@ utils.print_scores(model=xgb_reg, xdata=xvl, ydata=yvl, logger=logger)
 
 # Dump preds
 utils.dump_preds(model=xgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                 path=os.path.join(runoutdir, 'xgb_pred_vl_preds.csv'))
+                 path=os.path.join(run_outdir, 'xgb_pred_vl_preds.csv'))
     
 # Plot feature importance
 xgb.plot_importance(booster=xgb_reg, max_num_features=20, grid=True, title='XGBRegressor')
 plt.tight_layout()
-plt.savefig(os.path.join(runoutdir, 'xgb_reg_importances.png'))
+plt.savefig(os.path.join(run_outdir, 'xgb_reg_importances.png'))
 
 # Plot learning curves
 xgb_results = xgb_reg.evals_result()
@@ -410,7 +420,7 @@ for m in eval_metric:
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig(os.path.join(runoutdir, 'xgb_reg_leraning_curve_'+m+'.png'))
+    plt.savefig(os.path.join(run_outdir, 'xgb_reg_leraning_curve_'+m+'.png'))
 
 
 # -------------
@@ -453,9 +463,9 @@ logger.info('Runtime: {:.2f} mins'.format(ml_runtime['lgb_reg']/60))
 # logger.info('Runtime: {:.2f} mins'.format(ml_runtime['lgb_reg']/60))
 
 # Save model
-# lgb_reg.save_model(os.path.join(runoutdir, 'lgb_'+ml_type+'_model.txt'))
-joblib.dump(lgb_reg, filename=os.path.join(runoutdir, 'lgb_reg_model.pkl'))
-# lgb_reg_ = joblib.load(filename=os.path.join(runoutdir, 'lgb_reg_model.pkl'))
+# lgb_reg.save_model(os.path.join(run_outdir, 'lgb_'+ml_type+'_model.txt'))
+joblib.dump(lgb_reg, filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
+# lgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
 
 # Print preds
 # utils.print_scores(model=lgb_reg, xdata=xtr, ydata=ytr)
@@ -464,38 +474,38 @@ utils.print_scores(model=lgb_reg, xdata=xvl, ydata=yvl, logger=logger)
 
 # Dump preds
 utils.dump_preds(model=lgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                 path=os.path.join(runoutdir, 'lgb_pred_vl_preds.csv'))
+                 path=os.path.join(run_outdir, 'lgb_pred_vl_preds.csv'))
 
 # Plot feature importance
 lgb.plot_importance(booster=lgb_reg, max_num_features=20, grid=True, title='LGBMRegressor')
 plt.tight_layout()
-plt.savefig(os.path.join(runoutdir, 'lgb_reg_importances.png'))
+plt.savefig(os.path.join(run_outdir, 'lgb_reg_importances.png'))
 
 # Plot learning curves
 # TODO: note, plot_metric didn't accept 'mae' although it's alias for 'l1' 
 # TODO: plot_metric requires dict from train(), but train returns 'lightgbm.basic.Booster'??
 # for m in ['l1', 'l2']:
 #     ax = lgb.plot_metric(booster=lgb_reg, metric=m, grid=True)
-#     plt.savefig(os.path.join(runoutdir, 'lgb_reg_leraning_curve_'+m+'.png'))
+#     plt.savefig(os.path.join(run_outdir, 'lgb_reg_leraning_curve_'+m+'.png'))
 
 
 # -------------
 # TPOTRegressor
 # -------------
-tpot_reg_checkpnt_dir = os.path.join(runoutdir, 'tpot_reg_checkpoints')
-os.makedirs(os.path.join(runoutdir, tpot_reg_checkpnt_dir))
+tpot_reg_checkpnt_dir = os.path.join(run_outdir, 'tpot_reg_checkpoints')
+os.makedirs(os.path.join(run_outdir, tpot_reg_checkpnt_dir))
 logger.info('\nTrain TPOTRegressor ...')
 tpot_reg = tpot.TPOTRegressor(generations=5, population_size=50, verbosity=2)
 t0 = time.time()
 tpot_reg.fit(xtr, ytr)
 ml_runtime['tpot_reg'] = time.time() - t0
 logger.info('Runtime: {:.2f} mins'.format(ml_runtime['tpot_reg']/60))
-tpot_reg.export(os.path.join(runoutdir, 'tpot_reg_pipeline.py'))
+tpot_reg.export(os.path.join(run_outdir, 'tpot_reg_pipeline.py'))
 logger.info(tpot_reg.score(xvl, yvl))
 
 # Dump preds
 utils.dump_preds(model=tpot_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                 path=os.path.join(runoutdir, 'tpot_reg_pred_vl_preds.csv'))
+                 path=os.path.join(run_outdir, 'tpot_reg_pred_vl_preds.csv'))
 
 
 # ========================================================================
