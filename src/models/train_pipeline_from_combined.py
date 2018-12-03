@@ -81,6 +81,7 @@ os.chdir(file_path)
 import utils_models as utils
 
 DATADIR = os.path.join(file_path, '../../data/processed')
+FILENAME = 'tidy_data.parquet'
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
 os.makedirs(OUTDIR, exist_ok=True)
 
@@ -118,6 +119,7 @@ os.makedirs(run_outdir)
 logfilename = os.path.join(run_outdir, 'logfile.log')
 logger = utils.setup_logger(logfilename=logfilename)
 
+logger.info(f'File path: {file_path}')
 logger.info(f'Num of system CPUs: {psutil.cpu_count()}')
 
 

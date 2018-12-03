@@ -38,7 +38,7 @@ import utils_data as utils
 
 
 DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
-OUTDIR = os.path.join(file_path, '../../data/processed')
+OUTDIR = os.path.join(file_path, '../../data/processed/from_combined')
 os.makedirs(OUTDIR, exist_ok=True)
 
 t0 = time.time()
