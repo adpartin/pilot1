@@ -80,8 +80,7 @@ os.chdir(file_path)
 # file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
 import utils_models as utils
 
-DATADIR = os.path.join(file_path, '../../data/processed')
-FILENAME = 'tidy_data.parquet'
+DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
 os.makedirs(OUTDIR, exist_ok=True)
 
@@ -91,6 +90,8 @@ SEED = 0
 # ========================================================================
 #       Args TODO: add to argparse
 # ========================================================================
+FILENAME = 'tidy_data_no_fibro.parquet'
+
 train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
 infer_sources = ['ccle']
 
@@ -220,7 +221,7 @@ tmp_data = data.copy()
 df_list = []
 for prefx in fea_prefix.values():
     cols = data.columns[[True if prefx in c else False for c in data.columns.tolist()]]
-    if len(cols)>0:        
+    if len(cols) > 0:        
         df = data[cols].copy()
         tmp_data.drop(columns=cols, inplace=True)
         df_list.append(df)
@@ -236,8 +237,6 @@ xdata_imputed = imputer.fit_transform(xdata_to_impute)
 xdata_imputed = pd.DataFrame(xdata_imputed, columns=cols)
 logger.info('Num features with missing values (after impute): {}'.format(sum(xdata_imputed.isna().sum() > 1)))
 
-print(tmp_data.shape)
-print(xdata_imputed.shape)
 data = pd.concat([tmp_data, xdata_imputed], axis=1)
 del xdata_to_impute, xdata_imputed
 

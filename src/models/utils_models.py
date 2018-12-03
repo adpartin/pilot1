@@ -2,71 +2,18 @@ import os
 import logging
 import numpy as np
 import pandas as pd
+
+import matplotlib
+matplotlib.use('TkAgg')
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
 import seaborn as sns
 from scipy import stats
 from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error, explained_variance_score
 
 DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
 
-
-def boxplot_rsp_per_drug(df, target_name, path='boxplot_rsp_per_drug.png'):
-    # https://seaborn.pydata.org/generated/seaborn.catplot.html
-    # https://seaborn.pydata.org/generated/seaborn.boxplot.html
-    # https://matplotlib.org/api/_as_gen/matplotlib.pyplot.boxplot.html
-    # fig, ax = plt.subplots()
-    # bp = data.boxplot(column=target_name, by='DRUG', rot=70, fontsize=10, sym='k.', return_type='both') # how to control alpha of fliers?
-    g = sns.catplot(data=df, kind='box', x='DRUG', y=target_name, showfliers=True, sym='r.') # 'sym' doesn't affect
-    g.set_xticklabels(rotation=70)
-    # ax = sns.swarmplot(data=data, x='DRUG', y='AUC', color='0.25') # takes too long
-    # ax = sns.catplot(data=data, kind='box', x='DRUG', y='AUC', hue='ctype') # takes too long
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(path, bbox_inches='tight')
-
-def plot_hist_drugs(x, name='drugs_hist', ordered=False, path='hist_drugs.png'):
-    # x = data['DRUG']
-    val_counts = x.value_counts().reset_index().rename(columns={'index': 'drug', 'DRUG': 'count'})
-    if ordered:
-        val_counts.sort_values(by='count', inplace=True)
-    else:
-        val_counts.sort_values(by='drug', inplace=True)
-    fig, ax = plt.subplots()
-    plt.barh(val_counts['drug'], val_counts['count'], color='b', align='center', alpha=0.7)
-    # g = sns.barplot(x=val_counts['count'], y=val_counts['drug'], palette='viridis')
-    # # g = sns.catplot(y='DRUG', data=data, kind='count', palette='viridis', alpha=0.9)
-    # # g = sns.catplot(y='DRUG', data=data, kind='count', order=data['DRUG'].value_counts().index, palette='viridis', alpha=0.9)
-    plt.xlabel('count')
-    plt.ylabel('drug label')
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(path, bbox_inches='tight')
-
-def plot_hist(x, var_name, bins=100, path='hist.png'):
-    (mu, sigma) = stats.norm.fit(x)
-    fig, ax = plt.subplots()
-    sns.distplot(x, bins=bins, kde=True, fit=stats.norm, 
-                 hist_kws={'linewidth': 2, 'alpha': 0.6, 'color': 'b'},
-                 kde_kws={'linewidth': 2, 'alpha': 0.6, 'color': 'k'},
-                 fit_kws={'linewidth': 2, 'alpha': 0.6, 'color': 'r', 'label': f'norm fit: $\mu$={mu:.2f}, $\sigma$={sigma:.2f}'})
-    plt.grid(True)
-    plt.legend()
-    plt.title(var_name + ' hist')
-    plt.savefig(path, bbox_inches='tight')
-
-def plot_qq(x, var_name, path='qq_plot.png'):
-    # https://en.wikipedia.org/wiki/Q%E2%80%93Q_plot
-    # In Q-Q plot the axes are transformed in order to make a normal distribution appear in a straight line.
-    # (a perfectly normal distribution would exactly follow a line with slope = 1 and intercept = 0).
-    # The theoretical quantiles are placed along the x-axis. That is, the x-axis is not our data, it's simply
-    # an expectation of where our data should have been if it were normal.
-    # The actual data is plotted along the y-axis.
-    fig, ax = plt.subplots()
-    res = stats.probplot(x, dist='norm', fit=True, plot=plt)
-    plt.title('Q-Q plot of ' + var_name)
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(path, bbox_inches='tight')
 
 def setup_logger(logfilename='logfile.log'):
     """ Create logger. Output to file and console. """
@@ -100,6 +47,73 @@ def setup_logger(logfilename='logfile.log'):
     #     log.addHandler(sh)
     return logger
 
+
+def boxplot_rsp_per_drug(df, target_name, path='boxplot_rsp_per_drug.png'):
+    """ Boxplot of response per drug. """
+    # https://seaborn.pydata.org/generated/seaborn.catplot.html
+    # https://seaborn.pydata.org/generated/seaborn.boxplot.html
+    # https://matplotlib.org/api/_as_gen/matplotlib.pyplot.boxplot.html
+    # fig, ax = plt.subplots()
+    # bp = data.boxplot(column=target_name, by='DRUG', rot=70, fontsize=10, sym='k.', return_type='both') # how to control alpha of fliers?
+    g = sns.catplot(data=df, kind='box', x='DRUG', y=target_name, showfliers=True, sym='r.') # 'sym' doesn't affect
+    g.set_xticklabels(rotation=70)
+    # ax = sns.swarmplot(data=data, x='DRUG', y='AUC', color='0.25') # takes too long
+    # ax = sns.catplot(data=data, kind='box', x='DRUG', y='AUC', hue='ctype') # takes too long
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(path, bbox_inches='tight')
+
+
+def plot_hist_drugs(x, name='drugs_hist', ordered=False, path='hist_drugs.png'):
+    """ Plot counts per drug. """
+    # x = data['DRUG']
+    val_counts = x.value_counts().reset_index().rename(columns={'index': 'drug', 'DRUG': 'count'})
+    if ordered:
+        val_counts.sort_values(by='count', inplace=True)
+    else:
+        val_counts.sort_values(by='drug', inplace=True)
+    fig, ax = plt.subplots()
+    plt.barh(val_counts['drug'], val_counts['count'], color='b', align='center', alpha=0.7)
+    # g = sns.barplot(x=val_counts['count'], y=val_counts['drug'], palette='viridis')
+    # # g = sns.catplot(y='DRUG', data=data, kind='count', palette='viridis', alpha=0.9)
+    # # g = sns.catplot(y='DRUG', data=data, kind='count', order=data['DRUG'].value_counts().index, palette='viridis', alpha=0.9)
+    plt.xlabel('count')
+    plt.ylabel('drug label')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(path, bbox_inches='tight')
+
+
+def plot_hist(x, var_name, bins=100, path='hist.png'):
+    """ Plot hist of a 1-D array x. """
+    (mu, sigma) = stats.norm.fit(x)
+    fig, ax = plt.subplots()
+    sns.distplot(x, bins=bins, kde=True, fit=stats.norm, 
+                 hist_kws={'linewidth': 2, 'alpha': 0.6, 'color': 'b'},
+                 kde_kws={'linewidth': 2, 'alpha': 0.6, 'color': 'k'},
+                 fit_kws={'linewidth': 2, 'alpha': 0.6, 'color': 'r', 'label': f'norm fit: $\mu$={mu:.2f}, $\sigma$={sigma:.2f}'})
+    plt.grid(True)
+    plt.legend()
+    plt.title(var_name + ' hist')
+    plt.savefig(path, bbox_inches='tight')
+
+
+def plot_qq(x, var_name, path='qq_plot.png'):
+    """ Q-Q plot (for response variables). """
+    # https://en.wikipedia.org/wiki/Q%E2%80%93Q_plot
+    # In Q-Q plot the axes are transformed in order to make a normal distribution appear in a straight line.
+    # (a perfectly normal distribution would exactly follow a line with slope = 1 and intercept = 0).
+    # The theoretical quantiles are placed along the x-axis. That is, the x-axis is not our data, it's simply
+    # an expectation of where our data should have been if it were normal.
+    # The actual data is plotted along the y-axis.
+    fig, ax = plt.subplots()
+    res = stats.probplot(x, dist='norm', fit=True, plot=plt)
+    plt.title('Q-Q plot of ' + var_name)
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(path, bbox_inches='tight')
+
+
 def print_scores(model, xdata, ydata, logger=None):
     preds = model.predict(xdata)
     model_r2_score = r2_score(ydata, preds)
@@ -116,6 +130,7 @@ def print_scores(model, xdata, ydata, logger=None):
         print(f'mean_absolute_error: {model_mean_abs_error:.2f}')
         print(f'median_absolute_error: {model_median_abs_error:.2f}')
         print(f'model_explained_variance_score: {model_explained_variance_score:.2f}')
+
 
 def dump_preds(model, df_data, xdata, target_name, path, model_name=None):
     """
@@ -157,10 +172,10 @@ def plot_boxplot(x, y, figsize=(15, 5), title=None, outpath=None):
     # explanation for outliers in boxplot: https://en.wikipedia.org/wiki/Interquartile_range
     """
     fig, ax = plt.subplots(figsize=figsize)
-    sns.boxplot(x=x, y=y, showfliers=True);
+    sns.boxplot(x=x, y=y, showfliers=True)
     # sns.swarmplot(x=x, y=y, color='0.25')  # swarmplot takes to long to plot!
     if title:
-        ax.set_title(title);
+        ax.set_title(title)
     ax.grid(True)
     if outpath:
         plt.savefig(fname=outpath)
@@ -186,7 +201,7 @@ def plot_density(col, split_by, df, kind='kde', bins=100, figsize=(15, 5), title
         elif kind=='hist':
             ax.hist(tmp[col], bins=bins, label=b)
     if title:
-        ax.set_title(title);
+        ax.set_title(title)
     ax.grid(True)
     if outpath:
         plt.savefig(fname=outpath) 
