@@ -154,6 +154,66 @@ def dump_preds(model, df_data, xdata, target_name, path, model_name=None):
     df_preds.to_csv(path)
 
 
+def plot_rf_fi(rf_model, figsize=(8, 5), plot_direction='h', columns=None, max_cols_plot=None,
+               color='g', title=None, errorbars=True):
+    """ Plot feature importance from a random forest.
+    Args:
+        plot_direction : direction of the bars (`v` for vertical, `h` for hrozontal)
+        columns : list of columns names (df.columns)
+        max_cols_plot (int) : number of top most important features to plot
+    Returns:
+        indices : all feature indices ordered by importance
+        fig : handle for plt figure
+    """
+    fontsize=14
+    alpha=0.7
+
+    importance = rf_model.feature_importances_
+    std = np.std([tree.feature_importances_ for tree in rf_model.estimators_], axis=0)
+    indices = np.argsort(importance)[::-1]  # feature indices ordered by importance
+    top_indices = indices[:max_cols_plot]    # get indices of top most important features
+    if columns is None:
+        columns = top_indices
+    else:
+        columns = np.array(columns)[top_indices]
+
+    # Start plotting
+    fig, ax = plt.subplots(figsize=figsize)
+    if title:
+        ax.set_title(title)
+        
+    if plot_direction=='v':
+        if errorbars:
+            ax.bar(range(len(top_indices)), importance[top_indices], color=color, align='center', alpha=alpha,
+                   yerr=std[top_indices], ecolor='black')
+        else:
+            ax.bar(range(len(top_indices)), importance[top_indices], color=color, align='center', alpha=alpha)
+        ax.set_xticks(range(len(top_indices)))
+        ax.set_xticklabels(columns, rotation='vertical', fontsize=fontsize)
+        ax.set_xlim([-1, len(top_indices)])
+        ax.set_xlabel('Feature', fontsize=fontsize)
+        ax.set_ylabel('Importance', fontsize=fontsize)
+        [tick.label.set_fontsize(fontsize-4) for tick in ax.yaxis.get_major_ticks()]
+    else:
+        if errorbars:
+            ax.barh(range(len(top_indices)), importance[top_indices], color=color, align='center', alpha=alpha,
+                    xerr=std[top_indices], ecolor='black')
+        else:
+            ax.barh(range(len(top_indices)), importance[top_indices], color=color, align='center', alpha=alpha)
+        ax.set_yticks(range(len(top_indices)))
+        ax.set_yticklabels(columns, rotation='horizontal', fontsize=fontsize)
+        ax.set_ylim([-1, len(top_indices)])
+        # ax.invert_yaxis()
+        ax.set_ylabel('Feature', fontsize=fontsize)
+        ax.set_xlabel('Importance', fontsize=fontsize)
+        [tick.label.set_fontsize(fontsize-4) for tick in ax.xaxis.get_major_ticks()]
+
+    # ax.grid()
+    # plt.tight_layout()
+
+    return indices, fig
+
+
 class HyperTunedModel():  # ModelTunedCVSearch
     # https://www.kaggle.com/spektrum/randomsearchcv-to-hyper-tune-1st-level
     pass
