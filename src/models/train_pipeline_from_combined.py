@@ -37,6 +37,12 @@ https://www.analyticsvidhya.com/blog/2015/11/8-ways-deal-continuous-variables-pr
 http://blog.kaggle.com/2015/07/27/taxi-trajectory-winners-interview-1st-place-team-%F0%9F%9A%95/
 - Apply clustering to rna-seq. The clusters vector will become a categorical variable. In this case
   we avoid using tissue type labels but rather use proximity in the actual feature space.
+
+
+Run-time problems:
+When running on Mac, lightgbm gives an error: https://github.com/dmlc/xgboost/issues/1715
+This has been solved by installing "nomkl":  conda install nomkl
+What is nomkl: https://docs.continuum.io/mkl-optimizations/
 """
 from __future__ import division
 from __future__ import print_function
@@ -56,8 +62,8 @@ import numpy as np
 import pandas as pd
 
 import matplotlib
-matplotlib.use('TkAgg')
-# matplotlib.use('Agg')
+# matplotlib.use('TkAgg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import seaborn as sns
@@ -68,16 +74,18 @@ from sklearn.preprocessing import Imputer, OneHotEncoder, OrdinalEncoder
 from sklearn.model_selection import train_test_split, learning_curve, KFold, StratifiedKFold
 
 # Utils
-file_path = os.getcwd()
-file_path = os.path.join(file_path, 'src/models')
-os.chdir(file_path)
+# file_path = os.getcwd()
+# file_path = os.path.join(file_path, 'src/models')
+# os.chdir(file_path)
 
 # DATADIR = './tidy_data_from_combined'
 # FILENAME = 'tidy_data.parquet'
 # OUTDIR = os.path.join(file_path, 'ml_tidy_combined')
 # os.makedirs(OUTDIR, exist_ok=True)
 
-# file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
+##utils_path = os.path.abspath(os.path.join(file_path, 'utils'))
+##sys.path.append(utils_path)
 import utils_models as utils
 
 DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
@@ -294,7 +302,7 @@ plt.savefig(os.path.join(run_outdir, target_name+'_ytr_yvl_hist.png'), bbox_inch
 from sklearn.ensemble import RandomForestRegressor, AdaBoostRegressor, ExtraTreesRegressor
 import xgboost as xgb
 import lightgbm as lgb
-import tpot
+# import tpot
 
 from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, ParameterGrid
@@ -304,60 +312,60 @@ from sklearn.externals import joblib
 ml_runtime = OrderedDict() # {}
 
 
-# ---------------------
-# RandomForestRegressor
-# ---------------------
-logger.info('\nTrain RandomForestRegressor ...')
-rf_reg = RandomForestRegressor(max_features='sqrt', bootstrap=True, oob_score=True,
-                               verbose=1, random_state=SEED, n_jobs=-1)
-# grid_search_params = {'n_estimators': [100, 250], # [100, 250, 500]
-#                      'max_depth': [None, 9],  # [None, 5, 9, 15]
-#                      # 'min_samples_split': [2, 6, 10],
-#                      # 'min_samples_leaf': [1, ]
-# }
-# rf_reg_gridsearch = GridSearchCV(
+# # ---------------------
+# # RandomForestRegressor
+# # ---------------------
+# logger.info('\nTrain RandomForestRegressor ...')
+# rf_reg = RandomForestRegressor(max_features='sqrt', bootstrap=True, oob_score=True,
+#                                verbose=1, random_state=SEED, n_jobs=-1)
+# # grid_search_params = {'n_estimators': [100, 250], # [100, 250, 500]
+# #                      'max_depth': [None, 9],  # [None, 5, 9, 15]
+# #                      # 'min_samples_split': [2, 6, 10],
+# #                      # 'min_samples_leaf': [1, ]
+# # }
+# # rf_reg_gridsearch = GridSearchCV(
+# #     estimator=rf_reg,
+# #     param_grid=grid_search_params,
+# #     scoring=None,
+# #     n_jobs=-1,
+# #     cv=5,
+# #     refit=True,
+# #     verbose=0,
+# # )
+# random_search_params = {'n_estimators': [100],
+#                         'max_depth': [None, 10]}
+# # random_search_params = {'n_estimators': [int(x) for x in np.linspace(start=200, stop=2000, num=10)],
+# #                         'max_depth': [None] + [int(x) for x in np.linspace(10, 110, num = 11)],
+# #                         'min_samples_split': [2, 5, 9],
+# #                         'min_samples_leaf': [1, 5, 9]}                        
+# rf_reg_gridsearch = RandomizedSearchCV(
 #     estimator=rf_reg,
-#     param_grid=grid_search_params,
-#     scoring=None,
-#     n_jobs=-1,
+#     param_distributions=random_search_params,
+#     n_iter=3,  # num of parameter settings that are sampled and used for training (num of models trained)
+#     scoring=None, # string or callable used to evaluate the predictions on the test set
+#     n_jobs=8,
 #     cv=5,
-#     refit=True,
-#     verbose=0,
-# )
-random_search_params = {'n_estimators': [100, 200],
-                        'max_depth': [None, 10]}
-# random_search_params = {'n_estimators': [int(x) for x in np.linspace(start=200, stop=2000, num=10)],
-#                         'max_depth': [None] + [int(x) for x in np.linspace(10, 110, num = 11)],
-#                         'min_samples_split': [2, 5, 9],
-#                         'min_samples_leaf': [1, 5, 9]}                        
-rf_reg_gridsearch = RandomizedSearchCV(
-    estimator=rf_reg,
-    param_distributions=random_search_params,
-    n_iter=3,  # num of parameter settings that are sampled and used for training (num of models trained)
-    scoring=None, # string or callable used to evaluate the predictions on the test set
-    n_jobs=8,
-    cv=5,
-    refit=True,  # Refit an estimator using the best found parameters on the whole dataset
-    verbose=0)
-t0 = time.time()
-rf_reg_gridsearch.fit(xtr, ytr)
-ml_runtime['rf_reg_gridsearch'] = time.time() - t0
-logger.info('Runtime: {:.2f} mins'.format(ml_runtime['rf_reg_gridsearch']/60))
+#     refit=True,  # Refit an estimator using the best found parameters on the whole dataset
+#     verbose=0)
+# t0 = time.time()
+# rf_reg_gridsearch.fit(xtr, ytr)
+# ml_runtime['rf_reg_gridsearch'] = time.time() - t0
+# logger.info('Runtime: {:.2f} mins'.format(ml_runtime['rf_reg_gridsearch']/60))
 
-# Save best model
-rf_reg = rf_reg_gridsearch.best_estimator_
-joblib.dump(rf_reg, filename=os.path.join(run_outdir, 'rf_reg_hypsearch_best_model.pkl'))
+# # Save best model
+# rf_reg = rf_reg_gridsearch.best_estimator_
+# joblib.dump(rf_reg, filename=os.path.join(run_outdir, 'rf_reg_hypsearch_best_model.pkl'))
 
-# Save resutls
-rf_reg_hypsearch = pd.DataFrame(rf_reg_gridsearch.cv_results_)
-rf_reg_hypsearch.to_csv(os.path.join(run_outdir, 'rf_reg_hypsearch_summary.csv'))  # save hyperparam search results
+# # Save resutls
+# rf_reg_hypsearch = pd.DataFrame(rf_reg_gridsearch.cv_results_)
+# rf_reg_hypsearch.to_csv(os.path.join(run_outdir, 'rf_reg_hypsearch_summary.csv'))  # save hyperparam search results
 
-logger.info(f'rf_reg best score (random search): {rf_reg_gridsearch.best_score_:.3f}')
-logger.info('rf_reg best params (random search): \n{}'.format(rf_reg_gridsearch.best_params_))
+# logger.info(f'rf_reg best score (random search): {rf_reg_gridsearch.best_score_:.3f}')
+# logger.info('rf_reg best params (random search): \n{}'.format(rf_reg_gridsearch.best_params_))
 
-# Dump preds
-utils.dump_preds(model=rf_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                 path=os.path.join(run_outdir, 'rf_pred_vl_preds.csv'))
+# # Dump preds
+# utils.dump_preds(model=rf_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
+#                  path=os.path.join(run_outdir, 'rf_pred_vl_preds.csv'))
 
 
 # ------------
@@ -401,7 +409,7 @@ utils.print_scores(model=xgb_reg, xdata=xvl, ydata=yvl, logger=logger)
 
 # Dump preds
 utils.dump_preds(model=xgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                 path=os.path.join(run_outdir, 'xgb_pred_vl_preds.csv'))
+                 path=os.path.join(run_outdir, 'xgb_vl_preds.csv'))
     
 # Plot feature importance
 xgb.plot_importance(booster=xgb_reg, max_num_features=20, grid=True, title='XGBRegressor')
@@ -475,7 +483,7 @@ utils.print_scores(model=lgb_reg, xdata=xvl, ydata=yvl, logger=logger)
 
 # Dump preds
 utils.dump_preds(model=lgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                 path=os.path.join(run_outdir, 'lgb_pred_vl_preds.csv'))
+                 path=os.path.join(run_outdir, 'lgb_vl_preds.csv'))
 
 # Plot feature importance
 lgb.plot_importance(booster=lgb_reg, max_num_features=20, grid=True, title='LGBMRegressor')
@@ -490,23 +498,29 @@ plt.savefig(os.path.join(run_outdir, 'lgb_reg_importances.png'))
 #     plt.savefig(os.path.join(run_outdir, 'lgb_reg_leraning_curve_'+m+'.png'))
 
 
-# -------------
-# TPOTRegressor
-# -------------
-tpot_reg_checkpnt_dir = os.path.join(run_outdir, 'tpot_reg_checkpoints')
-os.makedirs(os.path.join(run_outdir, tpot_reg_checkpnt_dir))
-logger.info('\nTrain TPOTRegressor ...')
-tpot_reg = tpot.TPOTRegressor(generations=5, population_size=50, verbosity=2)
-t0 = time.time()
-tpot_reg.fit(xtr, ytr)
-ml_runtime['tpot_reg'] = time.time() - t0
-logger.info('Runtime: {:.2f} mins'.format(ml_runtime['tpot_reg']/60))
-tpot_reg.export(os.path.join(run_outdir, 'tpot_reg_pipeline.py'))
-logger.info(tpot_reg.score(xvl, yvl))
+# # -------------
+# # TPOTRegressor
+# # -------------
+# tpot_reg_checkpnt_dir = os.path.join(run_outdir, 'tpot_reg_checkpoints')
+# os.makedirs(os.path.join(run_outdir, tpot_reg_checkpnt_dir))
+# logger.info('\nTrain TPOTRegressor ...')
+# tpot_reg = tpot.TPOTRegressor(generations=5, population_size=50, verbosity=2)
+# t0 = time.time()
+# tpot_reg.fit(xtr, ytr)
+# ml_runtime['tpot_reg'] = time.time() - t0
+# logger.info('Runtime: {:.2f} mins'.format(ml_runtime['tpot_reg']/60))
+# tpot_reg.export(os.path.join(run_outdir, 'tpot_reg_pipeline.py'))
+# logger.info(tpot_reg.score(xvl, yvl))
 
-# Dump preds
-utils.dump_preds(model=tpot_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                 path=os.path.join(run_outdir, 'tpot_reg_pred_vl_preds.csv'))
+# # Dump preds
+# utils.dump_preds(model=tpot_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
+#                  path=os.path.join(run_outdir, 'tpot_reg_pred_vl_preds.csv'))
+
+
+
+
+
+
 
 
 # ========================================================================
