@@ -115,10 +115,10 @@ drug_features = ['descriptors'] # [] # ['descriptors', 'fingerprints', 'descript
 other_features = [] # ['drug_labels'] # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
 
 # Models
-ml_models = ['tpot']
+ml_models = ['tpot_reg']
 
 verbose = True
-n_jobs = 8
+n_jobs = 64
 
 # Feature prefix
 fea_prefix = {'rnaseq': 'cell_rna',
@@ -574,17 +574,28 @@ if 'lgb_reg' in ml_models:
 # -------------
 # TPOTRegressor
 # -------------
+# Total evaluation pipelines:  population_size + generations × offspring_size 
 if 'tpot_reg' in ml_models:
     try:
         import tpot
     except ImportError:
         logger.error('Module not found (tpot)')
     
-    tpot_reg_checkpnt_dir = os.path.join(run_outdir, 'tpot_reg_checkpoints')
-    os.makedirs(os.path.join(run_outdir, tpot_reg_checkpnt_dir))
+    tpot_checkpoint_folder = os.path.join(run_outdir, 'tpot_reg_checkpoints')
+    os.makedirs(tpot_reg_checkpnt_dir)
 
     logger.info('\nTrain TPOTRegressor ...')
-    tpot_reg = tpot.TPOTRegressor(generations=5, population_size=50, verbosity=2)
+    tpot_reg = tpot.TPOTRegressor(generations=100,  # dflt: 100
+                                  population_size=100, # dflt: 100
+                                  offspring_size=100, # dflt: 100
+                                  scoring='neg_mean_squared_error', # dflt: 'neg_mean_squared_error'
+                                  cv=5,
+                                  n_jobs=n_jobs,
+                                  random_state=SEED,
+                                  warm_start=False,
+                                  periodic_checkpoint_folder=tpot_checkpoint_folder,
+                                  verbosity=2,
+                                  disable_update_check=True)
     t0 = time.time()
     tpot_reg.fit(xtr, ytr)
     ml_runtime['tpot_reg'] = time.time() - t0
