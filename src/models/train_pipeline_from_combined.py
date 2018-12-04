@@ -312,65 +312,54 @@ from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, ParameterG
 from sklearn.externals import joblib
 
 
-ml_runtime = OrderedDict() # {}
+train_runtime = OrderedDict() # {}
 
 
 # ---------------------
 # RandomForestRegressor
 # ---------------------
 logger.info('\nTrain RandomForestRegressor ...')
-# ----- xgboost hyper-param start
+# ----- rf hyper-param start
 rf_reg = RandomForestRegressor(max_features='sqrt', bootstrap=True, oob_score=True,
                                verbose=0, random_state=SEED, n_jobs=n_jobs)
-# grid_search_params = {'n_estimators': [100, 250], # [100, 250, 500]
-#                      'max_depth': [None, 9],  # [None, 5, 9, 15]
-#                      # 'min_samples_split': [2, 6, 10],
-#                      # 'min_samples_leaf': [1, ]
-# }
-# rf_reg_gridsearch = GridSearchCV(
-#     estimator=rf_reg,
-#     param_grid=grid_search_params,
-#     scoring=None,
-#     n_jobs=-1,
-#     cv=5,
-#     refit=True,
-#     verbose=0,
-# )
 
 random_search_params = {'n_estimators': [100, 500, 1000], # [int(x) for x in np.linspace(start=200, stop=2000, num=10)]
                         'max_depth': [None, 5, 10], # [None] + [int(x) for x in np.linspace(10, 110, num = 11)]
                         'min_samples_split': [2, 5, 9]}
-rf_reg_gridsearch = RandomizedSearchCV(
+rf_reg_randsearch = RandomizedSearchCV(
     estimator=rf_reg,
     param_distributions=random_search_params,
-    n_iter=10,  # num of parameter settings that are sampled and used for training (num of models trained)
+    n_iter=20,  # num of parameter settings that are sampled and used for training (num of models trained)
     scoring=None, # string or callable used to evaluate the predictions on the test set
     n_jobs=n_jobs,
     cv=5,
     refit=True,  # Refit an estimator using the best found parameters on the whole dataset
     verbose=0)
+
+# Run search
 t0 = time.time()
-rf_reg_gridsearch.fit(xtr, ytr)
-ml_runtime['rf_reg_gridsearch'] = time.time() - t0
-logger.info('Runtime: {:.2f} mins'.format(ml_runtime['rf_reg_gridsearch']/60))
+rf_reg_randsearch.fit(xtr, ytr)
+train_runtime['rf_reg_randsearch'] = time.time() - t0
+logger.info('Runtime: {:.2f} mins'.format(train_runtime['rf_reg_randsearch']/60))
 
 # Save best model
-rf_reg = rf_reg_gridsearch.best_estimator_
+rf_reg = rf_reg_randsearch.best_estimator_
 joblib.dump(rf_reg, filename=os.path.join(run_outdir, 'rf_reg_hypsearch_best_model.pkl'))
 
 # Print preds
 utils.print_scores(model=rf_reg, xdata=xvl, ydata=yvl, logger=logger)
 
 # Save resutls
-rf_reg_hypsearch = pd.DataFrame(rf_reg_gridsearch.cv_results_)
+rf_reg_hypsearch = pd.DataFrame(rf_reg_randsearch.cv_results_)
 rf_reg_hypsearch.to_csv(os.path.join(run_outdir, 'rf_reg_hypsearch_summary.csv'))  # save hyperparam search results
 
-logger.info(f'rf_reg best score (random search): {rf_reg_gridsearch.best_score_:.3f}')
-logger.info('rf_reg best params (random search): \n{}'.format(rf_reg_gridsearch.best_params_))
+logger.info(f'rf_reg best score (random search): {rf_reg_randsearch.best_score_:.3f}')
+logger.info('rf_reg best params (random search): \n{}'.format(rf_reg_randsearch.best_params_))
 
 # Dump preds
 utils.dump_preds(model=rf_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                 path=os.path.join(run_outdir, 'rf_pred_vl_preds.csv'))
+                 path=os.path.join(run_outdir, 'rf_vl_preds.csv'))
+# ----- rf hyper-param end
 
 
 # ------------
@@ -395,42 +384,44 @@ xgb_reg = xgb.XGBRegressor(objective='reg:linear', # default: 'reg:linear', TODO
                            reg_alpha=0, # default=0, L1 regularization
                            reg_lambda=1, # default=1, L2 regularization
                            random_state=SEED)
-random_search_params = {'n_estimators': [50, 100, 500],
-                        'learning_rate': [0.01, 0.1],
-                        'subsample': [0.3, 0.5, 0.7],
+
+random_search_params = {'n_estimators': [30, 50, 70],
+                        'learning_rate': [0.005, 0.01, 0.5],
+                        'subsample': [0.5, 0.7, 0.8],
                         'max_depth': [2, 3, 5]}
-xgb_reg_gridsearch = RandomizedSearchCV(
+xgb_reg_randsearch = RandomizedSearchCV(
     estimator=xgb_reg,
     param_distributions=random_search_params,
-    n_iter=10,  # num of parameter settings that are sampled and used for training (num of models trained)
+    n_iter=20,  # num of parameter settings that are sampled and used for training (num of models trained)
     scoring=None, # string or callable used to evaluate the predictions on the test set
     n_jobs=n_jobs,
     cv=5,
     refit=True,  # Refit an estimator using the best found parameters on the whole dataset
-    verbose=0)   
+    verbose=False)   
 
+# Start search
 t0 = time.time()
-xgb_reg_gridsearch.fit(xtr, ytr)
-ml_runtime['xgb_reg_gridsearch'] = time.time() - t0
-logger.info('Runtime: {:.2f} mins'.format(ml_runtime['xgb_reg_gridsearch']/60))
+xgb_reg_randsearch.fit(xtr, ytr)
+train_runtime['xgb_reg_randsearch'] = time.time() - t0
+logger.info('Runtime: {:.2f} mins'.format(train_runtime['xgb_reg_randsearch']/60))
 
 # Save best model
-xgb_reg = xgb_reg_gridsearch.best_estimator_
+xgb_reg = xgb_reg_randsearch.best_estimator_
 joblib.dump(xgb_reg, filename=os.path.join(run_outdir, 'xgb_reg_hypsearch_best_model.pkl'))
 
 # Print preds
 utils.print_scores(model=xgb_reg, xdata=xvl, ydata=yvl, logger=logger)
 
 # Save resutls
-xgb_reg_hypsearch = pd.DataFrame(xgb_reg_gridsearch.cv_results_)
+xgb_reg_hypsearch = pd.DataFrame(xgb_reg_randsearch.cv_results_)
 xgb_reg_hypsearch.to_csv(os.path.join(run_outdir, 'xgb_reg_hypsearch_summary.csv'))  # save hyperparam search results
 
-logger.info(f'rf_reg best score (random search): {xgb_reg_gridsearch.best_score_:.3f}')
-logger.info('rf_reg best params (random search): \n{}'.format(xgb_reg_gridsearch.best_params_))
+logger.info(f'rf_reg best score (random search): {xgb_reg_randsearch.best_score_:.3f}')
+logger.info('rf_reg best params (random search): \n{}'.format(xgb_reg_randsearch.best_params_))
 
 # Dump preds
 utils.dump_preds(model=xgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                 path=os.path.join(run_outdir, 'xgb_pred_vl_preds.csv'))
+                 path=os.path.join(run_outdir, 'xgb_vl_preds.csv'))
 # ----- xgboost hyper-param end
 
 # ----- xgboost "Sklearn API" start
@@ -448,8 +439,8 @@ eval_metric = ['mae', 'rmse']
 t0 = time.time()
 xgb_reg.fit(xtr, ytr, eval_metric=eval_metric, eval_set=[(xtr, ytr), (xvl, yvl)],
             early_stopping_rounds=10, verbose=False, callbacks=None)
-ml_runtime['xgb_reg'] = time.time() - t0
-logger.info('Runtime: {:.2f} mins'.format(ml_runtime['xgb_reg']/60))
+train_runtime['xgb_reg'] = time.time() - t0
+logger.info('Runtime: {:.2f} mins'.format(train_runtime['xgb_reg']/60))
 
 # Save model
 # xgb_reg.save_model(os.path.join(run_outdir, 'xgb_reg.model'))
@@ -462,6 +453,7 @@ utils.print_scores(model=xgb_reg, xdata=xvl, ydata=yvl, logger=logger)
 # Dump preds
 utils.dump_preds(model=xgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
                  path=os.path.join(run_outdir, 'xgb_vl_preds.csv'))
+# ----- xgboost "Sklearn API" end
     
 # Plot feature importance
 xgb.plot_importance(booster=xgb_reg, max_num_features=20, grid=True, title='XGBRegressor')
@@ -505,15 +497,16 @@ params = {'task': 'train', # default='train'
           'learning_rate': 0.1, # default=0.1
           'num_leaves': 31, # default=31 (num of leaves in 1 tree)
           'seed': SEED,
-          'num_threads': 0, # default=0 (set to the num of real CPU cores)
+          'num_threads': n_jobs, # default=0 (set to the num of real CPU cores)
           'device_type': 'cpu', # default='cpu'
           'metric': eval_metric # metric(s) to be evaluated on the evaluation set(s)
 }
+
 t0 = time.time()
-lgb_reg = lgb.train(params=params, train_set=lgb_tr, valid_sets=lgb_vl)
+lgb_reg = lgb.train(params=params, train_set=lgb_tr, valid_sets=lgb_vl, verbose_eval=False)
 # lgb_cv = lgb.train(params=params, train_set=lgb_tr, nfolds=5)
-ml_runtime['lgb_reg'] = time.time() - t0
-logger.info('Runtime: {:.2f} mins'.format(ml_runtime['lgb_reg']/60))
+train_runtime['lgb_reg'] = time.time() - t0
+logger.info('Runtime: {:.2f} mins'.format(train_runtime['lgb_reg']/60))
 # ----- lightgbm "Training API" end 
 
 # ----- lightgbm "sklearn API" start

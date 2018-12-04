@@ -214,8 +214,13 @@ def plot_rf_fi(rf_model, figsize=(8, 5), plot_direction='h', columns=None, max_c
     return indices, fig
 
 
-class HyperTunedModel():  # ModelTunedCVSearch
+class SuperGBM():  # ModelTunedCVSearch
+    """ This is a super class for training and fine-tuning *Super* GBM models, i.e.,
+    xgboost and lightgbm.
+    This models share similar API so various methods are re-used.
+    """
     # https://www.kaggle.com/spektrum/randomsearchcv-to-hyper-tune-1st-level
+    # TODO: complete this class
     pass
 
 
