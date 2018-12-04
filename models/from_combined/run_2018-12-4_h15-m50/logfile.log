@@ -1,0 +1,11 @@
+File path: /Users/apartin/Dropbox/work/pilot1/cell-line-drug-sensitivity/src/models
+Num of system CPUs: 8
+n_jobs: 4
+
+Load tidy data ... /Users/apartin/Dropbox/work/pilot1/cell-line-drug-sensitivity/src/models/../../data/processed/from_combined/tidy_data_no_fibro.parquet
+data.shape (405885, 3694)
+data memory usage (GB): 6.238
+
+Extract train sources ... ['ccle']
+data.shape (10853, 3694)
+data memory usage (GB): 0.167

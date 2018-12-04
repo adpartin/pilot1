@@ -103,11 +103,12 @@ SEED = 0
 FILENAME = 'tidy_data_no_fibro.parquet'
 
 # Train and infer data
-train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
+train_sources = ['ccle', 'ctrp']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
 infer_sources = ['ccle']
 
-# Traget
-target_name = 'AUC'  # response
+# Traget (response)
+# target_name = 'AUC'
+target_name = 'AUC1'
 
 # Features
 cell_features = ['rnaseq'] # ['rnaseq', cnv', 'rnaseq_latent']
@@ -115,10 +116,12 @@ drug_features = ['descriptors'] # [] # ['descriptors', 'fingerprints', 'descript
 other_features = [] # ['drug_labels'] # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
 
 # Models
-ml_models = ['tpot_reg']
+# ml_models = ['tpot_reg']
+ml_models = ['lgb_reg']
 
+trasform_target = False
 verbose = True
-n_jobs = 64
+n_jobs = 4
 
 # Feature prefix
 fea_prefix = {'rnaseq': 'cell_rna',
@@ -140,6 +143,7 @@ logger = utils.setup_logger(logfilename=logfilename)
 
 logger.info(f'File path: {file_path}')
 logger.info(f'Num of system CPUs: {psutil.cpu_count()}')
+logger.info(f'n_jobs: {n_jobs}')
 
 
 # ========================================================================
@@ -194,13 +198,16 @@ utils.plot_hist_drugs(x=data['DRUG'], path=os.path.join(run_outdir, 'drugs_hist.
 
 
 # Transform the target
-# y = np.log1p(ydata); plot_hist(x=y, var_name=target_name+'_log1p')
-# # y = np.log(ydata+1); plot_hist(x=y, var_name=target_name+'_log+1')
-# y = np.log10(ydata+1); plot_hist(x=y, var_name=target_name+'_log10')
-# y = np.log2(ydata+1); plot_hist(x=y, var_name=target_name+'_log2')
-# y = ydata**2; plot_hist(x=ydata, var_name=target_name+'_x^2')
-# y, lmbda = stats.boxcox(ydata+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
-# ydata = pd.DataFrame(y)
+if trasform_target:
+    y = data[target_name].copy()
+    # y = np.log1p(ydata); plot_hist(x=y, var_name=target_name+'_log1p')
+    # # y = np.log(ydata+1); plot_hist(x=y, var_name=target_name+'_log+1')
+    # y = np.log10(ydata+1); plot_hist(x=y, var_name=target_name+'_log10')
+    # y = np.log2(ydata+1); plot_hist(x=y, var_name=target_name+'_log2')
+    # y = ydata**2; plot_hist(x=ydata, var_name=target_name+'_x^2')
+    y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
+    data[target_name] = y
+    # ydata = pd.DataFrame(y)
 
 
 if 'drug_labels' in other_features:
@@ -582,7 +589,7 @@ if 'tpot_reg' in ml_models:
         logger.error('Module not found (tpot)')
     
     tpot_checkpoint_folder = os.path.join(run_outdir, 'tpot_reg_checkpoints')
-    os.makedirs(tpot_reg_checkpnt_dir)
+    os.makedirs(tpot_checkpoint_folder)
 
     logger.info('\nTrain TPOTRegressor ...')
     tpot_reg = tpot.TPOTRegressor(generations=100,  # dflt: 100
@@ -598,7 +605,7 @@ if 'tpot_reg' in ml_models:
                                   disable_update_check=True)
     t0 = time.time()
     tpot_reg.fit(xtr, ytr)
-    ml_runtime['tpot_reg'] = time.time() - t0
+    train_runtime['tpot_reg'] = time.time() - t0
     logger.info('Runtime: {:.2f} mins'.format(ml_runtime['tpot_reg']/60))
     
     # Export model as .py script

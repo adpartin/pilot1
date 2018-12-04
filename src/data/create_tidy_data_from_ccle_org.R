@@ -11,54 +11,66 @@ library(reshape2)
 library(tibble)
 library(DESeq2)
 
-basedir <- "/Users/apartin/Dropbox/work/pilot1/cell-line"
-outdir <- file.path(basedir, "ccle_preproc")
-setwd(basedir)
-list.files()
+# Choose what data in terms of rna-seq genes to process and save
+rna_gene_set <- "lincs";  save_data_name <- "lincs" # landmark genes
+# rna_gene_set <- "top_exp_1k";  save_data_name <- "top_genes"  # most expressed genes ~1000
+# rna_gene_set <- "full";  save_data_name <- "full_gene_set"  # full set of genes after filtering
 
+# Set path to source file location
+# Sessop --> Set Working Directory --> To Source File Location
+# basedir <- "/Users/apartin/Dropbox/work/pilot1/cell-line"
+basedir <- getwd()
+  
+# Outdir
+outdir <- file.path(basedir, "../../data/processed/from_ccle_org")
 if (!dir.exists(outdir)) {dir.create(outdir)}
+# list.files()
 
+# Path to the original data
 datadir <- "/Users/apartin/work/jdacs/cell-line-data/ccle/from_broad_institute"
 datadir_molecular <- file.path(datadir, "current_data_11-08-2018")
-datadir_cellmeta <- file.path(datadir, "cell_line_annotations")
-datadir_drugmeta <- file.path(datadir, "pharmacological_profiling")
+datadir_cmeta <- file.path(datadir, "cell_line_annotations")
+datadir_dmeta <- file.path(datadir, "pharmacological_profiling")
 
 
-# ==================
-# Load cell metadata
-# ==================
-cellmeta <- read.table(file.path(datadir_cellmeta, "CCLE_sample_info_file_2012-10-18.txt"),
-                       sep="\t", header=1, na.strings=c("NA", ""))
-# dim(cellmeta)
-# colnames(cellmeta)
+
+# ==============================================================
+#   Load cell metadata
+# ==============================================================
+cmeta <- read.table(file.path(datadir_cmeta, "CCLE_sample_info_file_2012-10-18.txt"),
+                    sep="\t", header=1, na.strings=c("NA", ""))
+# dim(cmeta)
+# colnames(cmeta)
 # cellmeta[1:3,]
-cellmeta <- dplyr::rename(cellmeta, "CCLEName"="CCLE.name", "CellName"="Cell.line.primary.name",
-                          "CellNameAliases"="Cell.line.aliases", "SitePrimary"="Site.Primary",
-                          "HistSubtype1"="Hist.Subtype1", "ExpressionArrays"="Expression.arrays",
-                          "SNPArrays"="SNP.arrays", "HybridCaptureSequencing"="Hybrid.Capture.Sequencing")
-# sapply(cellmeta, FUN=function(x) length(unique(x)))
-# apply(cellmeta, MARGIN=2, FUN=function(x) length(unique(x)))
+cmeta <- dplyr::rename(cmeta, "CCLEName"="CCLE.name", "CellName"="Cell.line.primary.name",
+                       "CellNameAliases"="Cell.line.aliases", "SitePrimary"="Site.Primary",
+                       "HistSubtype1"="Hist.Subtype1", "ExpressionArrays"="Expression.arrays",
+                       "SNPArrays"="SNP.arrays", "HybridCaptureSequencing"="Hybrid.Capture.Sequencing")
+# sapply(cmeta, FUN=function(x) length(unique(x)))
+# apply(cmeta, MARGIN=2, FUN=function(x) length(unique(x)))
 
 
-# ==================
-# Load drug metadata
-# ==================
-drugmeta <- read.table(file.path(datadir_drugmeta, "CCLE_NP24.2009_profiling_2012.02.20.csv"),
-                       sep=",", header=1, na.strings=c("NA", ""))
-# dim(drugmeta)
-# colnames(drugmeta)
-# drugmeta[1:3,]
-drugmeta <- dplyr::rename(drugmeta, "Drug"="Compound..code.or.generic.name.",
-                          "DrugBrandName"="Compound..brand.name.", "Traget"="Target.s.",
-                          "MechOfAction"="Mechanism.of.action",	"HighestPhase"="Highest.Phase")
-# apply(drugmeta, MARGIN=2, FUN=function(x) length(unique(x)))
+
+# ==============================================================
+#   Load drug metadata
+# ==============================================================
+dmeta <- read.table(file.path(datadir_dmeta, "CCLE_NP24.2009_profiling_2012.02.20.csv"),
+                    sep=",", header=1, na.strings=c("NA", ""))
+# dim(dmeta)
+# colnames(dmeta)
+# dmeta[1:3,]
+dmeta <- dplyr::rename(dmeta, "Drug"="Compound..code.or.generic.name.",
+                       "DrugBrandName"="Compound..brand.name.", "Traget"="Target.s.",
+                       "MechOfAction"="Mechanism.of.action", "HighestPhase"="Highest.Phase")
+# apply(dmeta, MARGIN=2, FUN=function(x) length(unique(x)))
 
 
-# ==================
-# Load response data
-# ==================
-rspdata <- read.table(file.path(datadir_drugmeta, "CCLE_NP24.2009_Drug_data_2015.02.24.csv"),
-                                sep=",", header=1, na.strings=c("NA", ""))
+
+# ==============================================================
+#   Load response data
+# ==============================================================
+rspdata <- read.table(file.path(datadir_dmeta, "CCLE_NP24.2009_Drug_data_2015.02.24.csv"),
+                      sep=",", header=1, na.strings=c("NA", ""))
 # dim(rspdata)
 # colnames(rspdata)
 # rspdata[1:2,]
@@ -69,10 +81,13 @@ rspdata <- dplyr::rename(rspdata, "CCLEName"="CCLE.Cell.Line.Name", "CellName"="
 # apply(dplyr::select(rspdata, CCLEName, CellName, Drug), MARGIN=2,
 #       FUN=function(x) length(unique(x)))
 
+# colSums(is.na(rspdata))
 
-# ============
-# Load RNA-Seq
-# ============
+
+
+# ==============================================================
+#   Load RNA-Seq
+# ==============================================================
 rna <- read.table(file.path(datadir_molecular, "CCLE_DepMap_18q3_RNAseq_reads_20180718.gct.txt"),
                   sep="\t", skip=2, header=3, na.strings=c("NA", ""), check.names=F)
 dim(rna)
@@ -91,8 +106,7 @@ rna <- rna[order(rownames(rna)),]
 # Rename samples (drop the parenthesis)
 # colnames(rna)[3:ncol(rna)] <- sapply(colnames(rna)[3:ncol(rna)],
 #                                      FUN=function(s) unlist(strsplit(s, split=" "))[1])
-colnames(rna) <- sapply(colnames(rna),
-                        FUN=function(s) unlist(strsplit(s, split=" "))[1])
+colnames(rna) <- sapply(colnames(rna), FUN=function(s) unlist(strsplit(s, split=" "))[1])
 
 # library(magrittr)
 # ll <- "a-b-c-d"
@@ -115,18 +129,17 @@ rna <- rna[rowSums(rna)>0,]
 # Seems like we don't have meta for one cell line --> what should we do??
 # Thus, extract tissue from cell name
 colnames(rna)[1:5]
-cellmeta$CCLEName[1:5]
+cmeta$CCLEName[1:5]
 message("Cells sequenced: ", ncol(rna))
-message("Cells with metadata: ", nrow(cellmeta))
-message("Intersect btw rna cells and meta cells: ", length(intersect(colnames(rna), cellmeta$CCLEName)))
-message("Cell that doesn't appear in meta: ", setdiff(colnames(rna), cellmeta$CCLEName))
-tissuetype <- sapply(colnames(rna),
-                     function(s) paste(unlist(strsplit(s, "_"))[-1], collapse="_"))
+message("Cells with metadata: ", nrow(cmeta))
+message("Intersect btw rna cells and meta cells: ", length(intersect(colnames(rna), cmeta$CCLEName)))
+message("Cell that doesn't appear in meta: ", setdiff(colnames(rna), cmeta$CCLEName))
+tissuetype <- sapply(colnames(rna), function(s) paste(unlist(strsplit(s, "_"))[-1], collapse="_"))
 
 
-# =============
-# Gene mappings
-# =============
+# ==============================================================
+#   Gene mappings
+# ==============================================================
 # ----------------------------------------------------------------------------------------------
 # # Example in: https://bioconductor.org/packages/release/bioc/manuals/AnnotationDbi/man/AnnotationDbi.pdf
 # # https://www.r-bloggers.com/converting-gene-names-in-r-with-annotationdbi/
@@ -180,43 +193,43 @@ idx <- !(duplicated(gene_mapping$ENSEMBL) | duplicated(gene_mapping$ENTREZID))
 gene_mapping <- gene_mapping[idx,]
 sapply(gene_mapping, FUN=function(x) length(unique(x)))
 
-# Extract genes that have gene mapping
+# Keep rna for only those genes that have unique mapping
 # gene_subset <- intersect(rna$ENSG, gene_mapping$ENSEMBL)
-gene_subset <- intersect(rownames(rna), gene_mapping$ENSEMBL)
-
-# Keep the subset of uniquely mapped genes
-# rownames(rna) <- rna$ENSG
-# # rna$ENSG <- NULL
-# rna <- rna[,3:ncol(rna)]
-rna <- rna[gene_subset,]
+tmp_genes <- intersect(rownames(rna), gene_mapping$ENSEMBL)
+rna <- rna[tmp_genes,]
 
 
-# ===========
-# L1000 genes
-# ===========
-l1k <- read.table(file.path(basedir, "L1000.txt"), sep="\t", header=1)
-l1k <- dplyr::rename(l1k, "ENTREZID"="ID", "SymbolLINCS"="pr_gene_symbol")
-l1k <- dplyr::select(l1k, ENTREZID, SymbolLINCS)
-l1k <- l1k[order(l1k$ENTREZID),]
-l1k <- merge(l1k, gene_mapping, by="ENTREZID")
-l1k_ <- l1k[!(l1k$SymbolLINCS==l1k$SYMBOL),]
-ldata <- rna[l1k$ENSEMBL,]
+
+# ==============================================================
+#   Select the subset of genes to proceed
+# ==============================================================
+if (rna_gene_set == "lincs") {
+  # L1000
+  l1k <- read.table(file.path(basedir, "../../data/raw/L1000.txt"), sep="\t", header=1)
+  l1k <- dplyr::rename(l1k, "ENTREZID"="ID", "SymbolLINCS"="pr_gene_symbol")
+  l1k <- dplyr::select(l1k, ENTREZID, SymbolLINCS)
+  l1k <- l1k[order(l1k$ENTREZID),]
+  l1k <- merge(l1k, gene_mapping, by="ENTREZID")
+  l1k_ <- l1k[!(l1k$SymbolLINCS==l1k$SYMBOL),]  # Note, might be some problem with gene names (?!)
+  tmp_genes <- intersect(rownames(rna), l1k$ENSEMBL)
+  ldata <- rna[tmp_genes,]
+  rna <- ldata
+} else if (rna_gene_set == "top_exp") {
+  # genes with highest expression (count) level
+  n_top_genes <- 978
+  x <- apply(rna, MARGIN=1, FUN=quantile, 0.25)
+  y <- x[order(x, decreasing=T)][1:n_top_genes]
+  rna <- rna[names(y),]
+} else {
+  # Keep the original
+  rna <- rna
+}
 
 
-# ========================================
-# Filter genes on expression (count) level
-# ========================================
-top_genes <- 978
-x <- apply(rna, MARGIN=1, FUN=quantile, 0.25)
-y <- x[order(x, decreasing=T)][1:top_genes]
-qdata <- rna[names(y),]
 
-rna <- qdata
-
-
-# =====================================
-# Normalize the data and apply some EDA
-# =====================================
+# ==============================================================
+#   Normalize the data and apply some EDA
+# ==============================================================
 # Reorder the samples based on tissue type (for plotting)
 idx <- c(order(tissuetype)); tissuetype <- tissuetype[idx]
 table(tissuetype)
@@ -303,34 +316,41 @@ lognorm <- normTransform(dds, f=log2, pc=1)
 assay(lognorm)[1:2, 1:4]
 
 # Plot raw counts of 2 samples
+par(mfrow=c(1,1)); png(file.path(outdir, '2_random_samples_raw_count.png'))
 plot(cnts[,1], cnts[,2], cex=0.1,
      xlab=colnames(cnts)[1], ylab=colnames(cnts)[2], main="Raw count")
 abline(lm(cnts[,2] ~ cnts[,1] + 0))
+dev.off()
 
 # Plot counts of 2 samples normalized with log
+par(mfrow=c(1,1)); png(file.path(outdir, '2_random_samples_lognorm_count.png'))
 plot(logcnts[,1], logcnts[,2], cex=0.1,
      xlab=colnames(logcnts)[1], ylab=colnames(logcnts)[2], main="Log normalized count")
 abline(lm(logcnts[,2] ~ logcnts[,1] + 0))
+dev.off()
 
 # Plot counts of 2 samples normalized with log and SizeFactors
+par(mfrow=c(1,1)); png(file.path(outdir, '2_random_samples_sizeFactors_count.png'))
 plot(lognormcnts[,1], lognormcnts[,2], cex=0.1,
      xlab=colnames(lognormcnts)[1], ylab=colnames(lognormcnts)[2], main="sizeFactors normalized count")
 abline(lm(lognormcnts[,2] ~ lognormcnts[,1] + 0))
-
+dev.off()
 
 # --- Does it show difference ---
 # Plot the same sample counts: normalized using log2 vs normalized using SizeFactors
-" We don't see much different between log2 and log2 with sizeFactors "
+" We don't see much difference between log2 and log2 with sizeFactors "
 logcnts[1:2, 1:4]
 lognormcnts[1:2, 1:4]
 plot(logcnts[,1], lognormcnts[,1], cex=0.1)
 abline(lm(lognormcnts[,1] ~ logcnts[,1] + 0))
 
 # Plot boxplots of a few samples
-par(mfrow=c(1,2))
+par(mfrow=c(1,2)); # png(file.path(outdir, 'boxplot_random_samples_log2_vs_sizeFactors.png'))
 boxplot(logcnts[,1:10], main="log2(counts+1)", cex=0.1) # not normalized
 boxplot(lognormcnts[,1:10], main="norm sizeFactors", cex=0.1) # normalized  
+# dev.off()
 # -------------------------------
+
 
 # --------------------------
 # Stabilizing count variance
@@ -339,14 +359,26 @@ t0 <- Sys.time()
 vsd <- varianceStabilizingTransformation(dds)
 vsd_runtime <- Sys.time() - t0
 glue("vsd run time: {vsd_runtime/60} mins")
+
+vsd_data <- as.data.frame(t(assay(vsd)))
+vsd_cmeta <- as.data.frame(colData(vsd))
+
+# write.table(vsd_data, file.path(outdir, paste0(save_data_name, "_ccle_vsd.txt")), sep="\t")
+# write.table(vsd_cmeta, file.path(outdir, "qdata_ccle_meta.txt"), sep="\t")
+
+# Create tidy data
+vsd_data$CCLEName <- rownames(vsd_data)  # create col to merge on
+data <- merge(rspdata, vsd_data, by="CCLEName")
+data[1:3, 1:15]
+
+
+# Plot
 par(mfrow=c(1,1))
 plot(assay(vsd)[,1], assay(vsd)[,2], cex=0.1, main="VSD")
 abline(lm(assay(vsd)[,2] ~ assay(vsd)[,1] + 0))
 
-write.table(assay(vsd), file.path(outdir, "qdata_ccle_vsd.txt"), sep="\t")
-write.table(colData(vsd), file.path(outdir, "qdata_ccle_meta.txt"), sep="\t")
 
-
+# Plot (compare log2, sizeFactors, svd)
 pdf(file.path(outdir, "sample_vs_sample.pdf"), width=20)
 par(mfrow=c(1,3))
 xlim <- c(-0.5, 20)
