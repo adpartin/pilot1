@@ -40,9 +40,11 @@ http://blog.kaggle.com/2015/07/27/taxi-trajectory-winners-interview-1st-place-te
 
 
 Run-time problems:
-When running on Mac, lightgbm gives an error: https://github.com/dmlc/xgboost/issues/1715
-This has been solved by installing "nomkl":  conda install nomkl
-What is nomkl: https://docs.continuum.io/mkl-optimizations/
+When running on Mac, lightgbm gives an error:
+- https://github.com/dmlc/xgboost/issues/1715
+- https://lightgbm.readthedocs.io/en/latest/FAQ.html
+- This has been solved by installing "nomkl":  conda install nomkl
+- What is nomkl: https://docs.continuum.io/mkl-optimizations/
 """
 from __future__ import division
 from __future__ import print_function

@@ -36,8 +36,11 @@ file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.pa
 ##sys.path.append(utils_path)
 import utils_data as utils
 
-
-DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
+# TODO: fix this similar to CANDLE
+if sys.platform == 'darwin':
+    DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
+else:
+    DATADIR = '/vol/ml/apartin/Benchmarks/Data/Pilot1'
 OUTDIR = os.path.join(file_path, '../../data/processed/from_combined')
 os.makedirs(OUTDIR, exist_ok=True)
 
@@ -126,7 +129,7 @@ utils.plot_rsp_dists(rsp=rsp, rsp_cols=rsp_cols, savepath=os.path.join(OUTDIR, '
 #   Load rna (combined_dataset)
 # ========================================================================
 logger.info('\nLoading rna-seq ... ')
-lincs = utils.CombinedRNASeqLINCS(dataset='raw', sources=sources, na_values=na_values, verbose=False)
+lincs = utils.CombinedRNASeqLINCS(datadir=DATADIR, dataset='raw', sources=sources, na_values=na_values, verbose=False)
 rna, cmeta = lincs._df_rna, lincs._meta
 rna.rename(columns={'Sample': 'CELL'}, inplace=True)
 cmeta.rename(columns={'Sample': 'CELL', 'source': 'SOURCE'}, inplace=True)
