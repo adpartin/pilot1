@@ -256,7 +256,7 @@ df1$clrs <- as.vector(tissuetype[df1$ind])
 # df2 <- reshape2::melt(log2(rna))
 df1[1:3,]
 
-par(mfrow=c(1,1)); pdf(file.path(outdir, paste0(save_data_name, '_boxplot_log2(count).pdf')), width=100)
+par(mfrow=c(1,1)); pdf(file.path(outdir, paste0(save_data_name, '_boxplot_log2(cnts).pdf')), width=100)
 # par(mfrow=c(1,1)); pdf(file.path(outdir, 'boxplot_raw_log2(counts).pdf'), width=100)
 # pdf(file.path(outdir, 'boxplot_raw_log2(counts)_facets.pdf'), width=20)
 ggplot(df1, aes(x=ind, y=values)) +  
@@ -266,7 +266,7 @@ ggplot(df1, aes(x=ind, y=values)) +
   # scale_fill_viridis(discrete=T, option="magma") +
   ggtitle("CCLE samples (raw)") +
   xlab("") +
-  ylab("log2(read count+1)") +
+  ylab("log2(cnts+1)") +
   theme_dark() + 
   scale_colour_brewer(palette="Set1") +
   # theme(legend.position="bottom",
@@ -359,11 +359,12 @@ abline(lm(log_sf[,1] ~ logcnts[,1] + 0))
 # Boxplots of subset samples
 # --------------------------
 n_samples <- 10
-png(file.path(outdir, paste0(save_data_name, '_boxplot_log2(cnts)_vs_log_sf.png')))
-layout(matrix(c(1,2), nrow=1, ncol=2), respect=T)  # par(mfrow=c(1,2));
+# png(file.path(outdir, paste0(save_data_name, '_boxplot_log2(cnts)_vs_log_sf.png')))
+# layout(matrix(c(1,2), nrow=1, ncol=2), respect=T)
+par(mfrow=c(1,2))
 boxplot(logcnts[,1:n_samples], main="log2(cnts+1)", cex=0.1) # not normalized
 boxplot(log_sf[,1:n_samples], main="log2(sizeFactors)", cex=0.1) # normalized
-dev.off()
+# dev.off()
 # my_boxplot <- function(df1, df2, lbl1, lbl2, filename) {
 #   n_samples <- 10
 #   png(filename)
@@ -396,9 +397,10 @@ vsd_data <- assay(vsd)
 n_samples <- 10
 png(file.path(outdir, paste0(save_data_name, '_boxplot_compare_normalizations.png')))
 layout(matrix(c(1,2,3), nrow=1, ncol=3), respect=T)
-boxplot(logcnts[,1:n_samples], main="log2(cnts+1)", cex=0.1)
-boxplot(log_sf[,1:n_samples], main="log2(sizeFactors)", cex=0.1)
-boxplot(vsd_data[,1:n_samples], main="vsd", cex=0.1)
+ylim <- c(0, 20)
+boxplot(logcnts[,1:n_samples], main="log2(cnts+1)", cex=0.1, ylim=ylim)
+boxplot(log_sf[,1:n_samples], main="log2(sizeFactors)", cex=0.1, ylim=ylim)
+boxplot(vsd_data[,1:n_samples], main="vsd", cex=0.1, ylim=ylim)
 dev.off()
 
 
@@ -416,11 +418,11 @@ layout(matrix(c(1,2,3), nrow=1, ncol=3), respect=T)
 xlim <- c(-0.5, 20)
 ylim <- c(-0.5, 20)  
 
-plot(logcnts[,1], logcnts[,2], cex=0.1, main="log2(counts+1)",
+plot(logcnts[,1], logcnts[,2], cex=0.1, main="log2(cts+1)",
      xlim=xlim, ylim=ylim, panel.first = grid())
 abline(lm(logcnts[,2] ~ logcnts[,1] + 0))
 
-plot(log_sf[,1], log_sf[,2], cex=0.1, main="sizeFactors on counts",
+plot(log_sf[,1], log_sf[,2], cex=0.1, main="log2(sizeFactors)",
      xlim=xlim, ylim=ylim, panel.first = grid())
 abline(lm(log_sf[,2] ~ log_sf[,1] + 0))
 
@@ -448,8 +450,11 @@ dim(rspdata)
 vsd_data_t[1:2, 1:3]
 rspdata[1:2, 1:3]
 
-tidy_data_vsd <- merge(rspdata, vsd_data_t, by="CCLEName")
-tidy_data_vsd[1:3, 1:15]
+# Merge data
+# tidy_data_vsd <- merge(rspdata, vsd_data_t, by="CCLEName")
+df1 <- merge(vsd_cmeta, vsd_data_t, by="CCLEName")
+tidy_data_vsd <- merge(rspdata, df1, by="CCLEName")
+tidy_data_vsd[1:3, 1:17]
 
 # Save data
 write.table(tidy_data_vsd, file.path(outdir, paste0("tidy_data_", save_data_name, "_ccle_vsd.txt")), sep="\t")
@@ -460,13 +465,13 @@ write.table(vsd_cmeta, file.path(outdir, paste0(save_data_name, "_ccle_cmeta.txt
 # ==============================================================
 #   Stabilizing count variance - rlog
 # ==============================================================
-t0 <- Sys.time()
-rld <- rlog(dds)
-rlog_runtime <- Sys.time() - t0
-# https://stackoverflow.com/questions/46085274/is-there-a-string-formatting-operator-in-r-similar-to-pythons
-glue("rlog run time: {rlog_runtime/60} mins")
-plot(assay(rld)[,1], assay(rld)[,2], cex=0.1)
-abline(lm(assay(rld)[,2] ~ assay(rld)[,1] + 0))
+# t0 <- Sys.time()
+# rld <- rlog(dds)
+# rlog_runtime <- Sys.time() - t0
+# # https://stackoverflow.com/questions/46085274/is-there-a-string-formatting-operator-in-r-similar-to-pythons
+# glue("rlog run time: {rlog_runtime/60} mins")
+# plot(assay(rld)[,1], assay(rld)[,2], cex=0.1)
+# abline(lm(assay(rld)[,2] ~ assay(rld)[,1] + 0))
 
 
 # Subset the DESeqTransform
@@ -475,6 +480,10 @@ abline(lm(assay(rld)[,2] ~ assay(rld)[,1] + 0))
 # vsd_sub <- subset(vsd, select=colData(vsd)$tissuetype %in% c("BONE", "KIDNEY"))
 
 
+
+# ==============================================================
+#     Some EDA plots - TODO: not finished!!
+# ==============================================================
 # ---
 # PCA
 # ---

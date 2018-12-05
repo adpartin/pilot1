@@ -1,0 +1,7 @@
+File path: /Users/apartin/Dropbox/work/pilot1/cell-line-drug-sensitivity/src/models
+Num of system CPUs: 8
+n_jobs: 4
+
+Load tidy data ... /Users/apartin/Dropbox/work/pilot1/cell-line-drug-sensitivity/src/models/../../data/processed/from_ccle_org/tidy_data_lincs_ccle_vsd.txt
+data.shape (10924, 980)
+data memory usage (GB): 0.092

@@ -69,7 +69,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import seaborn as sns
-from pprint import pprint
 
 from scipy import stats
 from sklearn.preprocessing import Imputer, OneHotEncoder, OrdinalEncoder
@@ -92,6 +91,7 @@ import utils_models as utils
 
 DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
+FILENAME = 'tidy_data_no_fibro.parquet'
 os.makedirs(OUTDIR, exist_ok=True)
 
 SEED = 0
@@ -100,8 +100,6 @@ SEED = 0
 # ========================================================================
 #       Args TODO: add to argparse
 # ========================================================================
-FILENAME = 'tidy_data_no_fibro.parquet'
-
 # Train and infer data
 train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
 infer_sources = ['ccle']
