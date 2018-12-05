@@ -103,7 +103,7 @@ SEED = 0
 FILENAME = 'tidy_data_no_fibro.parquet'
 
 # Train and infer data
-train_sources = ['ccle', 'ctrp']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
+train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
 infer_sources = ['ccle']
 
 # Traget (response)
@@ -270,7 +270,7 @@ del xdata_to_impute, xdata_imputed
 # ========================================================================
 #       Split train and val (test)
 # ========================================================================
-logger.info('\nSplit to train and val (test) ...')
+logger.info('\nSplit data to train and val (test) ...')
 tr_data, vl_data = train_test_split(data, test_size=0.2, random_state=SEED)
 tr_data.reset_index(drop=True, inplace=True)
 vl_data.reset_index(drop=True, inplace=True)
