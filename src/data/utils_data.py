@@ -12,7 +12,11 @@ import seaborn as sns
 from scipy.stats import norm, skew
 
 
-DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
+# TODO: fix this similar to CANDLE
+if sys.platform == 'darwin':
+    DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
+else:
+    DATADIR = '/vol/ml/apartin/Benchmarks/Data/Pilot1'
 CELLMETA_FILENAME = 'combined_metadata_2018May.txt'
 
 

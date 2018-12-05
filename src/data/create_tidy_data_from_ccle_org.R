@@ -20,7 +20,7 @@ rna_gene_set <- "lincs";  save_data_name <- "lincs" # landmark genes
 # Sessop --> Set Working Directory --> To Source File Location
 # basedir <- "/Users/apartin/Dropbox/work/pilot1/cell-line"
 basedir <- getwd()
-  
+
 # Outdir
 outdir <- file.path(basedir, "../../data/processed/from_ccle_org")
 if (!dir.exists(outdir)) {dir.create(outdir)}
@@ -228,7 +228,7 @@ if (rna_gene_set == "lincs") {
 
 
 # ==============================================================
-#   Normalize the data and apply some EDA
+#   Create DESeqDataSet for normalization and make some plots
 # ==============================================================
 # Reorder the samples based on tissue type (for plotting)
 idx <- c(order(tissuetype)); tissuetype <- tissuetype[idx]
@@ -240,7 +240,10 @@ rna <- rna[,idx]
 # dfrna <- rna[,sample(ncol(rna), 20)]
 # dfrna <- rna[,1:50]
 
-# Boxplot
+
+# ---------------------
+# Boxplot - all samples
+# ---------------------
 # https://stackoverflow.com/questions/27109347/building-a-box-plot-from-all-columns-of-data-frame-with-column-names-on-x-in-ggp?lq=1
 # https://www.data-to-viz.com/caveat/boxplot.html
 # https://www.r-graph-gallery.com/264-control-ggplot2-boxplot-colors/
@@ -253,8 +256,8 @@ df1$clrs <- as.vector(tissuetype[df1$ind])
 # df2 <- reshape2::melt(log2(rna))
 df1[1:3,]
 
-# par(mfrow=c(1,1))
-par(mfrow=c(1,1)); pdf(file.path(outdir, 'boxplot_raw_log2(counts).pdf'), width=100)
+par(mfrow=c(1,1)); pdf(file.path(outdir, paste0(save_data_name, '_boxplot_log2(count).pdf')), width=100)
+# par(mfrow=c(1,1)); pdf(file.path(outdir, 'boxplot_raw_log2(counts).pdf'), width=100)
 # pdf(file.path(outdir, 'boxplot_raw_log2(counts)_facets.pdf'), width=20)
 ggplot(df1, aes(x=ind, y=values)) +  
   # geom_violin(width=1.4) +
@@ -271,14 +274,17 @@ ggplot(df1, aes(x=ind, y=values)) +
   #       plot.title=element_text(size=11),
   #       axis.text.x=element_text(angle=60, hjust=1))
   theme(axis.text.x=element_text(angle=60, hjust=1))
-  # facet_wrap(~clrs)
+# facet_wrap(~clrs)
 dev.off()
 
 
 # 
 sort(colSums(rna)[1:3])/1e6
 
+
+# --------------------------
 # Create DESeqDataSet object
+# --------------------------
 # I don't create coldata from cellmeta because one sample is missing in the cellmeta
 coldata <- as.data.frame(tissuetype)
 dds <- DESeq2::DESeqDataSetFromMatrix(countData = rna,
@@ -292,13 +298,13 @@ slotNames(dds) # list of slot names
 assayNames(dds)
 
 
-# Subset the dataset
+# Subset the dataset (specific tissue types)
 # dds <- subset(dds, select=colData(dds)$tissuetype %in% c("BONE", "KIDNEY"))
 
 
-# ----------------------------------
-# Normalization for sequencing depth
-# ----------------------------------
+# ----------------------------------------------------
+# Normalization for sequencing depth using sizeFactors
+# ----------------------------------------------------
 # Compute size factors
 dds <- DESeq2::estimateSizeFactors(dds)
 DESeq2::sizeFactors(dds)[1:3]  # access and print the size factors
@@ -307,80 +313,106 @@ abline(lm(colSums(counts(dds)) ~ sizeFactors(dds) + 0))
 
 # Compute dfs
 cnts <- DESeq2::counts(dds)
-logcnts <- log2(DESeq2::counts(dds) + 1)
-lognormcnts <- log2(DESeq2::counts(dds, normalized=TRUE) + 1)
+logcnts <- log2(DESeq2::counts(dds) + 1)  # log of raw counts
+log_sf <- log2(DESeq2::counts(dds, normalized=TRUE) + 1)  # log of normalized counts using sizeFactors
 
 # We can also get the counts normalized with sizeFactors and log using normTransform
-# Note that assay(lognorm) and lognormcnts are the same
 lognorm <- normTransform(dds, f=log2, pc=1)
 assay(lognorm)[1:2, 1:4]
+all(log_sf == assay(lognorm))  # note that assay(lognorm) and lognormcnts are the same
 
-# Plot raw counts of 2 samples
-par(mfrow=c(1,1)); png(file.path(outdir, '2_random_samples_raw_count.png'))
+
+# ------------------------
+# Plots - sample vs sample
+# ------------------------
+# Raw counts
+par(mfrow=c(1,1)); png(file.path(outdir, paste0(save_data_name, '_2_random_samples_cnts.png')))
 plot(cnts[,1], cnts[,2], cex=0.1,
      xlab=colnames(cnts)[1], ylab=colnames(cnts)[2], main="Raw count")
 abline(lm(cnts[,2] ~ cnts[,1] + 0))
 dev.off()
 
-# Plot counts of 2 samples normalized with log
-par(mfrow=c(1,1)); png(file.path(outdir, '2_random_samples_lognorm_count.png'))
+# Log of raw counts
+par(mfrow=c(1,1)); png(file.path(outdir, paste0(save_data_name, '_2_random_samples_logcnts.png')))
 plot(logcnts[,1], logcnts[,2], cex=0.1,
-     xlab=colnames(logcnts)[1], ylab=colnames(logcnts)[2], main="Log normalized count")
+     xlab=colnames(logcnts)[1], ylab=colnames(logcnts)[2], main="Log of raw count")
 abline(lm(logcnts[,2] ~ logcnts[,1] + 0))
 dev.off()
 
-# Plot counts of 2 samples normalized with log and SizeFactors
-par(mfrow=c(1,1)); png(file.path(outdir, '2_random_samples_sizeFactors_count.png'))
-plot(lognormcnts[,1], lognormcnts[,2], cex=0.1,
-     xlab=colnames(lognormcnts)[1], ylab=colnames(lognormcnts)[2], main="sizeFactors normalized count")
-abline(lm(lognormcnts[,2] ~ lognormcnts[,1] + 0))
+# Log of counts normalized using sizeFactors
+par(mfrow=c(1,1)); png(file.path(outdir, paste0(save_data_name, '_2_random_samples_log_sf.png')))
+plot(log_sf[,1], log_sf[,2], cex=0.1,
+     xlab=colnames(log_sf)[1], ylab=colnames(log_sf)[2], main="Log of counts normalized using sizeFactors")
+abline(lm(log_sf[,2] ~ log_sf[,1] + 0))
 dev.off()
 
-# --- Does it show difference ---
+# --- Is there any difference? ---
 # Plot the same sample counts: normalized using log2 vs normalized using SizeFactors
 " We don't see much difference between log2 and log2 with sizeFactors "
 logcnts[1:2, 1:4]
-lognormcnts[1:2, 1:4]
-plot(logcnts[,1], lognormcnts[,1], cex=0.1)
-abline(lm(lognormcnts[,1] ~ logcnts[,1] + 0))
-
-# Plot boxplots of a few samples
-par(mfrow=c(1,2)); # png(file.path(outdir, 'boxplot_random_samples_log2_vs_sizeFactors.png'))
-boxplot(logcnts[,1:10], main="log2(counts+1)", cex=0.1) # not normalized
-boxplot(lognormcnts[,1:10], main="norm sizeFactors", cex=0.1) # normalized  
-# dev.off()
-# -------------------------------
+log_sf[1:2, 1:4]
+plot(logcnts[,1], log_sf[,1], cex=0.1)
+abline(lm(log_sf[,1] ~ logcnts[,1] + 0))
 
 
 # --------------------------
-# Stabilizing count variance
+# Boxplots of subset samples
 # --------------------------
+n_samples <- 10
+png(file.path(outdir, paste0(save_data_name, '_boxplot_log2(cnts)_vs_log_sf.png')))
+layout(matrix(c(1,2), nrow=1, ncol=2), respect=T)  # par(mfrow=c(1,2));
+boxplot(logcnts[,1:n_samples], main="log2(cnts+1)", cex=0.1) # not normalized
+boxplot(log_sf[,1:n_samples], main="log2(sizeFactors)", cex=0.1) # normalized
+dev.off()
+# my_boxplot <- function(df1, df2, lbl1, lbl2, filename) {
+#   n_samples <- 10
+#   png(filename)
+#   layout(matrix(c(1,2), nrow=1, ncol=2), respect=T)
+#   # par(mfrow=c(1,2)); 
+#   boxplot(df1[,1:n_samples], main=lbl1, cex=0.1) # not normalized
+#   boxplot(df2[,1:n_samples], main=lbl2, cex=0.1) # normalized  
+#   dev.off()
+# }
+# my_boxplot(df1=logcnts, df2=log_sf, lbl1="log2(cnts+1)", lbl2="log2(sizeFactors)",
+#            filename=file.path(outdir, paste0(save_data_name, '_boxplot_log2(cnts)_vs_log_sf.png')))
+
+
+
+# ==============================================================
+#   Stabilizing count variance - VSD
+# ==============================================================
 t0 <- Sys.time()
 vsd <- varianceStabilizingTransformation(dds)
 vsd_runtime <- Sys.time() - t0
 glue("vsd run time: {vsd_runtime/60} mins")
 
-vsd_data <- as.data.frame(t(assay(vsd)))
-vsd_cmeta <- as.data.frame(colData(vsd))
-
-# write.table(vsd_data, file.path(outdir, paste0(save_data_name, "_ccle_vsd.txt")), sep="\t")
-# write.table(vsd_cmeta, file.path(outdir, "qdata_ccle_meta.txt"), sep="\t")
-
-# Create tidy data
-vsd_data$CCLEName <- rownames(vsd_data)  # create col to merge on
-data <- merge(rspdata, vsd_data, by="CCLEName")
-data[1:3, 1:15]
+# Get the actual vsd values
+vsd_data <- assay(vsd)
 
 
-# Plot
-par(mfrow=c(1,1))
-plot(assay(vsd)[,1], assay(vsd)[,2], cex=0.1, main="VSD")
-abline(lm(assay(vsd)[,2] ~ assay(vsd)[,1] + 0))
+# ---------------------------------
+# Boxplots - compare normalizations
+# ---------------------------------
+n_samples <- 10
+png(file.path(outdir, paste0(save_data_name, '_boxplot_compare_normalizations.png')))
+layout(matrix(c(1,2,3), nrow=1, ncol=3), respect=T)
+boxplot(logcnts[,1:n_samples], main="log2(cnts+1)", cex=0.1)
+boxplot(log_sf[,1:n_samples], main="log2(sizeFactors)", cex=0.1)
+boxplot(vsd_data[,1:n_samples], main="vsd", cex=0.1)
+dev.off()
 
+
+# -----------------------------
+# Plot - sample vs sample - vsd
+# -----------------------------
+par(mfrow=c(1,1)); png(file.path(outdir, paste0(save_data_name, '_2_random_samples_vsd.png')))
+plot(vsd_data[,1], vsd_data[,2], cex=0.1, main="VSD")
+abline(lm(vsd_data[,2] ~ vsd_data[,1] + 0))
+dev.off()
 
 # Plot (compare log2, sizeFactors, svd)
-pdf(file.path(outdir, "sample_vs_sample.pdf"), width=20)
-par(mfrow=c(1,3))
+png(file.path(outdir, paste0(save_data_name, '_2_random_samples_comparison.png')))
+layout(matrix(c(1,2,3), nrow=1, ncol=3), respect=T)
 xlim <- c(-0.5, 20)
 ylim <- c(-0.5, 20)  
 
@@ -388,23 +420,53 @@ plot(logcnts[,1], logcnts[,2], cex=0.1, main="log2(counts+1)",
      xlim=xlim, ylim=ylim, panel.first = grid())
 abline(lm(logcnts[,2] ~ logcnts[,1] + 0))
 
-plot(lognormcnts[,1], lognormcnts[,2], cex=0.1, main="sizeFactors on counts",
+plot(log_sf[,1], log_sf[,2], cex=0.1, main="sizeFactors on counts",
      xlim=xlim, ylim=ylim, panel.first = grid())
-abline(lm(lognormcnts[,2] ~ lognormcnts[,1] + 0))
+abline(lm(log_sf[,2] ~ log_sf[,1] + 0))
 
-plot(assay(vsd)[,1], assay(vsd)[,2], cex=0.1, main="VSD",
+plot(vsd_data[,1], vsd_data[,2], cex=0.1, main="VSD",
      xlim=xlim, ylim=ylim, panel.first = grid())
-abline(lm(assay(vsd)[,2] ~ assay(vsd)[,1] + 0))
+abline(lm(vsd_data[,2] ~ vsd_data[,1] + 0))
 dev.off()
 
 
-# t0 <- Sys.time()
-# rld <- rlog(dds)
-# rlog_runtime <- Sys.time() - t0
-# # https://stackoverflow.com/questions/46085274/is-there-a-string-formatting-operator-in-r-similar-to-pythons
-# glue("rlog run time: {rlog_runtime/60} mins")
-# plot(assay(rld)[,1], assay(rld)[,2], cex=0.1)
-# abline(lm(assay(rld)[,2] ~ assay(rld)[,1] + 0))
+# ----------------
+# Create tidy data
+# ----------------
+vsd_data_t <- as.data.frame(t(vsd_data))
+vsd_data_t$CCLEName <- rownames(vsd_data_t)  # create col to merge on
+vsd_data_t <- vsd_data_t[, c(ncol(vsd_data_t), seq(ncol(vsd_data_t)-1))]
+
+vsd_cmeta <- as.data.frame(colData(vsd))
+vsd_cmeta$CCLEName <- rownames(vsd_cmeta)  # create col to merge on
+vsd_cmeta <- vsd_cmeta[, c(ncol(vsd_cmeta), seq(ncol(vsd_cmeta)-1))]
+
+# rownames(rspdata) <- rspdata$CellName  # this won't work becuase rownames must be unique
+# rownames(vsd_data_t) <- NULL 
+dim(vsd_data_t)
+dim(rspdata)
+vsd_data_t[1:2, 1:3]
+rspdata[1:2, 1:3]
+
+tidy_data_vsd <- merge(rspdata, vsd_data_t, by="CCLEName")
+tidy_data_vsd[1:3, 1:15]
+
+# Save data
+write.table(tidy_data_vsd, file.path(outdir, paste0("tidy_data_", save_data_name, "_ccle_vsd.txt")), sep="\t")
+write.table(vsd_data, file.path(outdir, paste0(save_data_name, "_ccle_vsd.txt")), sep="\t")
+write.table(vsd_cmeta, file.path(outdir, paste0(save_data_name, "_ccle_cmeta.txt")), sep="\t")
+
+
+# ==============================================================
+#   Stabilizing count variance - rlog
+# ==============================================================
+t0 <- Sys.time()
+rld <- rlog(dds)
+rlog_runtime <- Sys.time() - t0
+# https://stackoverflow.com/questions/46085274/is-there-a-string-formatting-operator-in-r-similar-to-pythons
+glue("rlog run time: {rlog_runtime/60} mins")
+plot(assay(rld)[,1], assay(rld)[,2], cex=0.1)
+abline(lm(assay(rld)[,2] ~ assay(rld)[,1] + 0))
 
 
 # Subset the DESeqTransform
