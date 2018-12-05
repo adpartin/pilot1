@@ -2,14 +2,19 @@
 TODO:
 1. Multiple ML models
 - train multiple models
+  create super class ML_Model (this sklearn API class will implement hyperparam grid search)
 - rank models based on performance
 - optimize each model using hyperparam search
+  https://stats.stackexchange.com/questions/183984/how-to-use-xgboost-cv-with-hyperparameters-optimization
+  https://github.com/raymon-tian/trend_ml_toolkit_xgboost/blob/master/xg_train_slower.py
+  https://github.com/LevinJ/Supply-demand-forecasting/blob/master/utility/xgbbasemodel.py
 - ensemble/stack models
   http://blog.kaggle.com/2017/06/15/stacking-made-easy-an-introduction-to-stacknet-by-competitions-grandmaster-marios-michailidis-kazanova/
 
-Auto-ML models:
+Explore Auto-ML models:
 - tpot
 - auto-sklearn
+- data robot
 
 ML models:
 - NN (consider various normalization methods) - https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.html
@@ -21,6 +26,7 @@ ML models:
 - svm
 - knn
 - elastic net
+- use features generated using t-SNE, PCA, etc.
 
 Hyperparam schemes:
 - CANDLE
@@ -32,12 +38,21 @@ https://scikit-learn.org/stable/auto_examples/model_selection/plot_learning_curv
 3. Outliers and transformations
 https://www.analyticsvidhya.com/blog/2015/11/8-ways-deal-continuous-variables-predictive-modeling/
 - unskew the data; drop outliers based on boxplot (stratified by drug and tissue type)
+- IsolationForest
 
 4. Another feature to add would be cluster-based:
 http://blog.kaggle.com/2015/07/27/taxi-trajectory-winners-interview-1st-place-team-%F0%9F%9A%95/
 - Apply clustering to rna-seq. The clusters vector will become a categorical variable. In this case
   we avoid using tissue type labels but rather use proximity in the actual feature space.
 
+5. Features
+- rna-seq clusters
+- bin descriptors
+- embedding on mutation data
+- imputation --> create boolean indicator of NA values
+
+6. Feature importance
+- Explore X_SHAP_values in predict() method in lightgbm
 
 Run-time problems:
 When running on Mac, lightgbm gives an error:
@@ -102,7 +117,7 @@ SEED = 0
 # ========================================================================
 # Train and infer data
 train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
-infer_sources = ['ccle']
+infer_sources = ['ctrp']
 
 # Traget (response)
 # target_name = 'AUC'
@@ -118,6 +133,7 @@ other_features = [] # ['drug_labels'] # ['cell_labels', 'drug_labels', 'ctype', 
 ml_models = ['lgb_reg']
 
 trasform_target = False
+outlier_remove = False  # IsolationForest
 verbose = True
 n_jobs = 4
 
@@ -268,7 +284,7 @@ del xdata_to_impute, xdata_imputed
 # ========================================================================
 #       Split train and val (test)
 # ========================================================================
-logger.info('\nSplit data to train and val (test) ...')
+logger.info('\nSplit data into train and val (test) ...')
 tr_data, vl_data = train_test_split(data, test_size=0.2, random_state=SEED)
 tr_data.reset_index(drop=True, inplace=True)
 vl_data.reset_index(drop=True, inplace=True)
@@ -514,40 +530,44 @@ if 'lgb_reg' in ml_models:
     # https://lightgbm.readthedocs.io/en/latest/Python-API.html
     # TODO: use config file to set default parameters
     logger.info('\nTrain LGBMRegressor ...')
-    # ----- lightgbm "Training API" start
-    ml_type = 'reg'
-    lgb_tr = lgb.Dataset(data=xtr, label=ytr, categorical_feature='auto')
-    lgb_vl = lgb.Dataset(data=xvl, label=yvl, categorical_feature='auto')
-    # https://lightgbm.readthedocs.io/en/latest/Parameters.html
+    ml_objective = 'regression'
     eval_metric = ['l1', # aliases: regression_l1, mean_absolute_error, mae
-                'l2', # aliases: regression, regression_l2, mean_squared_error, mse, and more
-    ]
-    params = {'task': 'train', # default='train'
-            'objective': 'regression', # default='regression' which alias for 'rmse' and 'mse' (but these are different??)
-            'boosting': 'gbdt', # default='gbdt'
-            'num_iterations': 100, # default=100 (num of boosting iterations)
-            'learning_rate': 0.1, # default=0.1
-            'num_leaves': 31, # default=31 (num of leaves in 1 tree)
-            'seed': SEED,
-            'num_threads': n_jobs, # default=0 (set to the num of real CPU cores)
-            'device_type': 'cpu', # default='cpu'
-            'metric': eval_metric # metric(s) to be evaluated on the evaluation set(s)
-    }
+                   'l2', # aliases: regression, regression_l2, mean_squared_error, mse, and more
+                   ]
 
+    # ----- lightgbm "Training API" - start
+    # lgb_tr = lgb.Dataset(data=xtr, label=ytr, categorical_feature='auto')
+    # lgb_vl = lgb.Dataset(data=xvl, label=yvl, categorical_feature='auto')
+    # # https://lightgbm.readthedocs.io/en/latest/Parameters.html
+    # params = {'task': 'train', # default='train'
+    #         'objective': ml_objective, # default='regression' which alias for 'rmse' and 'mse' (but these are different??)
+    #         'boosting': 'gbdt', # default='gbdt'
+    #         'num_iterations': 100, # default=100 (num of boosting iterations)
+    #         'learning_rate': 0.1, # default=0.1
+    #         'num_leaves': 31, # default=31 (num of leaves in 1 tree)
+    #         'seed': SEED,
+    #         'num_threads': n_jobs, # default=0 (set to the num of real CPU cores)
+    #         'device_type': 'cpu', # default='cpu'
+    #         'metric': eval_metric # metric(s) to be evaluated on the evaluation set(s)
+    #         }
+    # t0 = time.time()
+    # lgb_reg = lgb.train(params=params, train_set=lgb_tr, valid_sets=lgb_vl, verbose_eval=False)
+    # # lgb_cv = lgb.train(params=params, train_set=lgb_tr, nfolds=5)
+    # train_runtime['lgb_reg'] = time.time() - t0
+    # logger.info('Runtime: {:.2f} mins'.format(train_runtime['lgb_reg']/60))
+    # ----- lightgbm "Training API" - end 
+
+    # ----- lightgbm "sklearn API" appraoch 1 - start
+    lgb_reg = lgb.LGBMModel(objective=ml_objective,
+                            n_jobs=n_jobs,
+                            random_state=SEED)
+    # lgb_reg = lgb.LGBMRegressor()
     t0 = time.time()
-    lgb_reg = lgb.train(params=params, train_set=lgb_tr, valid_sets=lgb_vl, verbose_eval=False)
-    # lgb_cv = lgb.train(params=params, train_set=lgb_tr, nfolds=5)
+    lgb_reg.fit(xtr, ytr, eval_metric=eval_metric, eval_set=[(xtr, ytr), (xvl, yvl)],
+                early_stopping_rounds=10, verbose=False, callbacks=None)
     train_runtime['lgb_reg'] = time.time() - t0
     logger.info('Runtime: {:.2f} mins'.format(train_runtime['lgb_reg']/60))
-    # ----- lightgbm "Training API" end 
-
-    # ----- lightgbm "sklearn API" start
-    # t0 = time.time()
-    # lgb_reg = lgb.LGBMRegressor()
-    # lgb_reg.fit(xtr, ytr, eval_metric=eval_metric, eval_set=[(xtr, ytr), (xvl, yvl)],
-    #             early_stopping_rounds=10, verbose=False, callbacks=None)
-    # ml_runtime['lgb_reg'] = time.time() - t0
-    # logger.info('Runtime: {:.2f} mins'.format(ml_runtime['lgb_reg']/60))
+    # ----- lightgbm "sklearn API" appraoch 1 - end
 
     # Save model
     # lgb_reg.save_model(os.path.join(run_outdir, 'lgb_'+ml_type+'_model.txt'))
@@ -561,7 +581,7 @@ if 'lgb_reg' in ml_models:
 
     # Dump preds
     utils.dump_preds(model=lgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                    path=os.path.join(run_outdir, 'lgb_vl_preds.csv'))
+                     path=os.path.join(run_outdir, 'lgb_vl_preds.csv'))
 
     # Plot feature importance
     lgb.plot_importance(booster=lgb_reg, max_num_features=20, grid=True, title='LGBMRegressor')
@@ -571,9 +591,9 @@ if 'lgb_reg' in ml_models:
     # Plot learning curves
     # TODO: note, plot_metric didn't accept 'mae' although it's alias for 'l1' 
     # TODO: plot_metric requires dict from train(), but train returns 'lightgbm.basic.Booster'??
-    # for m in ['l1', 'l2']:
-    #     ax = lgb.plot_metric(booster=lgb_reg, metric=m, grid=True)
-    #     plt.savefig(os.path.join(run_outdir, 'lgb_reg_leraning_curve_'+m+'.png'))
+    for m in ['l1', 'l2']:
+        ax = lgb.plot_metric(booster=lgb_reg, metric=m, grid=True)
+        plt.savefig(os.path.join(run_outdir, 'lgb_reg_learning_curve_'+m+'.png'))
 
 
 # -------------
