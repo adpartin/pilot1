@@ -34,7 +34,7 @@ os.chdir(file_path)
 # file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
 ##utils_path = os.path.abspath(os.path.join(file_path, 'utils'))
 ##sys.path.append(utils_path)
-import utils_models as utils
+# import utils_models as utils
 
 DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
 MODELDIR = os.path.join(file_path, '../../models/from_combined')
@@ -42,7 +42,7 @@ OUTDIR = os.path.join(file_path, '../../infer/from_combined')
 os.makedirs(OUTDIR, exist_ok=True)
 
 DATA_FILE_NAME = 'tidy_data_no_fibro.parquet'
-MODEL_FILE_NAME = 'run_2018-12-5_h17-m42'
+MODEL_FILE_NAME = 'run_2018-12-5_h17-m52'
 
 SEED = 0
 
@@ -51,7 +51,7 @@ SEED = 0
 #       Args TODO: add to argparse
 # ========================================================================
 # Train and infer data
-train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
+# train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
 infer_sources = ['ctrp']
 
 # Traget (response)

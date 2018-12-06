@@ -132,6 +132,37 @@ def print_scores(model, xdata, ydata, logger=None):
         print(f'model_explained_variance_score: {model_explained_variance_score:.2f}')
 
 
+def impute_values(data, fea_prefix, logger=None):
+    """  """
+    from sklearn.impute import SimpleImputer, MissingIndicator
+
+    tmp_data = data.copy()
+    df_list = []
+    for prefx in fea_prefix.values():
+        cols = data.columns[[True if prefx in c else False for c in data.columns.tolist()]]
+        if len(cols) > 0:        
+            df = data[cols].copy()
+            tmp_data.drop(columns=cols, inplace=True)
+            df_list.append(df)
+
+    xdata_to_impute = pd.DataFrame(pd.concat(df_list, axis=1))
+
+    # TODO: try regressor (impute continuous features) or classifier (impute discrete features)
+    # https://scikit-learn.org/stable/auto_examples/plot_missing_values.html
+    cols = xdata_to_impute.columns
+    imputer = SimpleImputer(missing_values=np.nan, strategy='mean', verbose=1)
+    xdata_imputed = imputer.fit_transform(xdata_to_impute)
+    xdata_imputed = pd.DataFrame(xdata_imputed, columns=cols)
+
+    if logger is not None:
+        logger.info('\nImpute missing features ...')
+        logger.info('Num features with missing values: {}'.format(sum(xdata_to_impute.isna().sum() > 1)))
+        logger.info('Num features with missing values (after impute): {}'.format(sum(xdata_imputed.isna().sum() > 1)))
+
+    data = pd.concat([tmp_data, xdata_imputed], axis=1)
+    return data
+
+
 def dump_preds(model, df_data, xdata, target_name, path, model_name=None):
     """
     Args:

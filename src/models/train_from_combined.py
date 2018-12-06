@@ -45,7 +45,8 @@ http://blog.kaggle.com/2015/07/27/taxi-trajectory-winners-interview-1st-place-te
 - Apply clustering to rna-seq. The clusters vector will become a categorical variable. In this case
   we avoid using tissue type labels but rather use proximity in the actual feature space.
 
-5. Features
+5. Features; data pre-processing
+- create code preproc_tidy_data.py
 - rna-seq clusters
 - bin descriptors
 - embedding on mutation data
@@ -171,7 +172,14 @@ logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
 # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
 
 
-# Extract sources
+# Replace characters that are illegal for xgboost feature names
+# xdata.columns = list(map(lambda s: s.replace('[','_').replace(']','_'), xdata.columns.tolist())) # required by xgboost
+import re
+regex = re.compile(r'\[|\]|<', re.IGNORECASE)
+data.columns = [regex.sub('_', c) if any(x in str(c) for x in set(('[', ']', '<'))) else c for c in data.columns.values]
+
+
+# Extract training sources
 logger.info('\nExtract train sources ... {}'.format(train_sources))
 data = data[data['SOURCE'].isin(train_sources)].reset_index(drop=True)
 logger.info(f'data.shape {data.shape}')
@@ -179,11 +187,12 @@ logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
 # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
 
 
-# Replace characters that are illegal for xgboost feature names
-# xdata.columns = list(map(lambda s: s.replace('[','_').replace(']','_'), xdata.columns.tolist())) # required by xgboost
-import re
-regex = re.compile(r'\[|\]|<', re.IGNORECASE)
-data.columns = [regex.sub('_', c) if any(x in str(c) for x in set(('[', ']', '<'))) else c for c in data.columns.values]
+# Extract infer sources
+logger.info('\nExtract infer sources ... {}'.format(infer_sources))
+infer_data = data[data['SOURCE'].isin(infer_sources)].reset_index(drop=True)
+logger.info(f'infer_data.shape {infer_data.shape}')
+logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(infer_data)/1e9))
+# print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
 
 
 # Assign type to categoricals
@@ -253,31 +262,7 @@ if 'rna_clusters' in other_features:
 # ========================================================================
 #       Impute missing values
 # ========================================================================
-from sklearn.impute import SimpleImputer, MissingIndicator
-
-logger.info('\nImpute missing features ...')
-tmp_data = data.copy()
-df_list = []
-for prefx in fea_prefix.values():
-    cols = data.columns[[True if prefx in c else False for c in data.columns.tolist()]]
-    if len(cols) > 0:        
-        df = data[cols].copy()
-        tmp_data.drop(columns=cols, inplace=True)
-        df_list.append(df)
-
-xdata_to_impute = pd.DataFrame(pd.concat(df_list, axis=1))
-
-# TODO: try regressor (impute continuous features) or classifier (impute discrete features)
-# https://scikit-learn.org/stable/auto_examples/plot_missing_values.html
-logger.info('Num features with missing values: {}'.format(sum(xdata_to_impute.isna().sum() > 1)))
-cols = xdata_to_impute.columns
-imputer = SimpleImputer(missing_values=np.nan, strategy='mean', verbose=1)
-xdata_imputed = imputer.fit_transform(xdata_to_impute)
-xdata_imputed = pd.DataFrame(xdata_imputed, columns=cols)
-logger.info('Num features with missing values (after impute): {}'.format(sum(xdata_imputed.isna().sum() > 1)))
-
-data = pd.concat([tmp_data, xdata_imputed], axis=1)
-del xdata_to_impute, xdata_imputed
+data = utils.impute_values(data, fea_prefix=fea_prefix, logger=None)
 
 
 
@@ -638,6 +623,11 @@ if 'tpot_reg' in ml_models:
 
 
 
+
+
+# ========================================================================
+#       Infer
+# ========================================================================
 
 
 
