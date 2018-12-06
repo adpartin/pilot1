@@ -21,7 +21,7 @@ ML models:
 - xgboost (gbtree or gblinear)
 - lightgbm
 - catboost
-- random forest
+- RandomForestRegressor, AdaBoostRegressor, ExtraTreesRegressor
 - naive bayes
 - svm
 - knn
@@ -88,7 +88,7 @@ import seaborn as sns
 
 from scipy import stats
 from sklearn.preprocessing import Imputer, OneHotEncoder, OrdinalEncoder
-from sklearn.model_selection import train_test_split, learning_curve, KFold, StratifiedKFold
+from sklearn.model_selection import learning_curve, KFold, StratifiedKFold
 
 # Utils
 # file_path = os.getcwd()
@@ -124,10 +124,18 @@ infer_sources = ['ctrp']
 # target_name = 'AUC'
 target_name = 'AUC1'
 
-# Features
+# Features to use
+# TODO: instead of using these names, just use the values of fea_prefix dict
 cell_features = ['rnaseq'] # ['rnaseq', cnv', 'rnaseq_latent']
 drug_features = ['descriptors'] # [] # ['descriptors', 'fingerprints', 'descriptors_latent', 'fingerprints_latent']
 other_features = [] # ['drug_labels'] # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
+feature_list = cell_features + drug_features + other_features
+
+# Feature prefix as it appears in the tidy dataframe
+fea_prefix = {'rnaseq': 'cell_rna',
+              'cnv': 'cell_cnv',
+              'descriptors': 'drug_dsc',
+              'fingerprints': 'drug_fng'}
 
 # Models
 # ml_models = ['tpot_reg']
@@ -138,11 +146,6 @@ outlier_remove = False  # IsolationForest
 verbose = True
 n_jobs = 4
 
-# Feature prefix
-fea_prefix = {'rnaseq': 'cell_rna',
-              'cnv': 'cell_cnv',
-              'descriptors': 'drug_dsc',
-              'fingerprints': 'drug_fng'}
 
 
 # ========================================================================
@@ -262,26 +265,33 @@ if 'rna_clusters' in other_features:
 # ========================================================================
 #       Impute missing values
 # ========================================================================
-data = utils.impute_values(data, fea_prefix=fea_prefix, logger=None)
+data = utils.impute_values(data, fea_prefix=fea_prefix, logger=logger)
 
 
 
 # ========================================================================
 #       Split train and val (test)
 # ========================================================================
-logger.info('\nSplit data into train and val (test) ...')
-tr_data, vl_data = train_test_split(data, test_size=0.2, random_state=SEED)
-tr_data.reset_index(drop=True, inplace=True)
-vl_data.reset_index(drop=True, inplace=True)
-logger.info(f'tr_data.shape {tr_data.shape}')
-logger.info(f'vl_data.shape {vl_data.shape}')
+# logger.info('\nSplit data into train and val (test) ...')
+# tr_data, vl_data = train_test_split(data, test_size=0.2, random_state=SEED)
+# tr_data.reset_index(drop=True, inplace=True)
+# vl_data.reset_index(drop=True, inplace=True)
+# logger.info(f'tr_data.shape {tr_data.shape}')
+# logger.info(f'vl_data.shape {vl_data.shape}')
+tr_data, vl_data = utils.split_tr_vl(data=data, test_size=0.2, random_state=SEED, logger=logger)
+
 
 # Extract target and features
-fea_prefix_list = [fea_prefix[fea] for fea in (cell_features + drug_features) if fea in fea_prefix.keys()]
-xtr = tr_data[[c for c in tr_data.columns if c.split('.')[0] in fea_prefix_list]].reset_index(drop=True).copy()
-xvl = vl_data[[c for c in vl_data.columns if c.split('.')[0] in fea_prefix_list]].reset_index(drop=True).copy()
-ytr = tr_data[target_name].copy()
-yvl = vl_data[target_name].copy()
+# fea_prefix_list = [fea_prefix[fea] for fea in feature_list if fea in fea_prefix.keys()]
+# xtr = tr_data[[c for c in tr_data.columns if c.split('.')[0] in fea_prefix_list]].reset_index(drop=True).copy()
+# xvl = vl_data[[c for c in vl_data.columns if c.split('.')[0] in fea_prefix_list]].reset_index(drop=True).copy()
+# ytr = tr_data[target_name].copy()
+# yvl = vl_data[target_name].copy()
+xtr = utils.extract_features(data=tr_data, feature_list=feature_list, fea_prefix=fea_prefix)
+xvl = utils.extract_features(data=vl_data, feature_list=feature_list, fea_prefix=fea_prefix)
+ytr = utils.extract_target(data=tr_data, target_name=target_name)
+yvl = utils.extract_target(data=vl_data, target_name=target_name)
+
 
 # Print features shapes
 def print_feature_shapes(df, name):
@@ -315,8 +325,6 @@ plt.savefig(os.path.join(run_outdir, target_name+'_ytr_yvl_hist.png'), bbox_inch
 # ========================================================================
 #       Train models
 # ========================================================================
-from sklearn.ensemble import AdaBoostRegressor, ExtraTreesRegressor
-
 from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, ParameterGrid
 from sklearn.externals import joblib

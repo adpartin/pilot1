@@ -163,6 +163,37 @@ def impute_values(data, fea_prefix, logger=None):
     return data
 
 
+def split_tr_vl(data, test_size=0.2, random_state=None, logger=None):
+    """ ... """
+    from sklearn.model_selection import train_test_split
+    tr_data, vl_data = train_test_split(data, test_size=test_size, random_state=random_state)
+    tr_data.reset_index(drop=True, inplace=True)
+    vl_data.reset_index(drop=True, inplace=True)
+    if logger is not None:
+        logger.info('\nSplit data into train and val (test) ...')
+        logger.info(f'tr_data.shape {tr_data.shape}')
+        logger.info(f'vl_data.shape {vl_data.shape}')
+    return tr_data, vl_data
+
+
+def extract_features(data, feature_list, fea_prefix):
+    """ 
+    Args:
+        data :
+        feature_list : e.g., (cell_features + drug_features)
+        fea_prefix :
+    Returns:
+    """
+    fea_prefix_list = [fea_prefix[fea] for fea in feature_list if fea in fea_prefix.keys()]
+    data = data[[c for c in data.columns if c.split('.')[0] in fea_prefix_list]].reset_index(drop=True).copy()
+    return data
+
+
+def extract_target(data, target_name):
+    y = data[target_name].copy()
+    return y
+
+
 def dump_preds(model, df_data, xdata, target_name, path, model_name=None):
     """
     Args:
