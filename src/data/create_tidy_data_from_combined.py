@@ -1,6 +1,9 @@
 """
 Notes:
 - Imputation of missing values is done in src/models.
+
+TODO:
+- create tidy data from chemparter.
 """
 from __future__ import division
 from __future__ import print_function

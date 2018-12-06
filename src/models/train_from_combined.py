@@ -10,6 +10,7 @@ TODO:
   https://github.com/LevinJ/Supply-demand-forecasting/blob/master/utility/xgbbasemodel.py
 - ensemble/stack models
   http://blog.kaggle.com/2017/06/15/stacking-made-easy-an-introduction-to-stacknet-by-competitions-grandmaster-marios-michailidis-kazanova/
+  https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard
 
 Explore Auto-ML models:
 - tpot
@@ -117,8 +118,8 @@ SEED = 0
 #       Args TODO: add to argparse
 # ========================================================================
 # Train and infer data
-train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
-infer_sources = ['ctrp']
+train_sources = ['ctrp']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
+infer_sources = ['ccle']
 
 # Traget (response)
 # target_name = 'AUC'
@@ -182,19 +183,19 @@ regex = re.compile(r'\[|\]|<', re.IGNORECASE)
 data.columns = [regex.sub('_', c) if any(x in str(c) for x in set(('[', ']', '<'))) else c for c in data.columns.values]
 
 
+# Extract infer sources
+logger.info('\nExtract infer sources ... {}'.format(infer_sources))
+te_data = data[data['SOURCE'].isin(infer_sources)].reset_index(drop=True)
+logger.info(f'te_data.shape {te_data.shape}')
+logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(te_data)/1e9))
+# print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+
+
 # Extract training sources
 logger.info('\nExtract train sources ... {}'.format(train_sources))
 data = data[data['SOURCE'].isin(train_sources)].reset_index(drop=True)
 logger.info(f'data.shape {data.shape}')
 logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
-# print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
-
-
-# Extract infer sources
-logger.info('\nExtract infer sources ... {}'.format(infer_sources))
-infer_data = data[data['SOURCE'].isin(infer_sources)].reset_index(drop=True)
-logger.info(f'infer_data.shape {infer_data.shape}')
-logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(infer_data)/1e9))
 # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
 
 
@@ -272,21 +273,10 @@ data = utils.impute_values(data, fea_prefix=fea_prefix, logger=logger)
 # ========================================================================
 #       Split train and val (test)
 # ========================================================================
-# logger.info('\nSplit data into train and val (test) ...')
-# tr_data, vl_data = train_test_split(data, test_size=0.2, random_state=SEED)
-# tr_data.reset_index(drop=True, inplace=True)
-# vl_data.reset_index(drop=True, inplace=True)
-# logger.info(f'tr_data.shape {tr_data.shape}')
-# logger.info(f'vl_data.shape {vl_data.shape}')
 tr_data, vl_data = utils.split_tr_vl(data=data, test_size=0.2, random_state=SEED, logger=logger)
 
 
 # Extract target and features
-# fea_prefix_list = [fea_prefix[fea] for fea in feature_list if fea in fea_prefix.keys()]
-# xtr = tr_data[[c for c in tr_data.columns if c.split('.')[0] in fea_prefix_list]].reset_index(drop=True).copy()
-# xvl = vl_data[[c for c in vl_data.columns if c.split('.')[0] in fea_prefix_list]].reset_index(drop=True).copy()
-# ytr = tr_data[target_name].copy()
-# yvl = vl_data[target_name].copy()
 xtr = utils.extract_features(data=tr_data, feature_list=feature_list, fea_prefix=fea_prefix)
 xvl = utils.extract_features(data=vl_data, feature_list=feature_list, fea_prefix=fea_prefix)
 ytr = utils.extract_target(data=tr_data, target_name=target_name)
@@ -329,14 +319,14 @@ from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, ParameterGrid
 from sklearn.externals import joblib
 
-
 train_runtime = OrderedDict() # {}
-
+preds_filename_prefix = 'dev'
 
 # ---------------------
 # RandomForestRegressor
 # ---------------------
 if 'rf_reg' in ml_models:
+    model_name = 'rf_reg'
     try:
         from sklearn.ensemble import RandomForestRegressor
     except ImportError:
@@ -366,26 +356,26 @@ if 'rf_reg' in ml_models:
     # Run search
     t0 = time.time()
     rf_reg_randsearch.fit(xtr, ytr)
-    train_runtime['rf_reg_randsearch'] = time.time() - t0
-    logger.info('Runtime: {:.2f} mins'.format(train_runtime['rf_reg_randsearch']/60))
+    train_runtime[model_name+'_randsearch'] = time.time() - t0
+    logger.info('Runtime: {:.2f} mins'.format(train_runtime[model_name+'_randsearch']/60))
 
     # Save best model
     rf_reg = rf_reg_randsearch.best_estimator_
-    joblib.dump(rf_reg, filename=os.path.join(run_outdir, 'rf_reg_hypsearch_best_model.pkl'))
+    joblib.dump(rf_reg, filename=os.path.join(run_outdir, model_name+'_hypsearch_best_model.pkl'))
 
     # Print preds
     utils.print_scores(model=rf_reg, xdata=xvl, ydata=yvl, logger=logger)
 
     # Save resutls
     rf_reg_hypsearch = pd.DataFrame(rf_reg_randsearch.cv_results_)
-    rf_reg_hypsearch.to_csv(os.path.join(run_outdir, 'rf_reg_hypsearch_summary.csv'))  # save hyperparam search results
+    rf_reg_hypsearch.to_csv(os.path.join(run_outdir, model_name+'_hypsearch_summary.csv'))  # save hyperparam search results
 
-    logger.info(f'rf_reg best score (random search): {rf_reg_randsearch.best_score_:.3f}')
-    logger.info('rf_reg best params (random search): \n{}'.format(rf_reg_randsearch.best_params_))
+    logger.info(f'{model_name} best score (random search): {rf_reg_randsearch.best_score_:.3f}')
+    logger.info('{} best params (random search): \n{}'.format(model_name, rf_reg_randsearch.best_params_))
 
     # Dump preds
     utils.dump_preds(model=rf_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                    path=os.path.join(run_outdir, 'rf_vl_preds.csv'))
+                    path=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))
     # ----- rf hyper-param end
 
 
@@ -515,6 +505,7 @@ if 'xgb_reg' in ml_models:
 # LGBMRegressor
 # -------------
 if 'lgb_reg' in ml_models:
+    model_name = 'lgb_reg'
     try:
         import lightgbm as lgb
     except ImportError:  # install??
@@ -558,13 +549,13 @@ if 'lgb_reg' in ml_models:
     t0 = time.time()
     lgb_reg.fit(xtr, ytr, eval_metric=eval_metric, eval_set=[(xtr, ytr), (xvl, yvl)],
                 early_stopping_rounds=10, verbose=False, callbacks=None)
-    train_runtime['lgb_reg'] = time.time() - t0
-    logger.info('Runtime: {:.2f} mins'.format(train_runtime['lgb_reg']/60))
+    train_runtime[model_name] = time.time() - t0
+    logger.info('Runtime: {:.2f} mins'.format(train_runtime[model_name]/60))
     # ----- lightgbm "sklearn API" appraoch 1 - end
 
     # Save model
     # lgb_reg.save_model(os.path.join(run_outdir, 'lgb_'+ml_type+'_model.txt'))
-    joblib.dump(lgb_reg, filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
+    joblib.dump(lgb_reg, filename=os.path.join(run_outdir, model_name+'_model.pkl'))
     # lgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
 
     # Print preds
@@ -574,19 +565,19 @@ if 'lgb_reg' in ml_models:
 
     # Dump preds
     utils.dump_preds(model=lgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                     path=os.path.join(run_outdir, 'lgb_vl_preds.csv'))
+                     path=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))
 
     # Plot feature importance
     lgb.plot_importance(booster=lgb_reg, max_num_features=20, grid=True, title='LGBMRegressor')
     plt.tight_layout()
-    plt.savefig(os.path.join(run_outdir, 'lgb_reg_importances.png'))
+    plt.savefig(os.path.join(run_outdir, model_name+'_importances.png'))
 
     # Plot learning curves
     # TODO: note, plot_metric didn't accept 'mae' although it's alias for 'l1' 
     # TODO: plot_metric requires dict from train(), but train returns 'lightgbm.basic.Booster'??
-    for m in ['l1', 'l2']:
+    for m in eval_metric:
         ax = lgb.plot_metric(booster=lgb_reg, metric=m, grid=True)
-        plt.savefig(os.path.join(run_outdir, 'lgb_reg_learning_curve_'+m+'.png'))
+        plt.savefig(os.path.join(run_outdir, model_name+'_learning_curve_'+m+'.png'))
 
 
 # -------------
@@ -626,8 +617,10 @@ if 'tpot_reg' in ml_models:
     utils.print_scores(model=tpot_reg, xdata=xvl, ydata=yvl, logger=logger)
 
     # Dump preds
+    t0 = time.time()
     utils.dump_preds(model=tpot_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
                     path=os.path.join(run_outdir, 'tpot_reg_vl_preds.csv'))
+    logger.info('Predictions runtime: {:.2f} mins'.format(time.time()/60))
 
 
 
@@ -636,71 +629,29 @@ if 'tpot_reg' in ml_models:
 # ========================================================================
 #       Infer
 # ========================================================================
+logger.info('\n=====================================================')
+logger.info(f'Inference ... {infer_sources}')
+logger.info('=====================================================')
+
+preds_filename_prefix = 'infer'
+model_name = 'lgb_reg'
+
+# Prepare infer data for predictions
+te_data = utils.impute_values(data=te_data, fea_prefix=fea_prefix, logger=logger)
+xte = utils.extract_features(data=te_data, feature_list=feature_list, fea_prefix=fea_prefix)
+yte = utils.extract_target(data=te_data, target_name=target_name)
+
+# Print feature shapes
+print_feature_shapes(df=xte, name='xte')
+
+# Print preds
+utils.print_scores(model=lgb_reg, xdata=xte, ydata=yte, logger=logger)
+
+# Dump preds
+utils.dump_preds(model=lgb_reg, df_data=te_data, xdata=xte, target_name=target_name,
+                 path=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))
 
 
-
-
-
-# ========================================================================
-# From competition
-# ========================================================================
-# # https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard
-# from sklearn.linear_model import ElasticNet, Lasso, BayesianRidge, LassoLarsIC
-# from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-# from sklearn.kernel_ridge import KernelRidge
-# from sklearn.pipeline import Pipeline, make_pipeline
-# from sklearn.preprocessing import RobustScaler
-# from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin, clone
-# from sklearn.model_selection import KFold, cross_val_score, train_test_split
-# from sklearn.metrics import mean_squared_error
-# import xgboost as xgb
-# import lightgbm as lgb
-
-
-# # Validation function
-# def rmsle_cv(model, kfolds=5):
-#     # https://scikit-learn.org/stable/modules/model_evaluation.html
-#     kf = KFold(kfolds, shuffle=False, random_state=SEED).get_n_splits(xtr.values)
-#     rmse= np.sqrt(-cross_val_score(estimator=model, X=xdata, y=ydata,
-#                                    scoring='r2', cv=kf, n_jobs=-1))
-#     return(rmse)
-
-
-# ml_runtime = OrderedDict() # {}
-# print('\nTrain Lasso ...')
-# t0 = time.time()
-# # https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Lasso.html
-# lasso = make_pipeline(RobustScaler(), Lasso(alpha=0.0005, random_state=SEED))
-# # lasso = Pipeline(steps=[('RobustScaler', RobustScaler()), ('Lasso', Lasso(alpha=0.0005, random_state=SEED))])
-# # scaler = RobustScaler()
-# # scaler.fit_transform(xdata)
-# print(lasso.score(xvl, yvl))   
-# ml_runtime['lasso'] = time.time() - t0
-# print('lasso: {:.2f} mins'.format(ml_runtime['lasso']/60))
-
-# print('\nTrain elastic net ...')
-# # https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.ElasticNet.html
-# elnet = make_pipeline(RobustScaler(), ElasticNet(alpha=0.0005, l1_ratio=0.9, random_state=SEED))
-# print(elnet.score(xvl, yvl))   
-# ml_runtime['elnet'] = time.time() - t0
-# print('elnet: {:.2f} mins'.format(ml_runtime['elnet']/60))
-
-# print('\nTrain kernel ridge ...')
-# # https://scikit-learn.org/stable/modules/generated/sklearn.kernel_ridge.KernelRidge.html
-# krr = KernelRidge(alpha=0.6, kernel='polynomial', degree=2, coef0=2.5)
-# print(krr.score(xvl, yvl))   
-# ml_runtime['krr'] = time.time() - t0
-# print('krr: {:.2f} mins'.format(ml_runtime['krr']/60))
-
-# print('\nTrain GBR ...')
-# # https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.GradientBoostingRegressor.html
-# gbr = GradientBoostingRegressor(n_estimators=200, learning_rate=0.05,
-#                                    max_depth=4, max_features='sqrt',
-#                                    min_samples_leaf=15, min_samples_split=10, 
-#                                    loss='huber', random_state =5)
-# print(gbr.score(xvl, yvl))   
-# ml_runtime['gbr'] = time.time() - t0
-# print('gbr: {:.2f} mins'.format(ml_runtime['gbr']/60))
 
 
 
