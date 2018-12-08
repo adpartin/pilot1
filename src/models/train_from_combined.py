@@ -109,6 +109,7 @@ import utils_models as utils
 DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
 FILENAME = 'tidy_data_no_fibro.parquet'
+# FILENAME = 'tidy_data.parquet'
 os.makedirs(OUTDIR, exist_ok=True)
 
 SEED = 0
@@ -118,8 +119,8 @@ SEED = 0
 #       Args TODO: add to argparse
 # ========================================================================
 # Train and infer data
-train_sources = ['ctrp']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
-infer_sources = ['ccle']
+train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
+infer_sources = ['gcsi']
 
 # Traget (response)
 # target_name = 'AUC'
@@ -142,7 +143,7 @@ fea_prefix = {'rnaseq': 'cell_rna',
 # ml_models = ['tpot_reg']
 ml_models = ['lgb_reg']
 
-trasform_target = False
+trasform_target = True
 outlier_remove = False  # IsolationForest
 verbose = True
 n_jobs = 4
@@ -235,6 +236,10 @@ if trasform_target:
     y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
     data[target_name] = y
     # ydata = pd.DataFrame(y)
+
+    y = te_data[target_name].copy()
+    y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
+    te_data[target_name] = y
 
 
 if 'drug_labels' in other_features:

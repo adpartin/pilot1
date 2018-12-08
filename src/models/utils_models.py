@@ -308,12 +308,12 @@ def plot_boxplot(x, y, figsize=(15, 5), title=None, outpath=None):
         plt.savefig(fname=outpath)
         
         
-def plot_density(col, split_by, df, kind='kde', bins=100, figsize=(15, 5), title=None, outpath=None): 
+def plot_density(df, col, split_by, kind='kde', bins=100, figsize=(15, 5), title=None, outpath=None): 
     """
     Args:
+        df : 
         col : the column name in df to plot (e.g. 'GROWTH')
         split_by : by which column to split the plots (e.g., 'SOURCE' --> plot growth for each source)
-        df : load_drug_fingerprints
         kind : 
         bins : number of bins in histogram (used when king='hist')
         figsize : 
@@ -327,6 +327,7 @@ def plot_density(col, split_by, df, kind='kde', bins=100, figsize=(15, 5), title
             sns.kdeplot(tmp[col], shade=True, label=b, legend=True)
         elif kind=='hist':
             ax.hist(tmp[col], bins=bins, label=b)
+            ax.legend()
     if title:
         ax.set_title(title)
     ax.grid(True)
