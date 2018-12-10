@@ -106,19 +106,39 @@ rna <- get_gene_subset(rna=rna, rna_gene_set="lincs", gene_mapping=gene_mapping,
 
 
 # ==============================================================
+#   Load data RPKM data
+# ==============================================================
+# Load rpkm rna-seq and keep the genes from cnts df
+ll <- load_rnaseq(rnaseq_fullpath=rnaseq_rpkm_fullpath)
+rna_rpkm <- ll$rna
+gene_names_rpkm <- ll$gene_names
+rm(ll)
+
+rna_rpkm <- rna_rpkm[rownames(rna),]
+
+
+
+# ==============================================================
 #   Create DESeqDataSet for normalization and make some plots
 # ==============================================================
-# ---------------------
-# Boxplot - all samples
-# ---------------------
+# ----------------------
+# Boxplots - all samples
+# ----------------------
 # Reorder the samples based on tissue type (for boxplots)
 idx <- c(order(tissuetype))
 tissuetype <- tissuetype[idx]
 table(tissuetype)
 rna <- rna[,idx]
+rna_rpkm <- rna_rpkm[,idx]
 
-# Boxplot of multiple samples
-plot_boxplots(rna=rna, tissuetype=tissuetype, filename=paste0(save_data_name, "_boxplot_log2(cnts)"), n=NULL)
+# Boxplot of multiple samples - cnts
+plot_boxplots(rna=rna, tissuetype=tissuetype,
+              filename=paste0(save_data_name, "_boxplots_log2(cnts)"), n=NULL)
+
+# Boxplot of multiple samples - rpkm
+plot_boxplots(rna=rna_rpkm, tissuetype=tissuetype,
+              filename=paste0(save_data_name, "_boxplots_rpkm"), n=NULL)
+
 sort(colSums(rna)[1:3])/1e6
 
 
@@ -162,39 +182,6 @@ assay(lognorm)[1:2, 1:4]
 all(log_sf == assay(lognorm))  # note that assay(lognorm) and lognormcnts are the same
 
 
-# # -----------------------------
-# # Plots sample vs sample (save)
-# # -----------------------------
-# # Raw counts
-# par(mfrow=c(1,1)); png(file.path(outdir, paste0(save_data_name, '_2_random_samples_cnts.png')))
-# plot(cnts[,1], cnts[,2], cex=0.1,
-#      xlab=colnames(cnts)[1], ylab=colnames(cnts)[2], main="Raw count")
-# abline(lm(cnts[,2] ~ cnts[,1] + 0))
-# dev.off()
-# 
-# # Log of raw counts
-# par(mfrow=c(1,1)); png(file.path(outdir, paste0(save_data_name, '_2_random_samples_logcnts.png')))
-# plot(logcnts[,1], logcnts[,2], cex=0.1,
-#      xlab=colnames(logcnts)[1], ylab=colnames(logcnts)[2], main="Log of raw count")
-# abline(lm(logcnts[,2] ~ logcnts[,1] + 0))
-# dev.off()
-# 
-# # Log of counts normalized using sizeFactors
-# par(mfrow=c(1,1)); png(file.path(outdir, paste0(save_data_name, '_2_random_samples_log_sf.png')))
-# plot(log_sf[,1], log_sf[,2], cex=0.1,
-#      xlab=colnames(log_sf)[1], ylab=colnames(log_sf)[2], main="Log of counts normalized using sizeFactors")
-# abline(lm(log_sf[,2] ~ log_sf[,1] + 0))
-# dev.off()
-
-# # --- Is there any difference? ---
-# # Plot the same sample counts: normalized using log2 vs normalized using SizeFactors
-# " We don't see much difference between log2 and log2 with sizeFactors "
-# logcnts[1:2, 1:4]
-# log_sf[1:2, 1:4]
-# plot(logcnts[,1], log_sf[,1], cex=0.1)
-# abline(lm(log_sf[,1] ~ logcnts[,1] + 0))
-
-
 # --------------------------
 # Boxplots of subset samples
 # --------------------------
@@ -216,7 +203,15 @@ vsd_runtime <- Sys.time() - t0
 glue("vsd run time: {vsd_runtime/60} mins")
 
 # Get the actual vsd values
-vsd_data <- assay(vsd)
+vsd_data <- as.data.frame(assay(vsd))
+
+
+# ----------------------
+# Boxplots - all samples
+# ----------------------
+# Boxplot of multiple samples - vsd
+plot_boxplots(rna=vsd_data, tissuetype=tissuetype,
+              filename=paste0(save_data_name, "_boxplots_vsd"), n=NULL)
 
 
 # ----------------------------------------
@@ -236,11 +231,6 @@ dev.off()
 # ------------------------------------
 # Plot - sample vs sample - vsd (save)
 # ------------------------------------
-# par(mfrow=c(1,1)); pdf(file.path(outdir, paste0(save_data_name, '_2_random_samples_vsd.pdf')))
-# plot(vsd_data[,1], vsd_data[,2], cex=0.1, main="VSD")
-# abline(lm(vsd_data[,2] ~ vsd_data[,1] + 0))
-# dev.off()
-
 # Plot (compare raw counts, log2, sizeFactors, svd)
 pdf(file.path(outdir, paste0(save_data_name, '_sample_vs_sample_comparison.pdf')))
 layout(matrix(c(1,2,3,4), nrow=2, ncol=2), respect=T)
@@ -265,13 +255,21 @@ abline(lm(vsd_data[,2] ~ vsd_data[,1] + 0))
 dev.off()
 
 
-# ----------------
-# Create tidy data
-# ----------------
-vsd_data_t <- as.data.frame(t(vsd_data))
-vsd_data_t$CCLEName <- rownames(vsd_data_t)  # create col to merge on
-vsd_data_t <- vsd_data_t[, c(ncol(vsd_data_t), seq(ncol(vsd_data_t)-1))] # put CCLEName as the first col
 
+# ==============================================================
+#   Create tidy data
+# ==============================================================
+# Transpose rna and add col to merging with rspdata
+transpose_rna <- function(df) {
+  df_t <- as.data.frame(t(df))
+  df_t$CCLEName <- rownames(df_t)  # create col to merge on
+  df_t <- df_t[, c(ncol(df_t), seq(ncol(df_t)-1))] # put CCLEName as the first col
+  return(df_t)
+}
+rna_rpkm_t <- transpose_rna(df=rna_rpkm)
+vsd_data_t <- transpose_rna(df=vsd_data)
+
+# Preproc cmeta for merging
 vsd_cmeta <- as.data.frame(colData(vsd))
 vsd_cmeta$CCLEName <- rownames(vsd_cmeta)  # create col to merge on
 vsd_cmeta <- vsd_cmeta[, c(ncol(vsd_cmeta), seq(ncol(vsd_cmeta)-1))]
@@ -283,16 +281,24 @@ dim(rspdata)
 vsd_data_t[1:2, 1:3]
 rspdata[1:2, 1:3]
 
-# Merge data
-# tidy_data_vsd <- merge(rspdata, vsd_data_t, by="CCLEName")
-df1 <- merge(vsd_cmeta, vsd_data_t, by="CCLEName")
-tidy_data_vsd <- merge(rspdata, df1, by="CCLEName")
-tidy_data_vsd[1:3, 1:17]
+# Merge expression and rspdata
+merge_data <- function(rspdata, df, vsd_cmeta) {
+  df1 <- merge(vsd_cmeta, df, by="CCLEName")
+  tidy_data <- merge(rspdata, df1, by="CCLEName")
+  return(tidy_data)
+}
+tidy_data_vsd <- merge_data(rspdata=rspdata, df=vsd_data_t, vsd_cmeta=vsd_cmeta)
+tidy_data_rpkm <- merge_data(rspdata=rspdata, df=rna_rpkm_t, vsd_cmeta=vsd_cmeta)
 
 # Save data
-write.table(tidy_data_vsd, file.path(outdir, paste0("tidy_data_", save_data_name, "_ccle_vsd.txt")), sep="\t")
-write.table(vsd_data, file.path(outdir, paste0(save_data_name, "_ccle_vsd.txt")), sep="\t")
-write.table(vsd_cmeta, file.path(outdir, paste0(save_data_name, "_ccle_cmeta.txt")), sep="\t")
+write.table(tidy_data_rpkm, file.path(outdir, paste0("tidy_data_ccle_rpkm_", save_data_name, ".txt")), sep="\t")
+write.table(rna_rpkm_t, file.path(outdir, paste0("ccle_rpkm_", save_data_name, ".txt")), sep="\t")
+
+write.table(tidy_data_vsd, file.path(outdir, paste0("tidy_data_ccle_vsd_", save_data_name, ".txt")), sep="\t")
+write.table(vsd_data_t, file.path(outdir, paste0("ccle_vsd_", save_data_name, ".txt")), sep="\t")
+
+write.table(vsd_cmeta, file.path(outdir, paste0("ccle_cmeta.txt")), sep="\t")
+
 
 
 # ==============================================================

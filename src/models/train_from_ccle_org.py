@@ -48,7 +48,7 @@ import utils_models as utils
 
 DATADIR = os.path.join(file_path, '../../data/processed/from_ccle_org')
 OUTDIR = os.path.join(file_path, '../../models/from_ccle_org')
-FILENAME = 'tidy_data_lincs_ccle_vsd.txt'
+FILENAME = 'tidy_data_ccle_vsd_lincs.txt'
 os.makedirs(OUTDIR, exist_ok=True)
 
 SEED = 0
@@ -58,8 +58,8 @@ SEED = 0
 #       Args TODO: add to argparse
 # ========================================================================
 # Train and infer data
-train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
-infer_sources = ['ccle']
+# train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
+# infer_sources = ['ccle']
 
 # Traget (response)
 # target_name: 'EC50um', 'IC50um', 'Amax', 'ActArea'
@@ -67,9 +67,10 @@ rsp_cols = ['EC50um', 'IC50um', 'Amax', 'ActArea']
 target_name = 'ActArea'
 
 # Features
-cell_features = ['rnaseq'] # ['rnaseq', cnv', 'rnaseq_latent']
-drug_features = ['descriptors'] # [] # ['descriptors', 'fingerprints', 'descriptors_latent', 'fingerprints_latent']
-other_features = [] # ['drug_labels'] # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
+cell_features = ['cell_rna'] # ['rnaseq', cnv', 'rnaseq_latent']
+drug_features = [] # ['descriptors'] # [] # ['descriptors', 'fingerprints', 'descriptors_latent', 'fingerprints_latent']
+other_features = ['drug_label'] # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
+feature_list = cell_features + drug_features + other_features
 
 # Models
 # ml_models = ['tpot_reg']
@@ -112,11 +113,40 @@ data.rename(columns={'CellName': 'CELL', 'Drug': 'DRUG'}, inplace=True)
 logger.info(f'data.shape {data.shape}')
 logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
 # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
-print(data.groupby('tissuetype').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+logger.info(data.groupby('tissuetype').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
 
 
-data.columns[:20]
-data[['CCLEName', 'CELL', 'Drug', 'tissuetype']].head()
+# Add prefix to genes ()
+# TODO: this should be done in the 'create' script!
+data = tmp.rename(columns={c: 'cell_rna.'+c for c in tmp.columns if 'ENSG' in c})
+
+
+# data.columns[:20]
+# data[['CCLEName', 'CELL', 'DRUG', 'tissuetype']].head()
+
+
+# Shuffle data
+data = data.sample(frac=1.0, axis=0, random_state=SEED).reset_index(drop=True)
+
+
+if 'drug_label' in other_features:
+    # print('\nAdd drug labels to features ...')
+    logger.info('\nAdd drug labels to features ...')
+    # print(data['DRUG'].value_counts())
+
+    # http://queirozf.com/entries/one-hot-encoding-a-feature-on-a-pandas-dataframe-an-example
+    # One-hot encoder
+    drug_labels = pd.get_dummies(data=data[['DRUG']], prefix='drug_label',
+                                 prefix_sep='.', dummy_na=False).reset_index(drop=True)
+
+    # Label encoder
+    # drug_labels = data[['DRUG']].astype('category', ordered=False).reset_index(drop=True)
+    # print(drug_labels.dtype)
+
+    # Concat drug labels and other features
+    data = pd.concat([drug_labels, data], axis=1).reset_index(drop=True)
+    logger.info(f'drug_labels.shape {drug_labels.shape}')
+    logger.info(f'data.shape {data.shape}')
 
 
 # ========================================================================
@@ -156,5 +186,12 @@ def plot_rsp_dists(rsp, rsp_cols, savepath=None):
         plt.savefig('rsp_dists.png', bbox_inches='tight', dpi=300)
 
 
-plot_rsp_dists(rsp=data, rsp_cols=rsp_cols, savepath=os.path.join(OUTDIR, 'rsp_dists.png'))
+plot_rsp_dists(rsp=data, rsp_cols=rsp_cols, savepath=os.path.join(run_outdir, 'rsp_dists.png'))
+# ========================================================================
+# ========================================================================
 
+
+# ========================================================================
+#       Impute missing values
+# ========================================================================
+data = utils.impute_values(data, fea_prefix=fea_prefix, logger=logger)

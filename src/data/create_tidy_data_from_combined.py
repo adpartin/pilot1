@@ -54,8 +54,8 @@ t0 = time.time()
 #       Args TODO: add to argparse
 # ========================================================================
 sources = ['ccle', 'gcsi', 'gdsc', 'ctrp']
-drug_features = ['descriptors', 'fingerprints']
-cell_features = ['rnaseq']
+drug_features = ['dsc']  # ['dsc', 'fng']
+cell_features = ['rna']  # ['rna', 'cnv']
 dropna_thres = 0.4
 
 verbose = True
@@ -71,10 +71,16 @@ fibro_names = ['CCLE.HS229T', 'CCLE.HS739T', 'CCLE.HS840T', 'CCLE.HS895T', 'CCLE
 rna_prefix = 'cell_rna.'
 dsc_prefix = 'drug_dsc.'
 
-prefix_dtypes = {'rna': np.float32,
-                 'cnv': np.int8,
-                 'dsc': np.float32,
-                 'fng': np.int8}
+# Feature prefix as it appears in the tidy dataframe
+fea_prfx_dict = {'rna': 'cell_rna.',
+                 'cnv': 'cell_cnv.',
+                 'dsc': 'drug_dsc.',
+                 'fng': 'drug_fng.'}
+
+prfx_dtypes = {'rna': np.float32,
+               'cnv': np.int8,
+               'dsc': np.float32,
+               'fng': np.int8}
 
 
 # ========================================================================
@@ -136,7 +142,7 @@ lincs = utils.CombinedRNASeqLINCS(datadir=DATADIR, dataset='raw', sources=source
 rna, cmeta = lincs._df_rna, lincs._meta
 rna.rename(columns={'Sample': 'CELL'}, inplace=True)
 cmeta.rename(columns={'Sample': 'CELL', 'source': 'SOURCE'}, inplace=True)
-rna = rna.rename(columns={c: rna_prefix+c for c in rna.columns[1:] if rna_prefix not in c})
+rna = rna.rename(columns={c: rna_prefix+c for c in rna.columns[1:] if rna_prefix not in c}) # add fea prefix
 logger.info(f'rna.shape {rna.shape}')
 
 if verbose:
@@ -155,7 +161,7 @@ cols = pd.read_table(path, engine='c', nrows=0)
 dtype_dict = {c: np.float32 for c in cols.columns[1:]}
 dsc = pd.read_table(path, dtype=dtype_dict, na_values=na_values, warn_bad_lines=True)
 dsc.rename(columns={'NAME': 'PUBCHEM'}, inplace=True)
-dsc = dsc.rename(columns={c: dsc_prefix+c for c in dsc.columns[1:] if dsc_prefix not in c})
+dsc = dsc.rename(columns={c: dsc_prefix+c for c in dsc.columns[1:] if dsc_prefix not in c}) # add fea prefix
 logger.info(f'dsc.shape {dsc.shape}')
 
 
@@ -294,7 +300,7 @@ del rsp2
 # Summary of memory usage
 logger.info('\nMemory usage per feature set in the tidy dataframe: {:.3f}'.format(sys.getsizeof(data)/1e9))
 if verbose:
-    for prfx in prefix_dtypes.keys():
+    for prfx in prfx_dtypes.keys():
         cols = [c for c in data.columns if prfx in c]
         tmp = data[cols]
         mem = 0 if tmp.shape[1]==0 else sys.getsizeof(tmp)/1e9
@@ -303,7 +309,7 @@ if verbose:
 
 # Cast features
 # https://stackoverflow.com/questions/15891038/change-data-type-of-columns-in-pandas
-# for fea_prfx, fea_frmt in prefix_dtypes.items():
+# for fea_prfx, fea_frmt in prfx_dtypes.items():
 #     print(f'feature type and format: ({fea_prfx}, {fea_frmt})')
 #     dict_types = {c: fea_frmt for c in tmp.columns if fea_prfx in c}
 #     if len(dict_types) > 0:
