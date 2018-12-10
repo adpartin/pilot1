@@ -92,16 +92,16 @@ from sklearn.preprocessing import Imputer, OneHotEncoder, OrdinalEncoder
 from sklearn.model_selection import learning_curve, KFold, StratifiedKFold
 
 # Utils
-# file_path = os.getcwd()
-# file_path = os.path.join(file_path, 'src/models')
-# os.chdir(file_path)
+file_path = os.getcwd()
+file_path = os.path.join(file_path, 'src/models')
+os.chdir(file_path)
 
 # DATADIR = './tidy_data_from_combined'
 # FILENAME = 'tidy_data.parquet'
 # OUTDIR = os.path.join(file_path, 'ml_tidy_combined')
 # os.makedirs(OUTDIR, exist_ok=True)
 
-file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
+# file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
 ##utils_path = os.path.abspath(os.path.join(file_path, 'utils'))
 ##sys.path.append(utils_path)
 import utils_models as utils
@@ -128,16 +128,22 @@ target_name = 'AUC1'
 
 # Features to use
 # TODO: instead of using these names, just use the values of fea_prefix dict
-cell_features = ['rnaseq'] # ['rnaseq', cnv', 'rnaseq_latent']
-drug_features = ['descriptors'] # [] # ['descriptors', 'fingerprints', 'descriptors_latent', 'fingerprints_latent']
+cell_features = ['rna'] # ['rna', cnv', 'rna_latent']
+drug_features = ['dsc'] # [] # ['dsc', 'fng', 'dsc_latent', 'fng_latent']
 other_features = [] # ['drug_labels'] # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
 feature_list = cell_features + drug_features + other_features
 
-# Feature prefix as it appears in the tidy dataframe
-fea_prefix = {'rnaseq': 'cell_rna',
-              'cnv': 'cell_cnv',
-              'descriptors': 'drug_dsc',
-              'fingerprints': 'drug_fng'}
+# Feature prefix (some already present in the tidy dataframe)
+fea_prfx_dict = {'rna': 'cell_rna.',
+                 'cnv': 'cell_cnv.',
+                 'dsc': 'drug_dsc.',
+                 'fng': 'drug_fng.',
+                 'clb': 'cell_lbl.',
+                 'dlb': 'drug_lbl.'}
+# fea_prefix = {'rna': 'cell_rna',
+#               'cnv': 'cell_cnv',
+#               'dsc': 'drug_dsc',
+#               'fng': 'drug_fng'}
 
 # Models
 # ml_models = ['tpot_reg']
@@ -249,8 +255,8 @@ if 'drug_labels' in other_features:
 
     # http://queirozf.com/entries/one-hot-encoding-a-feature-on-a-pandas-dataframe-an-example
     # One-hot encoder
-    drug_labels = pd.get_dummies(data=data[['DRUG']], prefix='drug_label',
-                                 prefix_sep='.', dummy_na=False).reset_index(drop=True)
+    drug_labels = pd.get_dummies(data=data[['DRUG']], prefix=fea_prfx_dict['dlb'],
+                                 dummy_na=False).reset_index(drop=True)
 
     # Label encoder
     # drug_labels = data[['DRUG']].astype('category', ordered=False).reset_index(drop=True)
@@ -272,7 +278,7 @@ if 'rna_clusters' in other_features:
 #       Impute missing values
 # ========================================================================
 # TODO: modify impute_values to accept feature_list instead of fea_prefix!!
-data = utils.impute_values(data, fea_prefix=fea_prefix, logger=logger)
+data = utils.impute_values(data=data, fea_prfx_dict=fea_prfx_dict, logger=logger)
 
 
 
@@ -283,8 +289,11 @@ tr_data, vl_data = utils.split_tr_vl(data=data, test_size=0.2, random_state=SEED
 
 
 # Extract target and features
-xtr = utils.extract_features(data=tr_data, feature_list=feature_list, fea_prefix=fea_prefix)
-xvl = utils.extract_features(data=vl_data, feature_list=feature_list, fea_prefix=fea_prefix)
+##xtr = utils.extract_features(data=tr_data, feature_list=feature_list, fea_prefix=fea_prefix)
+##xvl = utils.extract_features(data=vl_data, feature_list=feature_list, fea_prefix=fea_prefix)
+xtr, _ = utils.split_features_and_other_cols(tr_data, fea_prfx_dict=fea_prfx_dict)
+xvl, _ = utils.split_features_and_other_cols(vl_data, fea_prfx_dict=fea_prfx_dict)
+
 ytr = utils.extract_target(data=tr_data, target_name=target_name)
 yvl = utils.extract_target(data=vl_data, target_name=target_name)
 
@@ -298,6 +307,10 @@ def print_feature_shapes(df, name):
 
 print_feature_shapes(df=xtr, name='xtr')
 print_feature_shapes(df=xvl, name='xvl')
+
+# Print target
+# TODO: update this to something more informative (min, max, quantiles, etc.)
+logger.info(f'\nTarget: {target_name}')
 
 # Plots
 # TODO: overlap tr and vl plots for both response and drug counts
@@ -643,8 +656,10 @@ preds_filename_prefix = 'infer'
 model_name = 'lgb_reg'
 
 # Prepare infer data for predictions
-te_data = utils.impute_values(data=te_data, fea_prefix=fea_prefix, logger=logger)
-xte = utils.extract_features(data=te_data, feature_list=feature_list, fea_prefix=fea_prefix)
+##te_data = utils.impute_values(data=te_data, fea_prefix=fea_prefix, logger=logger)
+te_data = utils.impute_values(data=te_data, fea_prfx_dict=fea_prfx_dict, logger=logger)
+##xte = utils.extract_features(data=te_data, feature_list=feature_list, fea_prefix=fea_prefix)
+xte, _ = utils.split_features_and_other_cols(te_data, fea_prfx_dict=fea_prfx_dict)
 yte = utils.extract_target(data=te_data, target_name=target_name)
 
 # Print feature shapes

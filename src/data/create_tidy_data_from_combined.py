@@ -71,7 +71,7 @@ fibro_names = ['CCLE.HS229T', 'CCLE.HS739T', 'CCLE.HS840T', 'CCLE.HS895T', 'CCLE
 rna_prefix = 'cell_rna.'
 dsc_prefix = 'drug_dsc.'
 
-# Feature prefix as it appears in the tidy dataframe
+# Prefix to add to feature names based on feature types
 fea_prfx_dict = {'rna': 'cell_rna.',
                  'cnv': 'cell_cnv.',
                  'dsc': 'drug_dsc.',
@@ -142,7 +142,7 @@ lincs = utils.CombinedRNASeqLINCS(datadir=DATADIR, dataset='raw', sources=source
 rna, cmeta = lincs._df_rna, lincs._meta
 rna.rename(columns={'Sample': 'CELL'}, inplace=True)
 cmeta.rename(columns={'Sample': 'CELL', 'source': 'SOURCE'}, inplace=True)
-rna = rna.rename(columns={c: rna_prefix+c for c in rna.columns[1:] if rna_prefix not in c}) # add fea prefix
+rna = rna.rename(columns={c: fea_prfx_dict['rna']+c for c in rna.columns[1:] if fea_prfx_dict['rna'] not in c}) # add fea prefix
 logger.info(f'rna.shape {rna.shape}')
 
 if verbose:
@@ -161,7 +161,7 @@ cols = pd.read_table(path, engine='c', nrows=0)
 dtype_dict = {c: np.float32 for c in cols.columns[1:]}
 dsc = pd.read_table(path, dtype=dtype_dict, na_values=na_values, warn_bad_lines=True)
 dsc.rename(columns={'NAME': 'PUBCHEM'}, inplace=True)
-dsc = dsc.rename(columns={c: dsc_prefix+c for c in dsc.columns[1:] if dsc_prefix not in c}) # add fea prefix
+dsc = dsc.rename(columns={c: fea_prfx_dict['dsc']+c for c in dsc.columns[1:] if fea_prfx_dict['dsc'] not in c}) # add fea prefix
 logger.info(f'dsc.shape {dsc.shape}')
 
 
@@ -332,7 +332,7 @@ else:
     data.to_csv(tidy_filepath, sep='\t')
 logger.info('Time to save tidy data to disk: {:.2f} mins'.format((time.time()-t0)/60))
 
-# Check that the saved data is same as original one
+# Check that the saved data is the same as original one
 logger.info(f'\nLoad tidy dataframe {tidy_data_format} ...')
 t0 = time.time()
 if tidy_data_format == 'parquet':

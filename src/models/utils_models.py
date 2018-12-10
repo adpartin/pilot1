@@ -48,6 +48,9 @@ def setup_logger(logfilename='logfile.log'):
     return logger
 
 
+# =================================================
+# Plotting funcs
+# =================================================
 def boxplot_rsp_per_drug(df, target_name, path='boxplot_rsp_per_drug.png'):
     """ Boxplot of response per drug. """
     # https://seaborn.pydata.org/generated/seaborn.catplot.html
@@ -114,108 +117,6 @@ def plot_qq(x, var_name, path='qq_plot.png'):
     plt.savefig(path, bbox_inches='tight')
 
 
-def print_scores(model, xdata, ydata, logger=None):
-    preds = model.predict(xdata)
-    model_r2_score = r2_score(ydata, preds)
-    model_mean_abs_error = mean_absolute_error(ydata, preds)
-    model_median_abs_error = median_absolute_error(ydata, preds)
-    model_explained_variance_score = explained_variance_score(ydata, preds)
-    if logger is not None:
-        logger.info(f'r2_score: {model_r2_score:.2f}')
-        logger.info(f'mean_absolute_error: {model_mean_abs_error:.2f}')
-        logger.info(f'median_absolute_error: {model_median_abs_error:.2f}')
-        logger.info(f'model_explained_variance_score: {model_explained_variance_score:.2f}')
-    else:
-        print(f'r2_score: {model_r2_score:.2f}')
-        print(f'mean_absolute_error: {model_mean_abs_error:.2f}')
-        print(f'median_absolute_error: {model_median_abs_error:.2f}')
-        print(f'model_explained_variance_score: {model_explained_variance_score:.2f}')
-
-
-def impute_values(data, fea_prefix, logger=None):
-    """ ... """
-    from sklearn.impute import SimpleImputer, MissingIndicator
-
-    tmp_data = data.copy()
-    df_list = []
-    for prefx in fea_prefix.values():
-        cols = data.columns[[True if prefx in c else False for c in data.columns.tolist()]]
-        if len(cols) > 0:        
-            df = data[cols].copy()
-            tmp_data.drop(columns=cols, inplace=True)
-            df_list.append(df)
-
-    xdata_to_impute = pd.DataFrame(pd.concat(df_list, axis=1))
-
-    # TODO: try regressor (impute continuous features) or classifier (impute discrete features)
-    # https://scikit-learn.org/stable/auto_examples/plot_missing_values.html
-    cols = xdata_to_impute.columns
-    imputer = SimpleImputer(missing_values=np.nan, strategy='mean', verbose=1)
-    xdata_imputed = imputer.fit_transform(xdata_to_impute)
-    xdata_imputed = pd.DataFrame(xdata_imputed, columns=cols)
-
-    if logger is not None:
-        logger.info('\nImpute missing features ...')
-        logger.info('Num features with missing values: {}'.format(sum(xdata_to_impute.isna().sum() > 1)))
-        logger.info('Num features with missing values (after impute): {}'.format(sum(xdata_imputed.isna().sum() > 1)))
-
-    data = pd.concat([tmp_data, xdata_imputed], axis=1)
-    return data
-
-
-def split_tr_vl(data, test_size=0.2, random_state=None, logger=None):
-    """ ... """
-    from sklearn.model_selection import train_test_split
-    tr_data, vl_data = train_test_split(data, test_size=test_size, random_state=random_state)
-    tr_data.reset_index(drop=True, inplace=True)
-    vl_data.reset_index(drop=True, inplace=True)
-    if logger is not None:
-        logger.info('\nSplit data into train and val (test) ...')
-        logger.info(f'tr_data.shape {tr_data.shape}')
-        logger.info(f'vl_data.shape {vl_data.shape}')
-    return tr_data, vl_data
-
-
-def extract_features(data, feature_list, fea_prefix):
-    """ 
-    Args:
-        data :
-        feature_list : e.g., (cell_features + drug_features)
-        fea_prefix :
-    Returns:
-    """
-    fea_prefix_list = [fea_prefix[fea] for fea in feature_list if fea in fea_prefix.keys()]
-    data = data[[c for c in data.columns if c.split('.')[0] in fea_prefix_list]].reset_index(drop=True).copy()
-    return data
-
-
-def extract_target(data, target_name):
-    y = data[target_name].copy()
-    return y
-
-
-def dump_preds(model, df_data, xdata, target_name, path, model_name=None):
-    """
-    Args:
-        model : ml model (must have predict() method)
-        df : df that contains the cell and drug names, and target value
-        xdata : features to make predictions
-        target_name : name of the target as it appears in the df (e.g. 'AUC')
-    """
-    # preds = pd.DataFrame({target_name+'_pred': model.predict(xdata)})
-    df1 = df_data[['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]].copy()
-
-    preds = model.predict(xdata)
-    abs_error = abs(df_data[target_name] - preds)
-    squared_error = (df_data[target_name] - preds)**2
-    df2 = pd.DataFrame({target_name+'_pred': model.predict(xdata),
-                        target_name+'_error': abs_error,
-                        target_name+'_sq_error': squared_error})
-
-    df_preds = pd.concat([df1, df2], axis=1).reset_index(drop=True)
-    df_preds.to_csv(path)
-
-
 def plot_rf_fi(rf_model, figsize=(8, 5), plot_direction='h', columns=None, max_cols_plot=None,
                color='g', title=None, errorbars=True):
     """ Plot feature importance from a random forest.
@@ -274,6 +175,150 @@ def plot_rf_fi(rf_model, figsize=(8, 5), plot_direction='h', columns=None, max_c
     # plt.tight_layout()
 
     return indices, fig
+# =================================================
+
+
+def print_scores(model, xdata, ydata, logger=None):
+    preds = model.predict(xdata)
+    model_r2_score = r2_score(ydata, preds)
+    model_mean_abs_error = mean_absolute_error(ydata, preds)
+    model_median_abs_error = median_absolute_error(ydata, preds)
+    model_explained_variance_score = explained_variance_score(ydata, preds)
+    if logger is not None:
+        logger.info(f'r2_score: {model_r2_score:.2f}')
+        logger.info(f'mean_absolute_error: {model_mean_abs_error:.2f}')
+        logger.info(f'median_absolute_error: {model_median_abs_error:.2f}')
+        logger.info(f'model_explained_variance_score: {model_explained_variance_score:.2f}')
+    else:
+        print(f'r2_score: {model_r2_score:.2f}')
+        print(f'mean_absolute_error: {model_mean_abs_error:.2f}')
+        print(f'median_absolute_error: {model_median_abs_error:.2f}')
+        print(f'model_explained_variance_score: {model_explained_variance_score:.2f}')
+
+
+def split_features_and_other_cols(data, fea_prfx_dict):
+    """ This func extract two dfs from `data`: fea_data and other_data.
+    Args:
+        data : df contains multiple cols including features, meta, and target
+    Returns:
+        fea_data : contains only training features
+        other_data : contains other cols (meta, target)
+    """
+    # Extract df that contains only features (no meta or response)
+    other_data = data.copy()
+    df_fea_list = []
+
+    for prfx in fea_prfx_dict.values():
+
+        # get cols with specific feature prfx
+        cols = data.columns[[True if prfx in c else False for c in data.columns.tolist()]]
+
+        # if feature present in data, add it to df_fea_list, and drop from other_data
+        if len(cols) > 0:  
+            df = data[cols].copy()
+            other_data.drop(columns=cols, inplace=True)
+            df_fea_list.append(df)
+
+    fea_data = pd.DataFrame(pd.concat(df_fea_list, axis=1))
+    return fea_data, other_data
+
+
+def impute_values(data, fea_prfx_dict, logger=None):
+    """
+    Args:
+        data : df with bunch of cols (meta, target, features)
+        fea_prfx_dict : dict of feature prefixes, e.g.:
+            fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.', 'dsc': 'drug_dsc.', 'fng': 'drug_fng.'}
+        logger : logging object
+    TODO: consider more advanced imputation methods:
+    - https://www.rdocumentation.org/packages/Amelia/versions/1.7.4/topics/amelia
+    - try regressor (impute continuous features) or classifier (impute discrete features)
+    """
+    from sklearn.impute import SimpleImputer, MissingIndicator
+
+    # # Extract df that contains only features (no meta or response)
+    # other_data = data.copy()
+    # df_list = []
+    # for prfx in fea_prfx_dict.values():
+    #     cols = data.columns[[True if prfx in c else False for c in data.columns.tolist()]]  # get cols with specific prfx
+    #     if len(cols) > 0:  # if feature present in data, impute missing values
+    #         df = data[cols].copy()
+    #         other_data.drop(columns=cols, inplace=True)
+    #         df_list.append(df)
+
+    # xdata_to_impute = pd.DataFrame(pd.concat(df_list, axis=1))
+    # cols = xdata_to_impute.columns
+
+    # Extract df that contains only features (no meta or response)
+    fea_data, other_data = split_features_and_other_cols(data=data, fea_prfx_dict=fea_prfx_dict)
+    colnames = fea_data.columns
+
+    # Impute missing values
+    imputer = SimpleImputer(missing_values=np.nan, strategy='mean', verbose=1)
+    fea_data_imputed = imputer.fit_transform(fea_data)
+    fea_data_imputed = pd.DataFrame(fea_data_imputed, columns=colnames)
+
+    if logger is not None:
+        logger.info('\nImpute missing features ...')
+        logger.info('Num features with missing values: {}'.format(sum(fea_data.isna().sum() > 1)))
+        logger.info('Num features with missing values (after impute): {}'.format(sum(fea_data_imputed.isna().sum() > 1)))
+
+    # Concat features (xdata_imputed) and other cols (other_data)
+    data = pd.concat([other_data, fea_data_imputed], axis=1)
+    return data
+
+
+# def extract_features(data, feature_list, fea_prefix):
+#     """ 
+#     Args:
+#         data :
+#         feature_list : e.g., (cell_features + drug_features)
+#         fea_prefix :
+#     Returns:
+#     """
+#     fea_prefix_list = [fea_prefix[fea] for fea in feature_list if fea in fea_prefix.keys()]
+#     data = data[[c for c in data.columns if c.split('.')[0] in fea_prefix_list]].reset_index(drop=True).copy()
+#     return data
+
+
+def split_tr_vl(data, test_size=0.2, random_state=None, logger=None):
+    """ ... """
+    from sklearn.model_selection import train_test_split
+    tr_data, vl_data = train_test_split(data, test_size=test_size, random_state=random_state)
+    tr_data.reset_index(drop=True, inplace=True)
+    vl_data.reset_index(drop=True, inplace=True)
+    if logger is not None:
+        logger.info('\nSplit data into train and val (test) ...')
+        logger.info(f'tr_data.shape {tr_data.shape}')
+        logger.info(f'vl_data.shape {vl_data.shape}')
+    return tr_data, vl_data
+
+
+def extract_target(data, target_name):
+    y = data[target_name].copy()
+    return y
+
+
+def dump_preds(model, df_data, xdata, target_name, path, model_name=None):
+    """
+    Args:
+        model : ml model (must have predict() method)
+        df : df that contains the cell and drug names, and target value
+        xdata : features to make predictions
+        target_name : name of the target as it appears in the df (e.g. 'AUC')
+    """
+    # preds = pd.DataFrame({target_name+'_pred': model.predict(xdata)})
+    df1 = df_data[['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]].copy()
+
+    preds = model.predict(xdata)
+    abs_error = abs(df_data[target_name] - preds)
+    squared_error = (df_data[target_name] - preds)**2
+    df2 = pd.DataFrame({target_name+'_pred': model.predict(xdata),
+                        target_name+'_error': abs_error,
+                        target_name+'_sq_error': squared_error})
+
+    df_preds = pd.concat([df1, df2], axis=1).reset_index(drop=True)
+    df_preds.to_csv(path)
 
 
 class SuperGBM():  # ModelTunedCVSearch
