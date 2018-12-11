@@ -27,8 +27,11 @@ load_rspdata <- function(rspdata_fullpath) {
 
 
 load_rnaseq <- function(rnaseq_fullpath) {
+  message("Load data from: ", rnaseq_fullpath)
   rna <- read.table(rnaseq_fullpath, sep="\t", skip=2, header=3, na.strings=c("NA", ""), check.names=F)
+  rna <- as.data.frame(rna)
   rna <- dplyr::rename(rna, "GENE_ENSG"="Name", "GENE_NAME"="Description")
+  # message("dim(rna): ", dim(rna))
   
   # Rename GENE_ENSG genes (drop the ".") and reorder by GENE_ENSG
   rna$GENE_ENSG <- sapply(rna$GENE_ENSG, FUN=function(s) unlist(strsplit(as.character(s), split=".", fixed=T))[1])
@@ -61,6 +64,7 @@ load_rnaseq <- function(rnaseq_fullpath) {
   rna <- dplyr::select(rna, usecells)
   
   # Drop genes with all zero counts
+  message("Total number of genes with all zero values in the original df: ", sum(rowSums(rna)==0))
   rna <- rna[rowSums(rna)>0,]
   
   # Update gene_names to keep the relevant genes
@@ -69,6 +73,8 @@ load_rnaseq <- function(rnaseq_fullpath) {
   gene_names <- merge(gene_names, rna, by="row.names")
   gene_names <- gene_names[,2:3] # get just the gene name cols
   # head(gene_names)
+  
+  # message("dim(rna): ", dim(rna))
   
   # Return list
   ll <- list("rna"=rna, "gene_names"=gene_names)

@@ -223,6 +223,24 @@ def split_features_and_other_cols(data, fea_prfx_dict):
     return fea_data, other_data
 
 
+def extract_subset_features(data, feature_list, fea_prfx_dict):
+    """ Extract subset of features for training.
+    Args:
+        data :
+        feature_list : e.g., (cell_features + drug_features)
+        fea_prfx_dict : 
+    Returns:
+        data : 
+    """
+    fea_data, other_data = split_features_and_other_cols(data, fea_prfx_dict)
+    fea_prfx_list = [fea_prfx_dict[fea] for fea in feature_list if fea in fea_prfx_dict.keys()]
+    fea_data = fea_data[[c for c in fea_data.columns if (c.split('.')[0]+'.') in fea_prfx_list]].reset_index(drop=True).copy()
+
+    # Concat feature set (fea_data) and other cols (other_data)
+    data = pd.concat([other_data, fea_data], axis=1)
+    return data
+
+
 def impute_values(data, fea_prfx_dict, logger=None):
     """
     Args:
@@ -236,19 +254,6 @@ def impute_values(data, fea_prfx_dict, logger=None):
     """
     from sklearn.impute import SimpleImputer, MissingIndicator
 
-    # # Extract df that contains only features (no meta or response)
-    # other_data = data.copy()
-    # df_list = []
-    # for prfx in fea_prfx_dict.values():
-    #     cols = data.columns[[True if prfx in c else False for c in data.columns.tolist()]]  # get cols with specific prfx
-    #     if len(cols) > 0:  # if feature present in data, impute missing values
-    #         df = data[cols].copy()
-    #         other_data.drop(columns=cols, inplace=True)
-    #         df_list.append(df)
-
-    # xdata_to_impute = pd.DataFrame(pd.concat(df_list, axis=1))
-    # cols = xdata_to_impute.columns
-
     # Extract df that contains only features (no meta or response)
     fea_data, other_data = split_features_and_other_cols(data=data, fea_prfx_dict=fea_prfx_dict)
     colnames = fea_data.columns
@@ -260,8 +265,8 @@ def impute_values(data, fea_prfx_dict, logger=None):
 
     if logger is not None:
         logger.info('\nImpute missing features ...')
-        logger.info('Num features with missing values: {}'.format(sum(fea_data.isna().sum() > 1)))
-        logger.info('Num features with missing values (after impute): {}'.format(sum(fea_data_imputed.isna().sum() > 1)))
+        logger.info('Total features with missing values: {}'.format(sum(fea_data.isna().sum() > 1)))
+        logger.info('Total features with missing values (after impute): {}'.format(sum(fea_data_imputed.isna().sum() > 1)))
 
     # Concat features (xdata_imputed) and other cols (other_data)
     data = pd.concat([other_data, fea_data_imputed], axis=1)
@@ -307,8 +312,16 @@ def dump_preds(model, df_data, xdata, target_name, path, model_name=None):
         xdata : features to make predictions
         target_name : name of the target as it appears in the df (e.g. 'AUC')
     """
-    # preds = pd.DataFrame({target_name+'_pred': model.predict(xdata)})
-    df1 = df_data[['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]].copy()
+    combined_cols = ['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]
+    ccle_org_cols = ['CELL', 'DRUG', 'tissuetype', target_name]
+
+    ##df1 = df_data[['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]].copy()
+    if set(combined_cols).issubset(set(df_data.columns.tolist())):
+        df1 = df_data[combined_cols].copy()
+    elif set(ccle_org_cols).issubset(set(df_data.columns.tolist())):
+        df1 = df_data[ccle_org_cols].copy()
+    else:
+        df1 = df_data['CELL', 'DRUG'].copy()
 
     preds = model.predict(xdata)
     abs_error = abs(df_data[target_name] - preds)

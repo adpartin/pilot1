@@ -67,10 +67,6 @@ drop_fibro = True
 fibro_names = ['CCLE.HS229T', 'CCLE.HS739T', 'CCLE.HS840T', 'CCLE.HS895T', 'CCLE.RKN',
                'CTRP.Hs-895-T', 'CTRP.RKN', 'GDSC.RKN', 'gCSI.RKN']
 
-# Features prefix based on feature type
-rna_prefix = 'cell_rna.'
-dsc_prefix = 'drug_dsc.'
-
 # Prefix to add to feature names based on feature types
 fea_prfx_dict = {'rna': 'cell_rna.',
                  'cnv': 'cell_cnv.',

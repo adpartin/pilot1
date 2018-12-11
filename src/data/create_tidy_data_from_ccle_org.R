@@ -100,9 +100,8 @@ rna <- rna[tmp_genes,]
 # Select the subset of genes to proceed
 # TODO: get_gene_subset() uses gene_mappings to get unique genes. This leaves
 # us with 965 instead of 978 genes. We may want to use gene_names instead.
-rna <- get_gene_subset(rna=rna, rna_gene_set="lincs", gene_mapping=gene_mapping,
-                       l1k_dir=file.path(basedir, "../../data/raw/L1000.txt"))
-
+##rna <- get_gene_subset(rna=rna, rna_gene_set="lincs", gene_mapping=gene_mapping,
+##                       l1k_dir=file.path(basedir, "../../data/raw/L1000.txt"))
 
 
 # ==============================================================
@@ -200,7 +199,7 @@ boxplot(log_sf[,1:n_samples], main="log2(sizeFactors)", cex=0.1) # normalized
 t0 <- Sys.time()
 vsd <- varianceStabilizingTransformation(dds)
 vsd_runtime <- Sys.time() - t0
-glue("vsd run time: {vsd_runtime/60} mins")
+glue("vsd runtime: {vsd_runtime} mins")
 
 # Get the actual vsd values
 vsd_data <- as.data.frame(assay(vsd))
@@ -241,7 +240,7 @@ plot(cnts[,1], cnts[,2], cex=0.1, main="Raw count",
      panel.first=grid(), xaxt="n")
 abline(lm(cnts[,2] ~ cnts[,1] + 0))
 
-plot(logcnts[,1], logcnts[,2], cex=0.1, main="log2(cts+1)",
+plot(logcnts[,1], logcnts[,2], cex=0.1, main="log2(cnts+1)",
      xlim=xlim, ylim=ylim, panel.first=grid(), xaxt="n")
 abline(lm(logcnts[,2] ~ logcnts[,1] + 0))
 
@@ -289,6 +288,11 @@ merge_data <- function(rspdata, df, vsd_cmeta) {
 }
 tidy_data_vsd <- merge_data(rspdata=rspdata, df=vsd_data_t, vsd_cmeta=vsd_cmeta)
 tidy_data_rpkm <- merge_data(rspdata=rspdata, df=rna_rpkm_t, vsd_cmeta=vsd_cmeta)
+
+# Add features prefix
+rna_prfx <- "cell_rna."
+colnames(tidy_data_vsd) <- sapply(colnames(tidy_data_vsd), FUN=function(s) dplyr::if_else(grepl("ENSG", s), true=paste0(rna_prfx, s), false=s))
+colnames(tidy_data_rpkm) <- sapply(colnames(tidy_data_rpkm), FUN=function(s) dplyr::if_else(grepl("ENSG", s), true=paste0(rna_prfx, s), false=s))
 
 # Save data
 write.table(tidy_data_rpkm, file.path(outdir, paste0("tidy_data_ccle_rpkm_", save_data_name, ".txt")), sep="\t")

@@ -92,16 +92,16 @@ from sklearn.preprocessing import Imputer, OneHotEncoder, OrdinalEncoder
 from sklearn.model_selection import learning_curve, KFold, StratifiedKFold
 
 # Utils
-file_path = os.getcwd()
-file_path = os.path.join(file_path, 'src/models')
-os.chdir(file_path)
+# file_path = os.getcwd()
+# file_path = os.path.join(file_path, 'src/models')
+# os.chdir(file_path)
 
 # DATADIR = './tidy_data_from_combined'
 # FILENAME = 'tidy_data.parquet'
 # OUTDIR = os.path.join(file_path, 'ml_tidy_combined')
 # os.makedirs(OUTDIR, exist_ok=True)
 
-# file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
 ##utils_path = os.path.abspath(os.path.join(file_path, 'utils'))
 ##sys.path.append(utils_path)
 import utils_models as utils
@@ -149,7 +149,7 @@ fea_prfx_dict = {'rna': 'cell_rna.',
 # ml_models = ['tpot_reg']
 ml_models = ['lgb_reg']
 
-trasform_target = True
+trasform_target = False
 outlier_remove = False  # IsolationForest
 verbose = True
 n_jobs = 4
@@ -170,6 +170,7 @@ logger = utils.setup_logger(logfilename=logfilename)
 logger.info(f'File path: {file_path}')
 logger.info(f'Num of system CPUs: {psutil.cpu_count()}')
 logger.info(f'n_jobs: {n_jobs}')
+
 
 
 # ========================================================================
@@ -248,29 +249,36 @@ if trasform_target:
     te_data[target_name] = y
 
 
-if 'drug_labels' in other_features:
+if 'dlb' in other_features:
     # print('\nAdd drug labels to features ...')
     logger.info('\nAdd drug labels to features ...')
     # print(data['DRUG'].value_counts())
 
     # http://queirozf.com/entries/one-hot-encoding-a-feature-on-a-pandas-dataframe-an-example
     # One-hot encoder
-    drug_labels = pd.get_dummies(data=data[['DRUG']], prefix=fea_prfx_dict['dlb'],
-                                 dummy_na=False).reset_index(drop=True)
+    dlb = pd.get_dummies(data=data[['DRUG']], prefix=fea_prfx_dict['dlb'],
+                         dummy_na=False).reset_index(drop=True)
 
     # Label encoder
-    # drug_labels = data[['DRUG']].astype('category', ordered=False).reset_index(drop=True)
-    # print(drug_labels.dtype)
+    # dlb = data[['DRUG']].astype('category', ordered=False).reset_index(drop=True)
+    # print(dlb.dtype)
 
     # Concat drug labels and other features
-    data = pd.concat([drug_labels, data], axis=1).reset_index(drop=True)
-    logger.info(f'drug_labels.shape {drug_labels.shape}')
+    data = pd.concat([dlb, data], axis=1).reset_index(drop=True)
+    logger.info(f'dlb.shape {dlb.shape}')
     logger.info(f'data.shape {data.shape}')
 
 
 if 'rna_clusters' in other_features:
     # TODO
     pass
+
+
+
+# ========================================================================
+#       Keep specific set of features for training
+# ========================================================================
+data = utils.extract_subset_features(data=data, feature_list=feature_list, fea_prfx_dict=fea_prfx_dict)
 
 
 

@@ -69,7 +69,6 @@ def plot_rsp_dists(rsp, rsp_cols, savepath=None):
             fig.delaxes(ax) # delete un-used ax
         else:
             target_name = rsp_cols[i]
-            # print(i, target_name)
             x = rsp[target_name].copy()
             x = x[~x.isna()].values
             sns.distplot(x, bins=100, kde=True, ax=ax, label=target_name, # fit=norm, 
@@ -122,7 +121,7 @@ def dropna(df, axis=0, th=0.4):
 # --------------------------------------------------------------------------------------------------------------
 class CombinedRNASeqLINCS():
     """ Combined LINCS dataset. """
-    def __init__(self, datadir=DATADIR, dataset='combat', cellmeta_filename=CELLMETA_FILENAME, sources=[],
+    def __init__(self, datadir=DATADIR, dataset='raw', cellmeta_filename=CELLMETA_FILENAME, sources=[],
                  na_values=['na', '-', ''], verbose=True):
         """ Note that df_rna file must have the following structure:
         df_rna.columns[0] --> 'Sample'
@@ -142,14 +141,13 @@ class CombinedRNASeqLINCS():
         elif dataset == 'combat':
             DATASET = 'combined_rnaseq_data_lincs1000_combat'
         else:
-            raise ValueError(f'The passed dataset ({DATASET}) is not supprted.')
+            raise ValueError(f'The passed dataset ({DATASET}) is not supported.')
             
         # Load RNA-Seq
         path = os.path.join(datadir, DATASET)
         cols = pd.read_table(path, nrows=0, sep='\t')
         dtype_dict = {c: np.float32 for c in cols.columns[1:]}
         df_rna = pd.read_table(path, dtype=dtype_dict, sep='\t', na_values=na_values, warn_bad_lines=True)
-        # df_rna = pd.read_csv(path, sep='\t')
         df_rna = self._keep_sources(df_rna, sources=sources) 
 
         # Load metadata
