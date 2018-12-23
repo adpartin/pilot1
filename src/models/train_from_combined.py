@@ -8,9 +8,12 @@ TODO:
   https://stats.stackexchange.com/questions/183984/how-to-use-xgboost-cv-with-hyperparameters-optimization
   https://github.com/raymon-tian/trend_ml_toolkit_xgboost/blob/master/xg_train_slower.py
   https://github.com/LevinJ/Supply-demand-forecasting/blob/master/utility/xgbbasemodel.py
+  https://blog.cambridgespark.com/hyperparameter-tuning-in-xgboost-4ff9100a3b2f
 - ensemble/stack models
   http://blog.kaggle.com/2017/06/15/stacking-made-easy-an-introduction-to-stacknet-by-competitions-grandmaster-marios-michailidis-kazanova/
   https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard
+- best practices
+  http://dnc1994.com/2016/05/rank-10-percent-in-first-kaggle-competition-en/
 
 Explore Auto-ML models:
 - tpot
@@ -56,6 +59,9 @@ http://blog.kaggle.com/2015/07/27/taxi-trajectory-winners-interview-1st-place-te
 6. Feature importance
 - Explore X_SHAP_values in predict() method in lightgbm
 
+7. Stratify and group
+- https://github.com/scikit-learn/scikit-learn/pull/9413
+
 Run-time problems:
 When running on Mac, lightgbm gives an error:
 - https://github.com/dmlc/xgboost/issues/1715
@@ -92,16 +98,11 @@ from sklearn.preprocessing import Imputer, OneHotEncoder, OrdinalEncoder
 from sklearn.model_selection import learning_curve, KFold, StratifiedKFold
 
 # Utils
-# file_path = os.getcwd()
-# file_path = os.path.join(file_path, 'src/models')
-# os.chdir(file_path)
+file_path = os.getcwd()
+file_path = os.path.join(file_path, 'src/models')
+os.chdir(file_path)
 
-# DATADIR = './tidy_data_from_combined'
-# FILENAME = 'tidy_data.parquet'
-# OUTDIR = os.path.join(file_path, 'ml_tidy_combined')
-# os.makedirs(OUTDIR, exist_ok=True)
-
-file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
+# file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
 ##utils_path = os.path.abspath(os.path.join(file_path, 'utils'))
 ##sys.path.append(utils_path)
 import utils_models as utils
@@ -120,10 +121,9 @@ SEED = 0
 # ========================================================================
 # Train and infer data
 train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
-infer_sources = ['gcsi']
+infer_sources = ['ctrp']
 
 # Traget (response)
-# target_name = 'AUC'
 target_name = 'AUC1'
 
 # Features to use
@@ -140,19 +140,18 @@ fea_prfx_dict = {'rna': 'cell_rna.',
                  'fng': 'drug_fng.',
                  'clb': 'cell_lbl.',
                  'dlb': 'drug_lbl.'}
-# fea_prefix = {'rna': 'cell_rna',
-#               'cnv': 'cell_cnv',
-#               'dsc': 'drug_dsc',
-#               'fng': 'drug_fng'}
 
 # Models
-# ml_models = ['tpot_reg']
 ml_models = ['lgb_reg']
 
-trasform_target = False
+target_trasform = False
 outlier_remove = False  # IsolationForest
 verbose = True
 n_jobs = 4
+
+# Train
+n_splits = 5
+cv_split_method = 'simple' # 'simple', 'group', (TODO: implement 'stratified')
 
 
 
@@ -200,7 +199,6 @@ logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(te_data)/1e9))
 
 
 # Extract training sources
-logger.info('\nExtract train sources ... {}'.format(train_sources))
 data = data[data['SOURCE'].isin(train_sources)].reset_index(drop=True)
 logger.info(f'data.shape {data.shape}')
 logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
@@ -233,7 +231,7 @@ utils.plot_hist_drugs(x=data['DRUG'], path=os.path.join(run_outdir, 'drugs_hist.
 
 
 # Transform the target
-if trasform_target:
+if target_trasform:
     y = data[target_name].copy()
     # y = np.log1p(ydata); plot_hist(x=y, var_name=target_name+'_log1p')
     # # y = np.log(ydata+1); plot_hist(x=y, var_name=target_name+'_log+1')
@@ -250,7 +248,6 @@ if trasform_target:
 
 
 if 'dlb' in other_features:
-    # print('\nAdd drug labels to features ...')
     logger.info('\nAdd drug labels to features ...')
     # print(data['DRUG'].value_counts())
 
@@ -276,414 +273,515 @@ if 'rna_clusters' in other_features:
 
 
 # ========================================================================
-#       Keep specific set of features for training
+#       TODO: outlier removal
+# ========================================================================
+# https://scikit-learn.org/stable/auto_examples/plot_anomaly_comparison.html
+
+
+
+# ========================================================================
+#       Keep a set of training features and impute missing values
 # ========================================================================
 data = utils.extract_subset_features(data=data, feature_list=feature_list, fea_prfx_dict=fea_prfx_dict)
-
-
-
-# ========================================================================
-#       Impute missing values
-# ========================================================================
-# TODO: modify impute_values to accept feature_list instead of fea_prefix!!
 data = utils.impute_values(data=data, fea_prfx_dict=fea_prfx_dict, logger=logger)
 
 
 
 # ========================================================================
-#       Split train and val (test)
+#       Run CV training
 # ========================================================================
-tr_data, vl_data = utils.split_tr_vl(data=data, test_size=0.2, random_state=SEED, logger=logger)
+# from split_tr_vl import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
+# from ml_models import LGBM_Regressor
 
 
-# Extract target and features
-##xtr = utils.extract_features(data=tr_data, feature_list=feature_list, fea_prefix=fea_prefix)
-##xvl = utils.extract_features(data=vl_data, feature_list=feature_list, fea_prefix=fea_prefix)
-xtr, _ = utils.split_features_and_other_cols(tr_data, fea_prfx_dict=fea_prfx_dict)
-xvl, _ = utils.split_features_and_other_cols(vl_data, fea_prfx_dict=fea_prfx_dict)
-
-ytr = utils.extract_target(data=tr_data, target_name=target_name)
-yvl = utils.extract_target(data=vl_data, target_name=target_name)
+# def print_feature_shapes(df, name, logger):
+#     """ Print features shapes. """
+#     logger.info(f'\n{name}')
+#     for prefx in np.unique(list(map(lambda x: x.split('.')[0], df.columns.tolist()))):
+#         cols = df.columns[[True if prefx in c else False for c in df.columns.tolist()]]
+#         logger.info('{}: {}'.format(prefx, df[cols].shape))
 
 
-# Print features shapes
-def print_feature_shapes(df, name):
-    logger.info(f'\n{name}')
-    for prefx in np.unique(list(map(lambda x: x.split('.')[0], df.columns.tolist()))):
-        cols = df.columns[[True if prefx in c else False for c in df.columns.tolist()]]
-        logger.info('{}: {}'.format(prefx, df[cols].shape))
+# def cv_scores_to_df(scores):
+#     """ Convert a list of cv scores into df and compute mean and std. """
+#     scores = pd.DataFrame(scores).T
+#     scores['mean'] = scores.mean(axis=1)
+#     scores['std'] = scores.std(axis=1)
+#     return scores
 
-print_feature_shapes(df=xtr, name='xtr')
-print_feature_shapes(df=xvl, name='xvl')
 
-# Print target
-# TODO: update this to something more informative (min, max, quantiles, etc.)
-logger.info(f'\nTarget: {target_name}')
+# # Split tr/vl data
+# if cv_split_method=='simple':
+#     splitter = SimpleSplit(n_splits=n_splits, random_state=SEED)
+#     splitter.split(X=data)
+# elif cv_split_method=='group':
+#     splitter = GroupSplit(n_splits=n_splits, random_state=SEED)
+#     splitter.split(X=data, groups=data['CELL'])
+# elif cv_split_method=='stratify':
+#     pass
+# else:
+#     raise ValueError('This cv_split_method ({}) is not supported'.format(cv_split_method))
 
-# Plots
-# TODO: overlap tr and vl plots for both response and drug counts
-# utils.plot_hist(x=ytr, var_name=target_name+'_ytr', path=os.path.join(OUTDIR, target_name+'_ytr_hist.png'))
-# utils.plot_hist(x=yvl, var_name=target_name+'_yvl', path=os.path.join(OUTDIR, target_name+'_yvl_hist.png'))
-# utils.plot_hist_drugs(x=tr_data['DRUG'], name='drug_hist_train', path=os.path.join(OUTDIR, target_name+'_drug_hist_train.png'))
-# utils.plot_hist_drugs(x=vl_data['DRUG'], name='drug_hist_val', path=os.path.join(OUTDIR, target_name+'_drug_hist_train.png'))
 
-# Plot response dist for tr and vl
-fig, ax = plt.subplots()
-plt.hist(ytr, bins=100, label='ytr', color='b', alpha=0.5)
-plt.hist(yvl, bins=100, label='yvl', color='r', alpha=0.5)
-plt.title(target_name+' hist')
-plt.tight_layout()
-plt.grid(True)
-plt.legend()
-plt.savefig(os.path.join(run_outdir, target_name+'_ytr_yvl_hist.png'), bbox_inches='tight')
+# # Run CV training
+# logger.info(f'CV splitting method: {cv_split_method}')
+# tr_scores = []
+# vl_scores = []
+# for i in range(splitter.n_splits):
+#     print(f'\nFold {i+1}/{splitter.n_splits}')
+#     tr_idx = splitter.tr_cv_idx[i]
+#     vl_idx = splitter.vl_cv_idx[i]
+#     tr_data = data.iloc[tr_idx, :]
+#     vl_data = data.iloc[vl_idx, :]
+
+#     # print(tr_idx[:5])
+#     # print(vl_idx[:5])
+
+#     # tr_cells = set(tr_data['CELL'].values)
+#     # vl_cells = set(vl_data['CELL'].values)
+#     # print('total cell intersections btw tr and vl: ', len(tr_cells.intersection(vl_cells)))
+#     # print('a few intersections : ', list(tr_cells.intersection(vl_cells))[:3])
+
+#     xtr, _ = utils.split_features_and_other_cols(tr_data, fea_prfx_dict=fea_prfx_dict)
+#     xvl, _ = utils.split_features_and_other_cols(vl_data, fea_prfx_dict=fea_prfx_dict)
+
+#     # print_feature_shapes(df=xtr, name='xtr', logger=logger)
+#     # print_feature_shapes(df=xvl, name='xvl', logger=logger)
+
+#     ytr = utils.extract_target(data=tr_data, target_name=target_name)
+#     yvl = utils.extract_target(data=vl_data, target_name=target_name)
+
+#     title = f'{target_name}; split {str(i)}'
+#     plot_ytr_yvl_dist(ytr, yvl, title=title, outpath=os.path.join(run_outdir, title+'.png'))
+
+#     # Train model
+#     lgb_reg = LGBM_Regressor(target_name=target_name, random_state=SEED, logger=logger)
+#     lgb_reg.fit(xtr, ytr, eval_set=[(xtr, ytr), (xvl, yvl)])
+
+#     # Calc and save scores
+#     tr_scores.append(lgb_reg.calc_scores(xdata=xtr, ydata=ytr, to_print=False))
+#     vl_scores.append(lgb_reg.calc_scores(xdata=xvl, ydata=yvl, to_print=False))
+
+
+# # Summarize cv scores
+# tr_scores = cv_scores_to_df(tr_scores)
+# vl_scores = cv_scores_to_df(vl_scores)
+# print('\ntr scores\n{}'.format(tr_scores))
+# print('\nvl scores\n{}'.format(vl_scores))
 
 
 
 # ========================================================================
-#       Train models
+#       Train final model (entire dataset)
 # ========================================================================
-from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, ParameterGrid
-from sklearn.externals import joblib
+# logger.info(f'\nTrain final model (use entire dataset).')
+# xdata, _ = utils.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+# ydata = utils.extract_target(data=data, target_name=target_name)
+# print_feature_shapes(df=xdata, name='xdata', logger=logger)
 
-train_runtime = OrderedDict() # {}
-preds_filename_prefix = 'dev'
-
-# ---------------------
-# RandomForestRegressor
-# ---------------------
-if 'rf_reg' in ml_models:
-    model_name = 'rf_reg'
-    try:
-        from sklearn.ensemble import RandomForestRegressor
-    except ImportError:
-        # install??
-        logger.error(f'Module not found (RandomForestRegressor)')
-
-    logger.info('\nTrain RandomForestRegressor ...')
-    # ----- rf hyper-param start
-    rf_reg = RandomForestRegressor(max_features='sqrt', bootstrap=True, oob_score=True,
-                                verbose=0, random_state=SEED, n_jobs=n_jobs)
-
-    random_search_params = {'n_estimators': [100, 500, 1000], # [int(x) for x in np.linspace(start=200, stop=2000, num=10)]
-                            'max_depth': [None, 5, 10], # [None] + [int(x) for x in np.linspace(10, 110, num = 11)]
-                            'min_samples_split': [2, 5, 9]}
-    logger.info('hyper-params:\n{}'.format(random_search_params))
-
-    rf_reg_randsearch = RandomizedSearchCV(
-        estimator=rf_reg,
-        param_distributions=random_search_params,
-        n_iter=20,  # num of parameter settings that are sampled and used for training (num of models trained)
-        scoring=None, # string or callable used to evaluate the predictions on the test set
-        n_jobs=n_jobs,
-        cv=5,
-        refit=True,  # Refit an estimator using the best found parameters on the whole dataset
-        verbose=0)
-
-    # Run search
-    t0 = time.time()
-    rf_reg_randsearch.fit(xtr, ytr)
-    train_runtime[model_name+'_randsearch'] = time.time() - t0
-    logger.info('Runtime: {:.2f} mins'.format(train_runtime[model_name+'_randsearch']/60))
-
-    # Save best model
-    rf_reg = rf_reg_randsearch.best_estimator_
-    joblib.dump(rf_reg, filename=os.path.join(run_outdir, model_name+'_hypsearch_best_model.pkl'))
-
-    # Print preds
-    utils.print_scores(model=rf_reg, xdata=xvl, ydata=yvl, logger=logger)
-
-    # Save resutls
-    rf_reg_hypsearch = pd.DataFrame(rf_reg_randsearch.cv_results_)
-    rf_reg_hypsearch.to_csv(os.path.join(run_outdir, model_name+'_hypsearch_summary.csv'))  # save hyperparam search results
-
-    logger.info(f'{model_name} best score (random search): {rf_reg_randsearch.best_score_:.3f}')
-    logger.info('{} best params (random search): \n{}'.format(model_name, rf_reg_randsearch.best_params_))
-
-    # Dump preds
-    utils.dump_preds(model=rf_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                    path=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))
-    # ----- rf hyper-param end
+# # Train model
+# lgb_reg = LGBM_Regressor(target_name=target_name, random_state=SEED, logger=logger)
+# lgb_reg.fit(xdata, ydata, eval_set=[(xdata, ydata)])
+# scores = lgb_reg.calc_scores(xdata=xtr, ydata=ytr, to_print=False)
+# scores = cv_scores_to_df([scores])
 
 
-# ------------
-# XGBRegressor
-# ------------
-if 'xgb_reg' in ml_models:
-    try:
-        import xgboost as xgb
-    except ImportError:  # install??
-        logger.error('Module not found (xgboost)')
 
-    # https://xgboost.readthedocs.io/en/latest/python/python_api.html
-    # xgboost does not support categorical features!
-    # Rules of thumb
-    # 1. learning_rate should be 0.1 or lower (smaller values will require more trees).
-    # 2. tree_depth should be between 2 and 8 (where not much benefit is seen with deeper trees).
-    # 3. subsample should be between 30% and 80% of the training dataset, and compared to a value of 100% for no sampling.
-    logger.info('\nTrain XGBRegressor ...')
-    # xgb_tr = xgb.DMatrix(data=xtr, label=ytr, nthread=n_jobs)
-    # xgb_vl = xgb.DMatrix(data=xvl, label=yvl, nthread=n_jobs)
-    # ----- xgboost hyper-param start
-    xgb_reg = xgb.XGBRegressor(objective='reg:linear', # default: 'reg:linear', TODO: docs recommend funcs for different distributions (??)
-                            booster='gbtree', # default: gbtree (others: gblinear, dart)
-                            # max_depth=3, # default: 3
-                            # learning_rate=0.1, # default: 0.1
-                            # n_estimators=100, # default: 100
-                            n_jobs=n_jobs, # default: 1
-                            reg_alpha=0, # default=0, L1 regularization
-                            reg_lambda=1, # default=1, L2 regularization
-                            random_state=SEED)
+# ========================================================================
+#       Grid Search CV
+# ========================================================================
+# https://scikit-learn.org/stable/tutorial/statistical_inference/model_selection.html
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.svm import LinearSVR, SVR, NuSVR
+from sklearn.preprocessing import LabelEncoder, StandardScaler, RobustScaler, QuantileTransformer
+from sklearn.model_selection import GridSearchCV, cross_val_score
+from sklearn.model_selection import GroupKFold
 
-    random_search_params = {'n_estimators': [30, 50, 70],
-                            'learning_rate': [0.005, 0.01, 0.5],
-                            'subsample': [0.5, 0.7, 0.8],
-                            'max_depth': [2, 3, 5]}
-    logger.info('hyper-params:\n{}'.format(random_search_params))
+xdata, _ = utils.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+ydata = utils.extract_target(data=data, target_name=target_name)
+xdata = StandardScaler().fit_transform(xdata)
 
-    xgb_reg_randsearch = RandomizedSearchCV(
-        estimator=xgb_reg,
-        param_distributions=random_search_params,
-        n_iter=20,  # num of parameter settings that are sampled and used for training (num of models trained)
-        scoring=None, # string or callable used to evaluate the predictions on the test set
-        n_jobs=n_jobs,
-        cv=5,
-        refit=True,  # Refit an estimator using the best found parameters on the whole dataset
-        verbose=False)   
+# SVR
+model_name = 'svr'
+params_search = {'C': [0.1, 1, 10],
+                 'epsilon': [0.01, 0.1, 1]}
+model = SVR(gamma='scale', kernel='rbf')
 
-    # Start search
-    t0 = time.time()
-    xgb_reg_randsearch.fit(xtr, ytr)
-    train_runtime['xgb_reg_randsearch'] = time.time() - t0
-    logger.info('Runtime: {:.2f} mins'.format(train_runtime['xgb_reg_randsearch']/60))
+# KNN
+model_name = 'knn_reg'
+params_search = {'n_neighbors': [5, 10, 15]}
+model = KNeighborsRegressor(n_jobs=n_jobs)
 
-    # Save best model
-    xgb_reg = xgb_reg_randsearch.best_estimator_
-    joblib.dump(xgb_reg, filename=os.path.join(run_outdir, 'xgb_reg_hypsearch_best_model.pkl'))
+# CV splitter
+groups = data['CELL'].values
+groups = LabelEncoder().fit_transform(groups)
+cv_splitter = GroupKFold(n_splits=n_splits)
+cv_splitter = cv_splitter.split(data, groups=groups)
 
-    # Print preds
-    utils.print_scores(model=xgb_reg, xdata=xvl, ydata=yvl, logger=logger)
+# Define grid search
+gs = GridSearchCV(estimator=model, param_grid=params_search,
+                  n_jobs=n_jobs, refit=True, cv=cv_splitter, verbose=True)
 
-    # Save resutls
-    xgb_reg_hypsearch = pd.DataFrame(xgb_reg_randsearch.cv_results_)
-    xgb_reg_hypsearch.to_csv(os.path.join(run_outdir, 'xgb_reg_hypsearch_summary.csv'))  # save hyperparam search results
+# Train
+t0 = time.time()
+gs.fit(xdata, ydata)
+runtime_fit = time.time() - t0
+print('runtime_fit', runtime_fit)
 
-    logger.info(f'rf_reg best score (random search): {xgb_reg_randsearch.best_score_:.3f}')
-    logger.info('rf_reg best params (random search): \n{}'.format(xgb_reg_randsearch.best_params_))
+# Get the best model
+best_model = gs.best_estimator_
+results = pd.DataFrame(gs.cv_results_)
+print('results:\n{}'.format(results))
+print('{} best score (random search): {:.3f}'.format(model_name, gs.best_score_))
+print('{} best params (random search): \n{}'.format(model_name, gs.best_params_))
 
-    # Dump preds
-    utils.dump_preds(model=xgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                    path=os.path.join(run_outdir, 'xgb_vl_preds.csv'))
-    # ----- xgboost hyper-param end
 
-    # ----- xgboost "Sklearn API" start
-    xgb_reg = xgb.XGBRegressor(objective='reg:linear', # default: 'reg:linear', TODO: docs recommend funcs for different distributions (??)
-                            booster='gbtree', # default: gbtree (others: gblinear, dart)
-                            max_depth=3, # default: 3
-                            learning_rate=0.1, # default: 0.1
-                            n_estimators=100, # default: 100
-                            n_jobs=n_jobs, # default: 1
-                            reg_alpha=0, # default=0, L1 regularization
-                            reg_lambda=1, # default=1, L2 regularization
-                            random_state=SEED
-    )
-    eval_metric = ['mae', 'rmse']
-    t0 = time.time()
-    xgb_reg.fit(xtr, ytr, eval_metric=eval_metric, eval_set=[(xtr, ytr), (xvl, yvl)],
-                early_stopping_rounds=10, verbose=False, callbacks=None)
-    train_runtime['xgb_reg'] = time.time() - t0
-    logger.info('Runtime: {:.2f} mins'.format(train_runtime['xgb_reg']/60))
 
-    # Save model
-    # xgb_reg.save_model(os.path.join(run_outdir, 'xgb_reg.model'))
-    joblib.dump(xgb_reg, filename=os.path.join(run_outdir, 'xgb_reg_model.pkl'))
-    # xgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'xgb_reg_model.pkl'))
+# ========================================================================
+#       Ensemble models
+# ========================================================================
+pass
 
-    # Print preds
-    utils.print_scores(model=xgb_reg, xdata=xvl, ydata=yvl, logger=logger)
 
-    # Dump preds
-    utils.dump_preds(model=xgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                    path=os.path.join(run_outdir, 'xgb_vl_preds.csv'))
-    # ----- xgboost "Sklearn API" end
+
+# # ========================================================================
+# #       Train models
+# # ========================================================================
+# from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error
+# from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, ParameterGrid
+# from sklearn.externals import joblib
+
+# train_runtime = OrderedDict() # {}
+# preds_filename_prefix = 'dev'
+
+# # ---------------------
+# # RandomForestRegressor
+# # ---------------------
+# if 'rf_reg' in ml_models:
+#     model_name = 'rf_reg'
+#     try:
+#         from sklearn.ensemble import RandomForestRegressor
+#     except ImportError:
+#         # install??
+#         logger.error(f'Module not found (RandomForestRegressor)')
+
+#     logger.info('\nTrain RandomForestRegressor ...')
+#     # ----- rf hyper-param start
+#     rf_reg = RandomForestRegressor(max_features='sqrt', bootstrap=True, oob_score=True,
+#                                 verbose=0, random_state=SEED, n_jobs=n_jobs)
+
+#     random_search_params = {'n_estimators': [100, 500, 1000], # [int(x) for x in np.linspace(start=200, stop=2000, num=10)]
+#                             'max_depth': [None, 5, 10], # [None] + [int(x) for x in np.linspace(10, 110, num = 11)]
+#                             'min_samples_split': [2, 5, 9]}
+#     logger.info('hyper-params:\n{}'.format(random_search_params))
+
+#     rf_reg_randsearch = RandomizedSearchCV(
+#         estimator=rf_reg,
+#         param_distributions=random_search_params,
+#         n_iter=20,  # num of parameter settings that are sampled and used for training (num of models trained)
+#         scoring=None, # string or callable used to evaluate the predictions on the test set
+#         n_jobs=n_jobs,
+#         cv=5,
+#         refit=True,  # Refit an estimator using the best found parameters on the whole dataset
+#         verbose=0)
+
+#     # Run search
+#     t0 = time.time()
+#     rf_reg_randsearch.fit(xtr, ytr)
+#     train_runtime[model_name+'_randsearch'] = time.time() - t0
+#     logger.info('Runtime: {:.2f} mins'.format(train_runtime[model_name+'_randsearch']/60))
+
+#     # Save best model
+#     rf_reg = rf_reg_randsearch.best_estimator_
+#     joblib.dump(rf_reg, filename=os.path.join(run_outdir, model_name+'_hypsearch_best_model.pkl'))
+
+#     # Print preds
+#     utils.print_scores(model=rf_reg, xdata=xvl, ydata=yvl, logger=logger)
+
+#     # Save resutls
+#     rf_reg_hypsearch = pd.DataFrame(rf_reg_randsearch.cv_results_)
+#     rf_reg_hypsearch.to_csv(os.path.join(run_outdir, model_name+'_hypsearch_summary.csv'))  # save hyperparam search results
+
+#     logger.info(f'{model_name} best score (random search): {rf_reg_randsearch.best_score_:.3f}')
+#     logger.info('{} best params (random search): \n{}'.format(model_name, rf_reg_randsearch.best_params_))
+
+#     # Dump preds
+#     utils.dump_preds(model=rf_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
+#                     path=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))
+#     # ----- rf hyper-param end
+
+
+# # ------------
+# # XGBRegressor
+# # ------------
+# if 'xgb_reg' in ml_models:
+#     try:
+#         import xgboost as xgb
+#     except ImportError:  # install??
+#         logger.error('Module not found (xgboost)')
+
+#     # https://xgboost.readthedocs.io/en/latest/python/python_api.html
+#     # xgboost does not support categorical features!
+#     # Rules of thumb
+#     # 1. learning_rate should be 0.1 or lower (smaller values will require more trees).
+#     # 2. tree_depth should be between 2 and 8 (where not much benefit is seen with deeper trees).
+#     # 3. subsample should be between 30% and 80% of the training dataset, and compared to a value of 100% for no sampling.
+#     logger.info('\nTrain XGBRegressor ...')
+#     # xgb_tr = xgb.DMatrix(data=xtr, label=ytr, nthread=n_jobs)
+#     # xgb_vl = xgb.DMatrix(data=xvl, label=yvl, nthread=n_jobs)
+#     # ----- xgboost hyper-param start
+#     xgb_reg = xgb.XGBRegressor(objective='reg:linear', # default: 'reg:linear', TODO: docs recommend funcs for different distributions (??)
+#                             booster='gbtree', # default: gbtree (others: gblinear, dart)
+#                             # max_depth=3, # default: 3
+#                             # learning_rate=0.1, # default: 0.1
+#                             # n_estimators=100, # default: 100
+#                             n_jobs=n_jobs, # default: 1
+#                             reg_alpha=0, # default=0, L1 regularization
+#                             reg_lambda=1, # default=1, L2 regularization
+#                             random_state=SEED)
+
+#     random_search_params = {'n_estimators': [30, 50, 70],
+#                             'learning_rate': [0.005, 0.01, 0.5],
+#                             'subsample': [0.5, 0.7, 0.8],
+#                             'max_depth': [2, 3, 5]}
+#     logger.info('hyper-params:\n{}'.format(random_search_params))
+
+#     xgb_reg_randsearch = RandomizedSearchCV(
+#         estimator=xgb_reg,
+#         param_distributions=random_search_params,
+#         n_iter=20,  # num of parameter settings that are sampled and used for training (num of models trained)
+#         scoring=None, # string or callable used to evaluate the predictions on the test set
+#         n_jobs=n_jobs,
+#         cv=5,
+#         refit=True,  # Refit an estimator using the best found parameters on the whole dataset
+#         verbose=False)   
+
+#     # Start search
+#     t0 = time.time()
+#     xgb_reg_randsearch.fit(xtr, ytr)
+#     train_runtime['xgb_reg_randsearch'] = time.time() - t0
+#     logger.info('Runtime: {:.2f} mins'.format(train_runtime['xgb_reg_randsearch']/60))
+
+#     # Save best model
+#     xgb_reg = xgb_reg_randsearch.best_estimator_
+#     joblib.dump(xgb_reg, filename=os.path.join(run_outdir, 'xgb_reg_hypsearch_best_model.pkl'))
+
+#     # Print preds
+#     utils.print_scores(model=xgb_reg, xdata=xvl, ydata=yvl, logger=logger)
+
+#     # Save resutls
+#     xgb_reg_hypsearch = pd.DataFrame(xgb_reg_randsearch.cv_results_)
+#     xgb_reg_hypsearch.to_csv(os.path.join(run_outdir, 'xgb_reg_hypsearch_summary.csv'))  # save hyperparam search results
+
+#     logger.info(f'rf_reg best score (random search): {xgb_reg_randsearch.best_score_:.3f}')
+#     logger.info('rf_reg best params (random search): \n{}'.format(xgb_reg_randsearch.best_params_))
+
+#     # Dump preds
+#     utils.dump_preds(model=xgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
+#                     path=os.path.join(run_outdir, 'xgb_vl_preds.csv'))
+#     # ----- xgboost hyper-param end
+
+#     # ----- xgboost "Sklearn API" start
+#     xgb_reg = xgb.XGBRegressor(objective='reg:linear', # default: 'reg:linear', TODO: docs recommend funcs for different distributions (??)
+#                             booster='gbtree', # default: gbtree (others: gblinear, dart)
+#                             max_depth=3, # default: 3
+#                             learning_rate=0.1, # default: 0.1
+#                             n_estimators=100, # default: 100
+#                             n_jobs=n_jobs, # default: 1
+#                             reg_alpha=0, # default=0, L1 regularization
+#                             reg_lambda=1, # default=1, L2 regularization
+#                             random_state=SEED
+#     )
+#     eval_metric = ['mae', 'rmse']
+#     t0 = time.time()
+#     xgb_reg.fit(xtr, ytr, eval_metric=eval_metric, eval_set=[(xtr, ytr), (xvl, yvl)],
+#                 early_stopping_rounds=10, verbose=False, callbacks=None)
+#     train_runtime['xgb_reg'] = time.time() - t0
+#     logger.info('Runtime: {:.2f} mins'.format(train_runtime['xgb_reg']/60))
+
+#     # Save model
+#     # xgb_reg.save_model(os.path.join(run_outdir, 'xgb_reg.model'))
+#     joblib.dump(xgb_reg, filename=os.path.join(run_outdir, 'xgb_reg_model.pkl'))
+#     # xgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'xgb_reg_model.pkl'))
+
+#     # Print preds
+#     utils.print_scores(model=xgb_reg, xdata=xvl, ydata=yvl, logger=logger)
+
+#     # Dump preds
+#     utils.dump_preds(model=xgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
+#                     path=os.path.join(run_outdir, 'xgb_vl_preds.csv'))
+#     # ----- xgboost "Sklearn API" end
         
-    # Plot feature importance
-    xgb.plot_importance(booster=xgb_reg, max_num_features=20, grid=True, title='XGBRegressor')
-    plt.tight_layout()
-    plt.savefig(os.path.join(run_outdir, 'xgb_reg_importances.png'))
+#     # Plot feature importance
+#     xgb.plot_importance(booster=xgb_reg, max_num_features=20, grid=True, title='XGBRegressor')
+#     plt.tight_layout()
+#     plt.savefig(os.path.join(run_outdir, 'xgb_reg_importances.png'))
 
-    # Plot learning curves
-    xgb_results = xgb_reg.evals_result()
-    epoch_vec = np.arange(1, len(xgb_results['validation_0'][eval_metric[0]])+1)
-    for m in eval_metric:
-        fig, ax = plt.subplots()
-        for i, s in enumerate(xgb_results):
-            label = 'Train' if i==0 else 'Val'
-            ax.plot(epoch_vec, xgb_results[s][m], label=label)
-        plt.xlabel('Epochs')
-        plt.title(m)
-        plt.legend()
-        plt.grid(True)
-        plt.tight_layout()
-        plt.savefig(os.path.join(run_outdir, 'xgb_reg_leraning_curve_'+m+'.png'))
-
-
-# -------------
-# LGBMRegressor
-# -------------
-if 'lgb_reg' in ml_models:
-    model_name = 'lgb_reg'
-    try:
-        import lightgbm as lgb
-    except ImportError:  # install??
-        logger.error('Module not found (lightgbm)')
-
-    # https://lightgbm.readthedocs.io/en/latest/Python-API.html
-    # TODO: use config file to set default parameters
-    logger.info('\nTrain LGBMRegressor ...')
-    ml_objective = 'regression'
-    eval_metric = ['l1', # aliases: regression_l1, mean_absolute_error, mae
-                   'l2', # aliases: regression, regression_l2, mean_squared_error, mse, and more
-                   ]
-
-    # ----- lightgbm "Training API" - start
-    # lgb_tr = lgb.Dataset(data=xtr, label=ytr, categorical_feature='auto')
-    # lgb_vl = lgb.Dataset(data=xvl, label=yvl, categorical_feature='auto')
-    # # https://lightgbm.readthedocs.io/en/latest/Parameters.html
-    # params = {'task': 'train', # default='train'
-    #         'objective': ml_objective, # default='regression' which alias for 'rmse' and 'mse' (but these are different??)
-    #         'boosting': 'gbdt', # default='gbdt'
-    #         'num_iterations': 100, # default=100 (num of boosting iterations)
-    #         'learning_rate': 0.1, # default=0.1
-    #         'num_leaves': 31, # default=31 (num of leaves in 1 tree)
-    #         'seed': SEED,
-    #         'num_threads': n_jobs, # default=0 (set to the num of real CPU cores)
-    #         'device_type': 'cpu', # default='cpu'
-    #         'metric': eval_metric # metric(s) to be evaluated on the evaluation set(s)
-    #         }
-    # t0 = time.time()
-    # lgb_reg = lgb.train(params=params, train_set=lgb_tr, valid_sets=lgb_vl, verbose_eval=False)
-    # # lgb_cv = lgb.train(params=params, train_set=lgb_tr, nfolds=5)
-    # train_runtime['lgb_reg'] = time.time() - t0
-    # logger.info('Runtime: {:.2f} mins'.format(train_runtime['lgb_reg']/60))
-    # ----- lightgbm "Training API" - end 
-
-    # ----- lightgbm "sklearn API" appraoch 1 - start
-    lgb_reg = lgb.LGBMModel(objective=ml_objective,
-                            n_jobs=n_jobs,
-                            random_state=SEED)
-    # lgb_reg = lgb.LGBMRegressor()
-    t0 = time.time()
-    lgb_reg.fit(xtr, ytr, eval_metric=eval_metric, eval_set=[(xtr, ytr), (xvl, yvl)],
-                early_stopping_rounds=10, verbose=False, callbacks=None)
-    train_runtime[model_name] = time.time() - t0
-    logger.info('Runtime: {:.2f} mins'.format(train_runtime[model_name]/60))
-    # ----- lightgbm "sklearn API" appraoch 1 - end
-
-    # Save model
-    # lgb_reg.save_model(os.path.join(run_outdir, 'lgb_'+ml_type+'_model.txt'))
-    joblib.dump(lgb_reg, filename=os.path.join(run_outdir, model_name+'_model.pkl'))
-    # lgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
-
-    # Print preds
-    # utils.print_scores(model=lgb_reg, xdata=xtr, ydata=ytr)
-    # utils.print_scores(model=lgb_reg, xdata=xvl, ydata=yvl)
-    utils.print_scores(model=lgb_reg, xdata=xvl, ydata=yvl, logger=logger)
-
-    # Dump preds
-    utils.dump_preds(model=lgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                     path=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))
-
-    # Plot feature importance
-    lgb.plot_importance(booster=lgb_reg, max_num_features=20, grid=True, title='LGBMRegressor')
-    plt.tight_layout()
-    plt.savefig(os.path.join(run_outdir, model_name+'_importances.png'))
-
-    # Plot learning curves
-    # TODO: note, plot_metric didn't accept 'mae' although it's alias for 'l1' 
-    # TODO: plot_metric requires dict from train(), but train returns 'lightgbm.basic.Booster'??
-    for m in eval_metric:
-        ax = lgb.plot_metric(booster=lgb_reg, metric=m, grid=True)
-        plt.savefig(os.path.join(run_outdir, model_name+'_learning_curve_'+m+'.png'))
+#     # Plot learning curves
+#     xgb_results = xgb_reg.evals_result()
+#     epoch_vec = np.arange(1, len(xgb_results['validation_0'][eval_metric[0]])+1)
+#     for m in eval_metric:
+#         fig, ax = plt.subplots()
+#         for i, s in enumerate(xgb_results):
+#             label = 'Train' if i==0 else 'Val'
+#             ax.plot(epoch_vec, xgb_results[s][m], label=label)
+#         plt.xlabel('Epochs')
+#         plt.title(m)
+#         plt.legend()
+#         plt.grid(True)
+#         plt.tight_layout()
+#         plt.savefig(os.path.join(run_outdir, 'xgb_reg_leraning_curve_'+m+'.png'))
 
 
-# -------------
-# TPOTRegressor
-# -------------
-# Total evaluation pipelines:  population_size + generations × offspring_size 
-if 'tpot_reg' in ml_models:
-    try:
-        import tpot
-    except ImportError:
-        logger.error('Module not found (tpot)')
+# # -------------
+# # LGBMRegressor
+# # -------------
+# if 'lgb_reg' in ml_models:
+#     model_name = 'lgb_reg'
+#     try:
+#         import lightgbm as lgb
+#     except ImportError:  # install??
+#         logger.error('Module not found (lightgbm)')
+
+#     # https://lightgbm.readthedocs.io/en/latest/Python-API.html
+#     # TODO: use config file to set default parameters
+#     logger.info('\nTrain LGBMRegressor ...')
+#     ml_objective = 'regression'
+#     eval_metric = ['l1', # aliases: regression_l1, mean_absolute_error, mae
+#                    'l2', # aliases: regression, regression_l2, mean_squared_error, mse, and more
+#                    ]
+
+#     # ----- lightgbm "Training API" - start
+#     # lgb_tr = lgb.Dataset(data=xtr, label=ytr, categorical_feature='auto')
+#     # lgb_vl = lgb.Dataset(data=xvl, label=yvl, categorical_feature='auto')
+#     # # https://lightgbm.readthedocs.io/en/latest/Parameters.html
+#     # params = {'task': 'train', # default='train'
+#     #         'objective': ml_objective, # default='regression' which alias for 'rmse' and 'mse' (but these are different??)
+#     #         'boosting': 'gbdt', # default='gbdt'
+#     #         'num_iterations': 100, # default=100 (num of boosting iterations)
+#     #         'learning_rate': 0.1, # default=0.1
+#     #         'num_leaves': 31, # default=31 (num of leaves in 1 tree)
+#     #         'seed': SEED,
+#     #         'num_threads': n_jobs, # default=0 (set to the num of real CPU cores)
+#     #         'device_type': 'cpu', # default='cpu'
+#     #         'metric': eval_metric # metric(s) to be evaluated on the evaluation set(s)
+#     #         }
+#     # t0 = time.time()
+#     # lgb_reg = lgb.train(params=params, train_set=lgb_tr, valid_sets=lgb_vl, verbose_eval=False)
+#     # # lgb_cv = lgb.train(params=params, train_set=lgb_tr, nfolds=5)
+#     # train_runtime['lgb_reg'] = time.time() - t0
+#     # logger.info('Runtime: {:.2f} mins'.format(train_runtime['lgb_reg']/60))
+#     # ----- lightgbm "Training API" - end 
+
+#     # ----- lightgbm "sklearn API" appraoch 1 - start
+#     lgb_reg = lgb.LGBMModel(objective=ml_objective,
+#                             n_jobs=n_jobs,
+#                             random_state=SEED)
+#     # lgb_reg = lgb.LGBMRegressor()
+#     t0 = time.time()
+#     lgb_reg.fit(xtr, ytr, eval_metric=eval_metric, eval_set=[(xtr, ytr), (xvl, yvl)],
+#                 early_stopping_rounds=10, verbose=False, callbacks=None)
+#     train_runtime[model_name] = time.time() - t0
+#     logger.info('Runtime: {:.2f} mins'.format(train_runtime[model_name]/60))
+#     # ----- lightgbm "sklearn API" appraoch 1 - end
+
+#     # Save model
+#     # lgb_reg.save_model(os.path.join(run_outdir, 'lgb_'+ml_type+'_model.txt'))
+#     joblib.dump(lgb_reg, filename=os.path.join(run_outdir, model_name+'_model.pkl'))
+#     # lgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
+
+#     # Print preds
+#     # utils.print_scores(model=lgb_reg, xdata=xtr, ydata=ytr)
+#     # utils.print_scores(model=lgb_reg, xdata=xvl, ydata=yvl)
+#     utils.print_scores(model=lgb_reg, xdata=xvl, ydata=yvl, logger=logger)
+
+#     # Dump preds
+#     utils.dump_preds(model=lgb_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
+#                      path=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))
+
+#     # Plot feature importance
+#     lgb.plot_importance(booster=lgb_reg, max_num_features=20, grid=True, title='LGBMRegressor')
+#     plt.tight_layout()
+#     plt.savefig(os.path.join(run_outdir, model_name+'_importances.png'))
+
+#     # Plot learning curves
+#     # TODO: note, plot_metric didn't accept 'mae' although it's alias for 'l1' 
+#     # TODO: plot_metric requires dict from train(), but train returns 'lightgbm.basic.Booster'??
+#     for m in eval_metric:
+#         ax = lgb.plot_metric(booster=lgb_reg, metric=m, grid=True)
+#         plt.savefig(os.path.join(run_outdir, model_name+'_learning_curve_'+m+'.png'))
+
+
+# # -------------
+# # TPOTRegressor
+# # -------------
+# # Total evaluation pipelines:  population_size + generations × offspring_size 
+# if 'tpot_reg' in ml_models:
+#     try:
+#         import tpot
+#     except ImportError:
+#         logger.error('Module not found (tpot)')
     
-    tpot_checkpoint_folder = os.path.join(run_outdir, 'tpot_reg_checkpoints')
-    os.makedirs(tpot_checkpoint_folder)
+#     tpot_checkpoint_folder = os.path.join(run_outdir, 'tpot_reg_checkpoints')
+#     os.makedirs(tpot_checkpoint_folder)
 
-    logger.info('\nTrain TPOTRegressor ...')
-    tpot_reg = tpot.TPOTRegressor(generations=100,  # dflt: 100
-                                  population_size=100, # dflt: 100
-                                  offspring_size=100, # dflt: 100
-                                  scoring='neg_mean_squared_error', # dflt: 'neg_mean_squared_error'
-                                  cv=5,
-                                  n_jobs=n_jobs,
-                                  random_state=SEED,
-                                  warm_start=False,
-                                  periodic_checkpoint_folder=tpot_checkpoint_folder,
-                                  verbosity=2,
-                                  disable_update_check=True)
-    t0 = time.time()
-    tpot_reg.fit(xtr, ytr)
-    train_runtime['tpot_reg'] = time.time() - t0
-    logger.info('Runtime: {:.2f} mins'.format(ml_runtime['tpot_reg']/60))
+#     logger.info('\nTrain TPOTRegressor ...')
+#     tpot_reg = tpot.TPOTRegressor(generations=100,  # dflt: 100
+#                                   population_size=100, # dflt: 100
+#                                   offspring_size=100, # dflt: 100
+#                                   scoring='neg_mean_squared_error', # dflt: 'neg_mean_squared_error'
+#                                   cv=5,
+#                                   n_jobs=n_jobs,
+#                                   random_state=SEED,
+#                                   warm_start=False,
+#                                   periodic_checkpoint_folder=tpot_checkpoint_folder,
+#                                   verbosity=2,
+#                                   disable_update_check=True)
+#     t0 = time.time()
+#     tpot_reg.fit(xtr, ytr)
+#     train_runtime['tpot_reg'] = time.time() - t0
+#     logger.info('Runtime: {:.2f} mins'.format(ml_runtime['tpot_reg']/60))
     
-    # Export model as .py script
-    tpot_reg.export(os.path.join(run_outdir, 'tpot_reg_pipeline.py'))
+#     # Export model as .py script
+#     tpot_reg.export(os.path.join(run_outdir, 'tpot_reg_pipeline.py'))
 
-    # Print scores
-    utils.print_scores(model=tpot_reg, xdata=xvl, ydata=yvl, logger=logger)
+#     # Print scores
+#     utils.print_scores(model=tpot_reg, xdata=xvl, ydata=yvl, logger=logger)
 
-    # Dump preds
-    t0 = time.time()
-    utils.dump_preds(model=tpot_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
-                    path=os.path.join(run_outdir, 'tpot_reg_vl_preds.csv'))
-    logger.info('Predictions runtime: {:.2f} mins'.format(time.time()/60))
-
-
-
-
-
-# ========================================================================
-#       Infer
-# ========================================================================
-logger.info('\n=====================================================')
-logger.info(f'Inference ... {infer_sources}')
-logger.info('=====================================================')
-
-preds_filename_prefix = 'infer'
-model_name = 'lgb_reg'
-
-# Prepare infer data for predictions
-##te_data = utils.impute_values(data=te_data, fea_prefix=fea_prefix, logger=logger)
-te_data = utils.impute_values(data=te_data, fea_prfx_dict=fea_prfx_dict, logger=logger)
-##xte = utils.extract_features(data=te_data, feature_list=feature_list, fea_prefix=fea_prefix)
-xte, _ = utils.split_features_and_other_cols(te_data, fea_prfx_dict=fea_prfx_dict)
-yte = utils.extract_target(data=te_data, target_name=target_name)
-
-# Print feature shapes
-print_feature_shapes(df=xte, name='xte')
-
-# Print preds
-utils.print_scores(model=lgb_reg, xdata=xte, ydata=yte, logger=logger)
-
-# Dump preds
-utils.dump_preds(model=lgb_reg, df_data=te_data, xdata=xte, target_name=target_name,
-                 path=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))
+#     # Dump preds
+#     t0 = time.time()
+#     utils.dump_preds(model=tpot_reg, df_data=vl_data, xdata=xvl, target_name=target_name,
+#                     path=os.path.join(run_outdir, 'tpot_reg_vl_preds.csv'))
+#     logger.info('Predictions runtime: {:.2f} mins'.format(time.time()/60))
 
 
 
 
 
-# =====================================================================================
-# if __name__ == '__main__':
-#     main()
+# # ========================================================================
+# #       Infer
+# # ========================================================================
+# logger.info('\n=====================================================')
+# logger.info(f'Inference ... {infer_sources}')
+# logger.info('=====================================================')
+
+# preds_filename_prefix = 'infer'
+# model_name = 'lgb_reg'
+
+# # Prepare infer data for predictions
+# ##te_data = utils.impute_values(data=te_data, fea_prefix=fea_prefix, logger=logger)
+# te_data = utils.impute_values(data=te_data, fea_prfx_dict=fea_prfx_dict, logger=logger)
+# ##xte = utils.extract_features(data=te_data, feature_list=feature_list, fea_prefix=fea_prefix)
+# xte, _ = utils.split_features_and_other_cols(te_data, fea_prfx_dict=fea_prfx_dict)
+# yte = utils.extract_target(data=te_data, target_name=target_name)
+
+# # Print feature shapes
+# print_feature_shapes(df=xte, name='xte')
+
+# # Print preds
+# utils.print_scores(model=lgb_reg, xdata=xte, ydata=yte, logger=logger)
+
+# # Dump preds
+# utils.dump_preds(model=lgb_reg, df_data=te_data, xdata=xte, target_name=target_name,
+#                  path=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))
+

@@ -1,4 +1,5 @@
 load_cmeta <- function(cmeta_fullpath) {
+  # Load cell line metadata
   cmeta <- read.table(cmeta_fullpath, sep="\t", header=1, na.strings=c("NA", ""))  
   cmeta <- dplyr::rename(cmeta, "CCLEName"="CCLE.name", "CellName"="Cell.line.primary.name",
                          "CellNameAliases"="Cell.line.aliases", "SitePrimary"="Site.Primary",
@@ -8,7 +9,9 @@ load_cmeta <- function(cmeta_fullpath) {
 }
 
 
+
 load_dmeta <- function(dmeta_fullpath) {
+  # Load drug metadata
   dmeta <- read.table(dmeta_fullpath, sep=",", header=1, na.strings=c("NA", ""))
   dmeta <- dplyr::rename(dmeta, "Drug"="Compound..code.or.generic.name.",
                          "DrugBrandName"="Compound..brand.name.", "Traget"="Target.s.",
@@ -17,13 +20,16 @@ load_dmeta <- function(dmeta_fullpath) {
 }
 
 
+
 load_rspdata <- function(rspdata_fullpath) {
+  # Load response data
   rspdata <- read.table(rspdata_fullpath, sep=",", header=1, na.strings=c("NA", ""))
   rspdata <- dplyr::rename(rspdata, "CCLEName"="CCLE.Cell.Line.Name", "CellName"="Primary.Cell.Line.Name",
                            "Drug"="Compound", "Dose_um"="Doses..uM.", "ActivityMedian"="Activity.Data..median.",
                            "ActivitySD"="Activity.SD", "nDataPoints"="Num.Data", "EC50um"="EC50..uM.",
                            "IC50um"="IC50..uM.")
 }
+
 
 
 load_rnaseq <- function(rnaseq_fullpath) {
@@ -42,12 +48,11 @@ load_rnaseq <- function(rnaseq_fullpath) {
   rownames(gene_names) <- gene_names$GENE_ENSG
   
   # Drop gene name columns (keep only expression columns)
-  rna[1:2, 1:3]
+  # rna[1:2, 1:3]
   rownames(rna) <- rna$GENE_ENSG
   rna <- rna[,3:ncol(rna)]
   
   # Rename sample names (drop the parenthesis)
-  # colnames(rna)[3:ncol(rna)] <- sapply(colnames(rna)[3:ncol(rna)], FUN=function(s) unlist(strsplit(s, split=" "))[1])
   colnames(rna) <- sapply(colnames(rna), FUN=function(s) unlist(strsplit(s, split=" "))[1])
   
   # library(magrittr)
@@ -55,13 +60,13 @@ load_rnaseq <- function(rnaseq_fullpath) {
   # strsplit(ll, "-") %>% sapply(extract2, 1)
   
   # Keep cell lines that were actually screened and sequenced
-  cells_screened <- unique(as.vector(rspdata$CCLEName))
-  cells_screened[1:3]
-  usecells <- intersect(cells_screened, colnames(rna))
-  message("Cells sequenced: ", ncol(rna))
-  message("Cells screened: ", length(cells_screened))
-  message("Cells screened and sequenced: ", length(usecells))
-  rna <- dplyr::select(rna, usecells)
+  # cells_screened <- unique(as.vector(rspdata$CCLEName))
+  # cells_screened[1:3]
+  # usecells <- intersect(cells_screened, colnames(rna))
+  # message("Cells sequenced: ", ncol(rna))
+  # message("Cells screened: ", length(cells_screened))
+  # message("Cells screened and sequenced: ", length(usecells))
+  # rna <- dplyr::select(rna, usecells)
   
   # Drop genes with all zero counts
   message("Total number of genes with all zero values in the original df: ", sum(rowSums(rna)==0))
@@ -80,6 +85,7 @@ load_rnaseq <- function(rnaseq_fullpath) {
   ll <- list("rna"=rna, "gene_names"=gene_names)
   return(ll)
 }
+
 
 
 get_gene_mappgins <- function() {
@@ -140,6 +146,7 @@ get_gene_mappgins <- function() {
 }
 
 
+
 get_gene_subset <- function(rna, rna_gene_set=NULL, gene_mapping=NULL, l1k_dir=NULL) {
   # Args:
   #   rna_gene_set : "lincs", "top_exp", or else
@@ -171,6 +178,7 @@ get_gene_subset <- function(rna, rna_gene_set=NULL, gene_mapping=NULL, l1k_dir=N
 }
 
 
+
 plot_boxplots <- function(rna, tissuetype, filename, n=NULL) {
   if (!is.null(n)) {
     # Get a subset of samples
@@ -195,7 +203,7 @@ plot_boxplots <- function(rna, tissuetype, filename, n=NULL) {
   # df1[1:3,]
   
   # http://www.cookbook-r.com/Graphs/Output_to_a_file/#ggplot2
-  par(mfrow=c(1,1)); pdf(file.path(outdir, paste0(filename, ".pdf")), width=100)
+  par(mfrow=c(1,1)); pdf(file.path(outdir, paste0(filename, ".pdf")), width=150)
   print(
     ggplot(df1, aes(x=ind, y=values)) +  
     # geom_violin(width=1.4) +

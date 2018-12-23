@@ -286,12 +286,16 @@ def impute_values(data, fea_prfx_dict, logger=None):
 #     return data
 
 
-def split_tr_vl(data, test_size=0.2, random_state=None, logger=None):
+def split_tr_vl(data, test_size=0.2, strict_split=True, random_state=None, logger=None):
     """ ... """
-    from sklearn.model_selection import train_test_split
-    tr_data, vl_data = train_test_split(data, test_size=test_size, random_state=random_state)
-    tr_data.reset_index(drop=True, inplace=True)
-    vl_data.reset_index(drop=True, inplace=True)
+    from sklearn.model_selection import train_test_split, GroupShuffleSplit
+    if strict_split is not None:
+        pass
+    else:
+        tr_data, vl_data = train_test_split(data, test_size=test_size, random_state=random_state)
+        tr_data.reset_index(drop=True, inplace=True)
+        vl_data.reset_index(drop=True, inplace=True)
+
     if logger is not None:
         logger.info('\nSplit data into train and val (test) ...')
         logger.info(f'tr_data.shape {tr_data.shape}')

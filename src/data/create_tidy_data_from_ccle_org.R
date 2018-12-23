@@ -188,8 +188,8 @@ n_samples <- 10
 # png(file.path(outdir, paste0(save_data_name, '_boxplot_log2(cnts)_vs_log_sf.png')))
 # layout(matrix(c(1,2), nrow=1, ncol=2), respect=T)
 par(mfrow=c(1,2))
-boxplot(logcnts[,1:n_samples], main="log2(cnts+1)", cex=0.1) # not normalized
-boxplot(log_sf[,1:n_samples], main="log2(sizeFactors)", cex=0.1) # normalized
+boxplot(logcnts[,1:n_samples], main="log2(cnts+1)", cex=0.1, xaxt="n") # not normalized
+boxplot(log_sf[,1:n_samples], main="log2(sizeFactors)", cex=0.1, xaxt="n") # normalized
 
 
 
@@ -258,6 +258,9 @@ dev.off()
 # ==============================================================
 #   Create tidy data
 # ==============================================================
+# Extract rna for 
+
+
 # Transpose rna and add col to merging with rspdata
 transpose_rna <- function(df) {
   df_t <- as.data.frame(t(df))
