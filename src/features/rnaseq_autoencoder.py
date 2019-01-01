@@ -41,11 +41,11 @@ SEED = 0
 def build_autoencoder(input_dim, latent_dim, layers_dim):
     """ Symmetric dense autoencoder.
     Args:
-        input_dim (int) : 
-        latent_dim (int) : 
+        input_dim (int) :
+        latent_dim (int) :
         layers_dim : list of integers where each consecutive value is the dim of the
-                      next hidden layer in the encoder
-    
+                     next hidden layer in the encoder
+
     Returns:
         autoencoder : keras model of autoencoder
         encoder : keras model of encoder
@@ -136,7 +136,7 @@ history = autoencoder.fit(xtr, xtr,
                           shuffle=True,
                           validation_data=(xte, xte))
 
-utils_all.plot_keras_learning(history, figsize=(10,6), 
+utils_all.plot_keras_learning(history, figsize=(10,6),
                               img_name=os.path.join(OUTDIR, 'au_rnaseq_learning_curve.png'))
 
 # Encode and decode some samples

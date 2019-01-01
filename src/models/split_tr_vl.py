@@ -121,7 +121,7 @@ def plot_ytr_yvl_dist(ytr, yvl, title=None, outpath=None):
     plt.legend()
     # plt.savefig(os.path.join(outpath, title+'_ytr_yvl_dist.png'), bbox_inches='tight')
     if outpath is None:
-        plt.savefig(os.path.join(outpath, 'ytr_yvl_dist.png'), bbox_inches='tight')
+        plt.savefig('ytr_yvl_dist.png', bbox_inches='tight')
     else:
         plt.savefig(outpath, bbox_inches='tight')
 
