@@ -101,14 +101,15 @@ from sklearn.preprocessing import Imputer, OneHotEncoder, OrdinalEncoder
 from sklearn.model_selection import learning_curve
 
 # Utils
-file_path = os.getcwd()
-file_path = os.path.join(file_path, 'src/models')
-os.chdir(file_path)
+# file_path = os.getcwd()
+# file_path = os.path.join(file_path, 'src/models')
+# os.chdir(file_path)b
 
-# file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
 ##utils_path = os.path.abspath(os.path.join(file_path, 'utils'))
 ##sys.path.append(utils_path)
-import utils_models as utils
+import utils
+import utils_tidy
 
 DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
@@ -118,373 +119,487 @@ os.makedirs(OUTDIR, exist_ok=True)
 
 SEED = 0
 
-
-# ========================================================================
-#       Args TODO: add to argparse
-# ========================================================================
-# Train and infer data
-train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
-infer_sources = ['ccle']
-
-# Traget (response)
-target_name = 'AUC1'
-
-# Features to use
-# TODO: instead of using these names, just use the values of fea_prefix dict
-cell_features = ['rna'] # ['rna', cnv', 'rna_latent']
-drug_features = ['dsc'] # [] # ['dsc', 'fng', 'dsc_latent', 'fng_latent']
-other_features = [] # ['drug_labels'] # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
-feature_list = cell_features + drug_features + other_features
-
 # Feature prefix (some already present in the tidy dataframe)
 fea_prfx_dict = {'rna': 'cell_rna.',
-                 'cnv': 'cell_cnv.',
-                 'dsc': 'drug_dsc.',
-                 'fng': 'drug_fng.',
-                 'clb': 'cell_lbl.',
-                 'dlb': 'drug_lbl.'}
-
-# Models
-ml_models = ['lgb_reg']
-
-target_trasform = False
-outlier_remove = False  # IsolationForest
-verbose = True
-n_jobs = 4
-
-# Train
-n_splits = 5
-cv_split_method = 'simple' # 'simple', 'group', (TODO: implement 'stratified')
+                'cnv': 'cell_cnv.',
+                'dsc': 'drug_dsc.',
+                'fng': 'drug_fng.',
+                'clb': 'cell_lbl.',
+                'dlb': 'drug_lbl.'}
 
 
+def run(args):
+    train_sources = args.train_sources
+    test_sources = args.test_sources
+    target_name = args.target_name
+    target_trasform = args.target_trasform
+    cell_features = args.cell_features
+    drug_features = args.drug_features
+    other_features = args.other_features
+    ml_models = args.ml_models
+    cv_method = args.cv_method
+    cv_folds = args.cv_folds
+    verbose = args.verbose
+    n_jobs = args.n_jobs
 
-# ========================================================================
-#       Logger
-# ========================================================================
-t = datetime.datetime.now()
-t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
-t = ''.join([str(i) for i in t])
-run_outdir = os.path.join(OUTDIR, 'run_'+t)
-os.makedirs(run_outdir)
-logfilename = os.path.join(run_outdir, 'logfile.log')
-logger = utils.setup_logger(logfilename=logfilename)
+    # Feature list
+    feature_list = cell_features + drug_features + other_features
+    
+    
+    # # ========================================================================
+    # #       Args TODO: add to argparse
+    # # ========================================================================
+    # # Train and infer data
+    # train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
+    # infer_sources = ['ccle']
 
-logger.info(f'File path: {file_path}')
-logger.info(f'Num of system CPUs: {psutil.cpu_count()}')
-logger.info(f'n_jobs: {n_jobs}')
+    # # Traget (response)
+    # target_name = 'AUC1'
 
+    # # Features to use
+    # # TODO: instead of using these names, just use the values of fea_prefix dict
+    # cell_features = ['rna'] # ['rna', cnv', 'rna_latent']
+    # drug_features = ['dsc'] # [] # ['dsc', 'fng', 'dsc_latent', 'fng_latent']
+    # other_features = [] # ['drug_labels'] # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
+    # feature_list = cell_features + drug_features + other_features
 
+    # # Feature prefix (some already present in the tidy dataframe)
+    # fea_prfx_dict = {'rna': 'cell_rna.',
+    #                 'cnv': 'cell_cnv.',
+    #                 'dsc': 'drug_dsc.',
+    #                 'fng': 'drug_fng.',
+    #                 'clb': 'cell_lbl.',
+    #                 'dlb': 'drug_lbl.'}
 
-# ========================================================================
-#       Load data and pre-proc
-# ========================================================================
-datapath = os.path.join(DATADIR, FILENAME)
-logger.info(f'\nLoad tidy data ... {datapath}')
-data = pd.read_parquet(datapath, engine='auto', columns=None)
-logger.info(f'data.shape {data.shape}')
-logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
-# print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
+    # # Models
+    # ml_models = ['lgb_reg']
 
+    # target_trasform = False
+    # outlier_remove = False  # IsolationForest
+    # verbose = True
+    # n_jobs = 4
 
-# Replace characters that are illegal for xgboost feature names
-# xdata.columns = list(map(lambda s: s.replace('[','_').replace(']','_'), xdata.columns.tolist())) # required by xgboost
-import re
-regex = re.compile(r'\[|\]|<', re.IGNORECASE)
-data.columns = [regex.sub('_', c) if any(x in str(c) for x in set(('[', ']', '<'))) else c for c in data.columns.values]
-
-
-# Extract infer sources
-logger.info('\nExtract infer sources ... {}'.format(infer_sources))
-te_data = data[data['SOURCE'].isin(infer_sources)].reset_index(drop=True)
-logger.info(f'te_data.shape {te_data.shape}')
-logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(te_data)/1e9))
-# print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
-
-
-# Extract training sources
-logger.info('\nExtract train sources ... {}'.format(train_sources))
-data = data[data['SOURCE'].isin(train_sources)].reset_index(drop=True)
-logger.info(f'data.shape {data.shape}')
-logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
-# print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
-
-
-# Assign type to categoricals
-# cat_cols = data.select_dtypes(include='object').columns.tolist()
-# data[cat_cols] = data[cat_cols].astype('category', ordered=False)
-
-
-# Shuffle data
-data = data.sample(frac=1.0, axis=0, random_state=SEED).reset_index(drop=True)
+    # # Train
+    # n_splits = 5
+    # cv_split_method = 'simple' # 'simple', 'group', (TODO: implement 'stratified')
 
 
-# Filter out AUC>1
-# print('\nFilter some AUC outliers (>1)')
-# print('data.shape', data.shape)
-# data = data[[False if x>1.0 else True for x in data[target_name]]].reset_index(drop=True)
-# print('data.shape', data.shape)
+
+    # ========================================================================
+    #       Logger
+    # ========================================================================
+    t = datetime.datetime.now()
+    t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
+    t = ''.join([str(i) for i in t])
+    run_outdir = os.path.join(OUTDIR, 'run_'+t)
+    os.makedirs(run_outdir)
+    logfilename = os.path.join(run_outdir, 'logfile.log')
+    logger = utils.setup_logger(logfilename=logfilename)
+
+    logger.info(f'File path: {file_path}')
+    logger.info(f'Num of system CPUs: {psutil.cpu_count()}')
+    logger.info(f'n_jobs: {n_jobs}')
 
 
-# Plots
-utils.boxplot_rsp_per_drug(df=data, target_name=target_name,
-                           path=os.path.join(run_outdir, f'{target_name}_per_drug_boxplot.png'))
-utils.plot_hist(x=data[target_name], var_name=target_name,
-                path=os.path.join(run_outdir, target_name+'_hist.png'))
-utils.plot_qq(x=data[target_name], var_name=target_name, path=os.path.join(run_outdir, target_name+'_qqplot.png'))
-utils.plot_hist_drugs(x=data['DRUG'], path=os.path.join(run_outdir, 'drugs_hist.png'))
 
-
-# Transform the target
-if target_trasform:
-    y = data[target_name].copy()
-    # y = np.log1p(ydata); plot_hist(x=y, var_name=target_name+'_log1p')
-    # # y = np.log(ydata+1); plot_hist(x=y, var_name=target_name+'_log+1')
-    # y = np.log10(ydata+1); plot_hist(x=y, var_name=target_name+'_log10')
-    # y = np.log2(ydata+1); plot_hist(x=y, var_name=target_name+'_log2')
-    # y = ydata**2; plot_hist(x=ydata, var_name=target_name+'_x^2')
-    y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
-    data[target_name] = y
-    # ydata = pd.DataFrame(y)
-
-    y = te_data[target_name].copy()
-    y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
-    te_data[target_name] = y
-
-
-if 'dlb' in other_features:
-    logger.info('\nAdd drug labels to features ...')
-    # print(data['DRUG'].value_counts())
-
-    # http://queirozf.com/entries/one-hot-encoding-a-feature-on-a-pandas-dataframe-an-example
-    # One-hot encoder
-    dlb = pd.get_dummies(data=data[['DRUG']], prefix=fea_prfx_dict['dlb'],
-                         dummy_na=False).reset_index(drop=True)
-
-    # Label encoder
-    # dlb = data[['DRUG']].astype('category', ordered=False).reset_index(drop=True)
-    # print(dlb.dtype)
-
-    # Concat drug labels and other features
-    data = pd.concat([dlb, data], axis=1).reset_index(drop=True)
-    logger.info(f'dlb.shape {dlb.shape}')
+    # ========================================================================
+    #       Load data and pre-proc
+    # ========================================================================
+    datapath = os.path.join(DATADIR, FILENAME)
+    logger.info(f'\nLoad tidy data ... {datapath}')
+    data = pd.read_parquet(datapath, engine='auto', columns=None)
     logger.info(f'data.shape {data.shape}')
+    logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
+    # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
 
 
-if 'rna_clusters' in other_features:
-    # TODO
+    # Replace characters that are illegal for xgboost feature names
+    # xdata.columns = list(map(lambda s: s.replace('[','_').replace(']','_'), xdata.columns.tolist())) # required by xgboost
+    import re
+    regex = re.compile(r'\[|\]|<', re.IGNORECASE)
+    data.columns = [regex.sub('_', c) if any(x in str(c) for x in set(('[', ']', '<'))) else c for c in data.columns.values]
+
+
+    # Extract test sources
+    logger.info('\nExtract test sources ... {}'.format(test_sources))
+    te_data = data[data['SOURCE'].isin(test_sources)].reset_index(drop=True)
+    logger.info(f'te_data.shape {te_data.shape}')
+    logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(te_data)/1e9))
+    # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+
+
+    # Extract training sources
+    logger.info('\nExtract train sources ... {}'.format(train_sources))
+    data = data[data['SOURCE'].isin(train_sources)].reset_index(drop=True)
+    logger.info(f'data.shape {data.shape}')
+    logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
+    # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+
+
+    # Assign type to categoricals
+    # cat_cols = data.select_dtypes(include='object').columns.tolist()
+    # data[cat_cols] = data[cat_cols].astype('category', ordered=False)
+
+
+    # Shuffle data
+    data = data.sample(frac=1.0, axis=0, random_state=SEED).reset_index(drop=True)
+
+
+    # Filter out AUC>1
+    # print('\nFilter some AUC outliers (>1)')
+    # print('data.shape', data.shape)
+    # data = data[[False if x>1.0 else True for x in data[target_name]]].reset_index(drop=True)
+    # print('data.shape', data.shape)
+
+
+    # Plots
+    utils.boxplot_rsp_per_drug(df=data, target_name=target_name,
+                               path=os.path.join(run_outdir, f'{target_name}_per_drug_boxplot.png'))
+    utils.plot_hist(x=data[target_name], var_name=target_name,
+                    path=os.path.join(run_outdir, target_name+'_hist.png'))
+    utils.plot_qq(x=data[target_name], var_name=target_name, path=os.path.join(run_outdir, target_name+'_qqplot.png'))
+    utils.plot_hist_drugs(x=data['DRUG'], path=os.path.join(run_outdir, 'drugs_hist.png'))
+
+
+    # Transform the target
+    if target_trasform:
+        y = data[target_name].copy()
+        # y = np.log1p(ydata); plot_hist(x=y, var_name=target_name+'_log1p')
+        # # y = np.log(ydata+1); plot_hist(x=y, var_name=target_name+'_log+1')
+        # y = np.log10(ydata+1); plot_hist(x=y, var_name=target_name+'_log10')
+        # y = np.log2(ydata+1); plot_hist(x=y, var_name=target_name+'_log2')
+        # y = ydata**2; plot_hist(x=ydata, var_name=target_name+'_x^2')
+        y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
+        data[target_name] = y
+        # ydata = pd.DataFrame(y)
+
+        y = te_data[target_name].copy()
+        y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
+        te_data[target_name] = y
+
+
+    if 'dlb' in other_features:
+        logger.info('\nAdd drug labels to features ...')
+        # print(data['DRUG'].value_counts())
+
+        # http://queirozf.com/entries/one-hot-encoding-a-feature-on-a-pandas-dataframe-an-example
+        # One-hot encoder
+        dlb = pd.get_dummies(data=data[['DRUG']], prefix=fea_prfx_dict['dlb'],
+                            dummy_na=False).reset_index(drop=True)
+
+        # Label encoder
+        # dlb = data[['DRUG']].astype('category', ordered=False).reset_index(drop=True)
+        # print(dlb.dtype)
+
+        # Concat drug labels and other features
+        data = pd.concat([dlb, data], axis=1).reset_index(drop=True)
+        logger.info(f'dlb.shape {dlb.shape}')
+        logger.info(f'data.shape {data.shape}')
+
+
+    if 'rna_clusters' in other_features:
+        # TODO
+        pass
+
+
+
+    # ========================================================================
+    #       TODO: outlier removal
+    # ========================================================================
     pass
 
 
 
-# ========================================================================
-#       TODO: outlier removal
-# ========================================================================
-pass
+    # ========================================================================
+    #       Keep a set of training features and impute missing values
+    # ========================================================================
+    data = utils_tidy.extract_subset_features(data=data, feature_list=feature_list, fea_prfx_dict=fea_prfx_dict)
+    data = utils_tidy.impute_values(data=data, fea_prfx_dict=fea_prfx_dict, logger=logger)
 
 
 
-# ========================================================================
-#       Keep a set of training features and impute missing values
-# ========================================================================
-data = utils.extract_subset_features(data=data, feature_list=feature_list, fea_prfx_dict=fea_prfx_dict)
-data = utils.impute_values(data=data, fea_prfx_dict=fea_prfx_dict, logger=logger)
+    # ========================================================================
+    #       Run CV training
+    # ========================================================================
+    from split_tr_vl import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
+    from ml_models import LGBM_Regressor
+
+
+    def print_feature_shapes(df, name, logger):
+        """ Print features shapes. """
+        logger.info(f'\n{name}')
+        for prefx in np.unique(list(map(lambda x: x.split('.')[0], df.columns.tolist()))):
+            cols = df.columns[[True if prefx in c else False for c in df.columns.tolist()]]
+            logger.info('{}: {}'.format(prefx, df[cols].shape))
+
+
+    def cv_scores_to_df(scores, decimals=3):
+        """ Convert a list of cv scores into df and compute mean and std. """
+        scores = pd.DataFrame(scores).T
+        scores['mean'] = scores.mean(axis=1)
+        scores['std'] = scores.std(axis=1)
+        scores = scores.round(decimals=decimals)
+        return scores
+
+
+    # Split tr/vl data
+    if cv_method=='simple':
+        splitter = SimpleSplit(n_splits=cv_folds, random_state=SEED)
+        splitter.split(X=data)
+    elif cv_method=='group':
+        splitter = GroupSplit(n_splits=cv_folds, random_state=SEED)
+        splitter.split(X=data, groups=data['CELL'])
+    elif cv_method=='stratify':
+        pass
+    else:
+        raise ValueError('This cv_method ({}) is not supported'.format(cv_method))
+
+
+    # Run CV training
+    logger.info(f'\nCV splitting method: {cv_method}')
+    tr_scores = []
+    vl_scores = []
+    for i in range(splitter.n_splits):
+        logger.info(f'\nFold {i+1}/{splitter.n_splits}')
+        tr_idx = splitter.tr_cv_idx[i]
+        vl_idx = splitter.vl_cv_idx[i]
+        tr_data = data.iloc[tr_idx, :]
+        vl_data = data.iloc[vl_idx, :]
+
+        # print(tr_idx[:5])
+        # print(vl_idx[:5])
+
+        # tr_cells = set(tr_data['CELL'].values)
+        # vl_cells = set(vl_data['CELL'].values)
+        # print('total cell intersections btw tr and vl: ', len(tr_cells.intersection(vl_cells)))
+        # print('a few intersections : ', list(tr_cells.intersection(vl_cells))[:3])
+
+        xtr, _ = utils_tidy.split_features_and_other_cols(tr_data, fea_prfx_dict=fea_prfx_dict)
+        xvl, _ = utils_tidy.split_features_and_other_cols(vl_data, fea_prfx_dict=fea_prfx_dict)
+
+        # print_feature_shapes(df=xtr, name='xtr', logger=logger)
+        # print_feature_shapes(df=xvl, name='xvl', logger=logger)
+
+        ytr = utils_tidy.extract_target(data=tr_data, target_name=target_name)
+        yvl = utils_tidy.extract_target(data=vl_data, target_name=target_name)
+
+        title = f'{target_name}; split {str(i)}'
+        plot_ytr_yvl_dist(ytr, yvl, title=title, outpath=os.path.join(run_outdir, title+'.png'))
+
+        # Train model
+        lgb_reg = LGBM_Regressor(target_name=target_name, random_state=SEED, logger=logger)
+        lgb_reg.fit(xtr, ytr, eval_set=[(xtr, ytr), (xvl, yvl)])
+
+        # Calc and save scores
+        tr_scores.append(lgb_reg.calc_scores(xdata=xtr, ydata=ytr, to_print=False))
+        vl_scores.append(lgb_reg.calc_scores(xdata=xvl, ydata=yvl, to_print=False))
+
+
+    # Summarize cv scores
+    cv_tr_scores = cv_scores_to_df(tr_scores)
+    cv_vl_scores = cv_scores_to_df(vl_scores)
+    print('\ntr scores\n{}'.format(cv_tr_scores))
+    print('\nvl scores\n{}'.format(cv_vl_scores))
+    cv_tr_scores.to_csv(os.path.join(run_outdir, 'cv_tr_scores.csv'))
+    cv_vl_scores.to_csv(os.path.join(run_outdir, 'cv_vl_scores.csv'))
 
 
 
-# ========================================================================
-#       Run CV training
-# ========================================================================
-from split_tr_vl import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
-from ml_models import LGBM_Regressor
-
-
-def print_feature_shapes(df, name, logger):
-    """ Print features shapes. """
-    logger.info(f'\n{name}')
-    for prefx in np.unique(list(map(lambda x: x.split('.')[0], df.columns.tolist()))):
-        cols = df.columns[[True if prefx in c else False for c in df.columns.tolist()]]
-        logger.info('{}: {}'.format(prefx, df[cols].shape))
-
-
-def cv_scores_to_df(scores, decimals=3):
-    """ Convert a list of cv scores into df and compute mean and std. """
-    scores = pd.DataFrame(scores).T
-    scores['mean'] = scores.mean(axis=1)
-    scores['std'] = scores.std(axis=1)
-    scores = scores.round(decimals=decimals)
-    return scores
-
-
-# Split tr/vl data
-if cv_split_method=='simple':
-    splitter = SimpleSplit(n_splits=n_splits, random_state=SEED)
-    splitter.split(X=data)
-elif cv_split_method=='group':
-    splitter = GroupSplit(n_splits=n_splits, random_state=SEED)
-    splitter.split(X=data, groups=data['CELL'])
-elif cv_split_method=='stratify':
-    pass
-else:
-    raise ValueError('This cv_split_method ({}) is not supported'.format(cv_split_method))
-
-
-# Run CV training
-logger.info(f'\nCV splitting method: {cv_split_method}')
-tr_scores = []
-vl_scores = []
-for i in range(splitter.n_splits):
-    logger.info(f'\nFold {i+1}/{splitter.n_splits}')
-    tr_idx = splitter.tr_cv_idx[i]
-    vl_idx = splitter.vl_cv_idx[i]
-    tr_data = data.iloc[tr_idx, :]
-    vl_data = data.iloc[vl_idx, :]
-
-    # print(tr_idx[:5])
-    # print(vl_idx[:5])
-
-    # tr_cells = set(tr_data['CELL'].values)
-    # vl_cells = set(vl_data['CELL'].values)
-    # print('total cell intersections btw tr and vl: ', len(tr_cells.intersection(vl_cells)))
-    # print('a few intersections : ', list(tr_cells.intersection(vl_cells))[:3])
-
-    xtr, _ = utils.split_features_and_other_cols(tr_data, fea_prfx_dict=fea_prfx_dict)
-    xvl, _ = utils.split_features_and_other_cols(vl_data, fea_prfx_dict=fea_prfx_dict)
-
-    # print_feature_shapes(df=xtr, name='xtr', logger=logger)
-    # print_feature_shapes(df=xvl, name='xvl', logger=logger)
-
-    ytr = utils.extract_target(data=tr_data, target_name=target_name)
-    yvl = utils.extract_target(data=vl_data, target_name=target_name)
-
-    title = f'{target_name}; split {str(i)}'
-    plot_ytr_yvl_dist(ytr, yvl, title=title, outpath=os.path.join(run_outdir, title+'.png'))
+    # ========================================================================
+    #       Train final model (entire dataset)
+    # ========================================================================
+    logger.info('\n=====================================================')
+    logger.info(f'Train final model (use entire dataset) ...')
+    logger.info('=====================================================')
+    xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+    ydata = utils_tidy.extract_target(data=data, target_name=target_name)
+    print_feature_shapes(df=xdata, name='xdata', logger=logger)
 
     # Train model
-    lgb_reg = LGBM_Regressor(target_name=target_name, random_state=SEED, logger=logger)
-    lgb_reg.fit(xtr, ytr, eval_set=[(xtr, ytr), (xvl, yvl)])
+    lgb_reg_final = LGBM_Regressor(target_name=target_name, random_state=SEED, logger=logger)
+    lgb_reg_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])
 
-    # Calc and save scores
-    tr_scores.append(lgb_reg.calc_scores(xdata=xtr, ydata=ytr, to_print=False))
-    vl_scores.append(lgb_reg.calc_scores(xdata=xvl, ydata=yvl, to_print=False))
+    # Compute scores
+    scores = lgb_reg_final.calc_scores(xdata=xdata, ydata=ydata, to_print=True)
+    # scores = cv_scores_to_df([scores])
+    # lgb_reg_final.plot_fi(outdir=run_outdir)
 
+    # Dump preds
+    lgb_reg_final.dump_preds(df_data=data, xdata=xdata, target_name=target_name,
+                            outpath=os.path.join(run_outdir, 'preds.csv'))
 
-# Summarize cv scores
-cv_tr_scores = cv_scores_to_df(tr_scores)
-cv_vl_scores = cv_scores_to_df(vl_scores)
-print('\ntr scores\n{}'.format(cv_tr_scores))
-print('\nvl scores\n{}'.format(cv_vl_scores))
-cv_tr_scores.to_csv(os.path.join(run_outdir, 'cv_tr_scores.csv'))
-cv_vl_scores.to_csv(os.path.join(run_outdir, 'cv_vl_scores.csv'))
-
-
-
-# ========================================================================
-#       Train final model (entire dataset)
-# ========================================================================
-logger.info('\n=====================================================')
-logger.info(f'Train final model (use entire dataset) ...')
-logger.info('=====================================================')
-xdata, _ = utils.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-ydata = utils.extract_target(data=data, target_name=target_name)
-print_feature_shapes(df=xdata, name='xdata', logger=logger)
-
-# Train model
-lgb_reg_final = LGBM_Regressor(target_name=target_name, random_state=SEED, logger=logger)
-lgb_reg_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])
-
-# Compute scores
-scores = lgb_reg_final.calc_scores(xdata=xdata, ydata=ydata, to_print=True)
-# scores = cv_scores_to_df([scores])
-# lgb_reg_final.plot_fi(outdir=run_outdir)
-
-# Dump preds
-lgb_reg_final.dump_preds(df_data=data, xdata=xdata, target_name=target_name,
-                         outpath=os.path.join(run_outdir, 'preds.csv'))
-
-# Save model
-lgb_reg_final.save_model(outdir=run_outdir)
+    # Save model
+    lgb_reg_final.save_model(outdir=run_outdir)
 
 
 
-# ========================================================================
-#       Infer
-# ========================================================================
-logger.info('\n=====================================================')
-logger.info(f'Inference ... {infer_sources}')
-logger.info('=====================================================')
+    # ========================================================================
+    #       Infer
+    # ========================================================================
+    logger.info('\n=====================================================')
+    logger.info(f'Inference ... {test_sources}')
+    logger.info('=====================================================')
 
-preds_filename_prefix = 'infer'
-model_name = 'lgb_reg_final'
+    preds_filename_prefix = 'test'
+    model_name = 'lgb_reg_final'
 
-# Prepare infer data for predictions
-te_data = utils.impute_values(data=te_data, fea_prfx_dict=fea_prfx_dict, logger=logger)
-xte, _ = utils.split_features_and_other_cols(te_data, fea_prfx_dict=fea_prfx_dict)
-yte = utils.extract_target(data=te_data, target_name=target_name)
+    # Prepare test data for predictions
+    te_data = utils_tidy.impute_values(data=te_data, fea_prfx_dict=fea_prfx_dict, logger=logger)
+    xte, _ = utils_tidy.split_features_and_other_cols(te_data, fea_prfx_dict=fea_prfx_dict)
+    yte = utils_tidy.extract_target(data=te_data, target_name=target_name)
 
-# Print feature shapes
-print_feature_shapes(df=xte, name='xte', logger=logger)
+    # Print feature shapes
+    print_feature_shapes(df=xte, name='xte', logger=logger)
 
-# Compute scores
-scores = lgb_reg_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
-scores = cv_scores_to_df([scores])
+    # Compute scores
+    scores = lgb_reg_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
+    scores = cv_scores_to_df([scores])
 
-# Dump preds
-lgb_reg_final.dump_preds(df_data=te_data, xdata=xte, target_name=target_name,
-                         outpath=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))                 
-
-
-
-# ========================================================================
-#       Grid Search CV (TODO: didn't finish)
-# ========================================================================
-# # https://scikit-learn.org/stable/tutorial/statistical_inference/model_selection.html
-# from sklearn.neighbors import KNeighborsRegressor
-# from sklearn.svm import LinearSVR, SVR, NuSVR
-# from sklearn.preprocessing import LabelEncoder, StandardScaler, RobustScaler, QuantileTransformer
-# from sklearn.model_selection import GridSearchCV, cross_val_score
-# from sklearn.model_selection import GroupKFold
-
-# xdata, _ = utils.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-# ydata = utils.extract_target(data=data, target_name=target_name)
-# xdata = StandardScaler().fit_transform(xdata)
-
-# # SVR
-# model_name = 'svr'
-# params_search = {'C': [0.1, 1, 10],
-#                  'epsilon': [0.01, 0.1, 1]}
-# model = SVR(gamma='scale', kernel='rbf')
-
-# # KNN
-# model_name = 'knn_reg'
-# params_search = {'n_neighbors': [5, 10, 15]}
-# model = KNeighborsRegressor(n_jobs=n_jobs)
-
-# # CV splitter
-# groups = data['CELL'].values
-# groups = LabelEncoder().fit_transform(groups)
-# cv_splitter = GroupKFold(n_splits=n_splits)
-# cv_splitter = cv_splitter.split(data, groups=groups)
-
-# # Define grid search
-# gs = GridSearchCV(estimator=model, param_grid=params_search,
-#                   n_jobs=n_jobs, refit=True, cv=cv_splitter, verbose=True)
-
-# # Train
-# t0 = time.time()
-# gs.fit(xdata, ydata)
-# runtime_fit = time.time() - t0
-# print('runtime_fit', runtime_fit)
-
-# # Get the best model
-# best_model = gs.best_estimator_
-# results = pd.DataFrame(gs.cv_results_)
-# print('results:\n{}'.format(results))
-# print('{} best score (random search): {:.3f}'.format(model_name, gs.best_score_))
-# print('{} best params (random search): \n{}'.format(model_name, gs.best_params_))
+    # Dump preds
+    lgb_reg_final.dump_preds(df_data=te_data, xdata=xte, target_name=target_name,
+                             outpath=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))                 
 
 
 
-# ========================================================================
-#       Ensemble models
-# ========================================================================
-# pass                         
+    # ========================================================================
+    #       Grid Search CV (TODO: didn't finish)
+    # ========================================================================
+    # # https://scikit-learn.org/stable/tutorial/statistical_inference/model_selection.html
+    # from sklearn.neighbors import KNeighborsRegressor
+    # from sklearn.svm import LinearSVR, SVR, NuSVR
+    # from sklearn.preprocessing import LabelEncoder, StandardScaler, RobustScaler, QuantileTransformer
+    # from sklearn.model_selection import GridSearchCV, cross_val_score
+    # from sklearn.model_selection import GroupKFold
+
+    # xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+    # ydata = utils_tidy.extract_target(data=data, target_name=target_name)
+    # xdata = StandardScaler().fit_transform(xdata)
+
+    # # SVR
+    # model_name = 'svr'
+    # params_search = {'C': [0.1, 1, 10],
+    #                  'epsilon': [0.01, 0.1, 1]}
+    # model = SVR(gamma='scale', kernel='rbf')
+
+    # # KNN
+    # model_name = 'knn_reg'
+    # params_search = {'n_neighbors': [5, 10, 15]}
+    # model = KNeighborsRegressor(n_jobs=n_jobs)
+
+    # # CV splitter
+    # groups = data['CELL'].values
+    # groups = LabelEncoder().fit_transform(groups)
+    # cv_splitter = GroupKFold(n_splits=n_splits)
+    # cv_splitter = cv_splitter.split(data, groups=groups)
+
+    # # Define grid search
+    # gs = GridSearchCV(estimator=model, param_grid=params_search,
+    #                   n_jobs=n_jobs, refit=True, cv=cv_splitter, verbose=True)
+
+    # # Train
+    # t0 = time.time()
+    # gs.fit(xdata, ydata)
+    # runtime_fit = time.time() - t0
+    # print('runtime_fit', runtime_fit)
+
+    # # Get the best model
+    # best_model = gs.best_estimator_
+    # results = pd.DataFrame(gs.cv_results_)
+    # print('results:\n{}'.format(results))
+    # print('{} best score (random search): {:.3f}'.format(model_name, gs.best_score_))
+    # print('{} best params (random search): \n{}'.format(model_name, gs.best_params_))
+
+
+
+    # ========================================================================
+    #       Ensemble models
+    # ========================================================================
+    # pass                         
+
+
+def main(args):
+    parser = argparse.ArgumentParser(description="Cell-drug sensitivity parser.")
+    # https://docs.python.org/3/library/argparse.html#argparse.ArgumentParser.add_argument
+    
+    def str_to_bool(s):
+        """ Convert string to bool (in argparse context).
+        https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
+        """
+        if s.lower() not in ['t', 'f']:
+            raise ValueError("Need 't' or 'f'; got %r" % s)
+        return {'t': True, 'f': False}[s.lower()]
+
+    # Select target to predict
+    parser.add_argument("-t", "--target_name",
+        default="AUC1", choices=['AUC', 'AUC1', 'IC50'],
+        help="Column name of the target variable.") # target_name = 'AUC1'
+    parser.add_argument("-tt", "--target_trasform",
+        default='f', choices=['t', 'f'], type=str_to_bool,
+        help="'t': transform target, 'f': do not transform target.") # target_name = 'AUC1'
+
+    # Select train and test (inference) sources
+    parser.add_argument("-tr", "--train_sources", nargs="+",
+        default=["ccle"], choices=["ccle", "gcsi", "gdsc", "ctrp"],
+        help="Data sources to use for training.")
+    parser.add_argument("-te", "--test_sources",
+        default=["ccle"], choices=["ccle", "gcsi", "gdsc", "ctrp"],
+        help="Data sources to use for testing.")
+
+    # Select tissue types
+    parser.add_argument("--tissue_type",
+        default=argparse.SUPPRESS, choices=[],
+        help="Tissue types to use.")
+
+    # Select feature types
+    parser.add_argument("-cf", "--cell_features", nargs="+",
+        default=['rna'], choices=["rna", "cnv"],
+        help="Cell line feature types.") # ['rna', cnv', 'rna_latent']
+    parser.add_argument("-df", "--drug_features", nargs="+",
+        default=['dsc'], choices=["dsc", "fng"],
+        help="Drug feature types.") # ['dsc', 'fng', 'dsc_latent', 'fng_latent']
+    parser.add_argument("-of", "--other_features", default=[],
+        choices=[],
+        help="Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).") # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
+
+    # Select ML models
+    parser.add_argument("-ml", "--ml_models",
+        default=["lgb_reg"], choices=["lgb_reg"],
+        help="ML models to use for training.")
+
+    # Select CV scheme
+    parser.add_argument("-cvs", "--cv_method",
+        default='simple', choices=["simple", "group"],
+        help="Cross-val split method.")
+    parser.add_argument("-cvf", "--cv_folds",
+        default=5, type=int,
+        help="Number cross-val folds.")
+
+    # Take care of utliers
+    # parser.add_argument("-otlr", "--outlier_remove", default=False)
+
+    # Define verbosity
+    parser.add_argument("-v", "--verbose",
+        default='t', choices=['t', 'f'], type=str_to_bool,
+        help="'t': verbose, 'f': not verbose.")
+
+    # Define n_jobs
+    parser.add_argument("--n_jobs", default=4, type=int)
+
+    # Parse the args
+    args = parser.parse_args(args)
+    run(args)
+    
+
+if __name__ == '__main__':
+    """ __name__ == '__main__' explained:
+    https://www.youtube.com/watch?v=sugvnHA7ElY
+    """
+    """
+    https://stackoverflow.com/questions/14500183/in-python-can-i-call-the-main-of-an-imported-module
+    How to run code with input args from another code?
+    This will be used with multiple train and test sources.
+    For example: in launch_model_transfer.py
+        import train_from_combined.py
+        train_from_combined.main([tr_src, tst_src])
+    """
+    main(sys.argv[1:])

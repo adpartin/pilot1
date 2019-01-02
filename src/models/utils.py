@@ -196,118 +196,6 @@ def print_scores(model, xdata, ydata, logger=None):
         print(f'model_explained_variance_score: {model_explained_variance_score:.2f}')
 
 
-def split_features_and_other_cols(data, fea_prfx_dict):
-    """ This func extract two dfs from `data`: fea_data and other_data.
-    Args:
-        data : df contains multiple cols including features, meta, and target
-    Returns:
-        fea_data : contains only training features
-        other_data : contains other cols (meta, target)
-    """
-    # Extract df that contains only features (no meta or response)
-    other_data = data.copy()
-    df_fea_list = []
-
-    for prfx in fea_prfx_dict.values():
-
-        # get cols with specific feature prfx
-        cols = data.columns[[True if prfx in c else False for c in data.columns.tolist()]]
-
-        # if feature present in data, add it to df_fea_list, and drop from other_data
-        if len(cols) > 0:  
-            df = data[cols].copy()
-            other_data.drop(columns=cols, inplace=True)
-            df_fea_list.append(df)
-
-    fea_data = pd.DataFrame(pd.concat(df_fea_list, axis=1))
-    return fea_data, other_data
-
-
-def extract_subset_features(data, feature_list, fea_prfx_dict):
-    """ Extract subset of features for training.
-    Args:
-        data :
-        feature_list : e.g., (cell_features + drug_features)
-        fea_prfx_dict : 
-    Returns:
-        data : 
-    """
-    fea_data, other_data = split_features_and_other_cols(data, fea_prfx_dict)
-    fea_prfx_list = [fea_prfx_dict[fea] for fea in feature_list if fea in fea_prfx_dict.keys()]
-    fea_data = fea_data[[c for c in fea_data.columns if (c.split('.')[0]+'.') in fea_prfx_list]].reset_index(drop=True).copy()
-
-    # Concat feature set (fea_data) and other cols (other_data)
-    data = pd.concat([other_data, fea_data], axis=1)
-    return data
-
-
-def impute_values(data, fea_prfx_dict, logger=None):
-    """
-    Args:
-        data : df with bunch of cols (meta, target, features)
-        fea_prfx_dict : dict of feature prefixes, e.g.:
-            fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.', 'dsc': 'drug_dsc.', 'fng': 'drug_fng.'}
-        logger : logging object
-    TODO: consider more advanced imputation methods:
-    - https://www.rdocumentation.org/packages/Amelia/versions/1.7.4/topics/amelia
-    - try regressor (impute continuous features) or classifier (impute discrete features)
-    """
-    from sklearn.impute import SimpleImputer, MissingIndicator
-
-    # Extract df that contains only features (no meta or response)
-    fea_data, other_data = split_features_and_other_cols(data=data, fea_prfx_dict=fea_prfx_dict)
-    colnames = fea_data.columns
-
-    # Impute missing values
-    imputer = SimpleImputer(missing_values=np.nan, strategy='mean', verbose=1)
-    fea_data_imputed = imputer.fit_transform(fea_data)
-    fea_data_imputed = pd.DataFrame(fea_data_imputed, columns=colnames)
-
-    if logger is not None:
-        logger.info('\nImpute missing features ...')
-        logger.info('Total features with missing values: {}'.format(sum(fea_data.isna().sum() > 1)))
-        logger.info('Total features with missing values (after impute): {}'.format(sum(fea_data_imputed.isna().sum() > 1)))
-
-    # Concat features (xdata_imputed) and other cols (other_data)
-    data = pd.concat([other_data, fea_data_imputed], axis=1)
-    return data
-
-
-# def extract_features(data, feature_list, fea_prefix):
-#     """ 
-#     Args:
-#         data :
-#         feature_list : e.g., (cell_features + drug_features)
-#         fea_prefix :
-#     Returns:
-#     """
-#     fea_prefix_list = [fea_prefix[fea] for fea in feature_list if fea in fea_prefix.keys()]
-#     data = data[[c for c in data.columns if c.split('.')[0] in fea_prefix_list]].reset_index(drop=True).copy()
-#     return data
-
-
-def split_tr_vl(data, test_size=0.2, strict_split=True, random_state=None, logger=None):
-    """ ... """
-    from sklearn.model_selection import train_test_split, GroupShuffleSplit
-    if strict_split is not None:
-        pass
-    else:
-        tr_data, vl_data = train_test_split(data, test_size=test_size, random_state=random_state)
-        tr_data.reset_index(drop=True, inplace=True)
-        vl_data.reset_index(drop=True, inplace=True)
-
-    if logger is not None:
-        logger.info('\nSplit data into train and val (test) ...')
-        logger.info(f'tr_data.shape {tr_data.shape}')
-        logger.info(f'vl_data.shape {vl_data.shape}')
-    return tr_data, vl_data
-
-
-def extract_target(data, target_name):
-    y = data[target_name].copy()
-    return y
-
-
 def dump_preds(model, df_data, xdata, target_name, path, model_name=None):
     """
     Args:
@@ -336,16 +224,6 @@ def dump_preds(model, df_data, xdata, target_name, path, model_name=None):
 
     df_preds = pd.concat([df1, df2], axis=1).reset_index(drop=True)
     df_preds.to_csv(path)
-
-
-class SuperGBM():  # ModelTunedCVSearch
-    """ This is a super class for training and fine-tuning *Super* GBM models, i.e.,
-    xgboost and lightgbm.
-    This models share similar API so various methods are re-used.
-    """
-    # https://www.kaggle.com/spektrum/randomsearchcv-to-hyper-tune-1st-level
-    # TODO: complete this class
-    pass
 
 
 # ---------------------------------------------------------------------------------

@@ -20,6 +20,15 @@ import lightgbm as lgb
 #   common methods: calc_scores(), dump_preds(), 
 
 
+# TODO: create a super class GBM models (xgboost and lightgbm)
+# class SuperGBM():  # ModelTunedCVSearch
+#     """ This is a super class for training and fine-tuning *Super* GBM models, i.e.,
+#     xgboost and lightgbm.
+#     This models share similar API so various methods are re-used.
+#     """
+#     # https://www.kaggle.com/spektrum/randomsearchcv-to-hyper-tune-1st-level
+
+
 class LGBM_Regressor():
     def __init__(self, target_name=None, eval_metric=['l1', 'l2'], n_jobs=1, random_state=None, logger=None):
         # https://lightgbm.readthedocs.io/en/latest/Python-API.html
@@ -97,7 +106,17 @@ class LGBM_Regressor():
         scores['median_abs_error'] = median_absolute_error(ydata, preds)
         # scores['explained_variance_score'] = explained_variance_score(ydata, preds)
 
+        self.scores = scores
         if to_print:
+            self.print_scores()
+
+        return self.scores
+
+
+    def print_scores(self):
+        if hasattr(self, 'scores'):
+            scores = self.scores
+
             if self.logger is not None:
                 self.logger.info('r2_score: {:.2f}'.format(scores['r2_score']))
                 self.logger.info('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
@@ -108,9 +127,6 @@ class LGBM_Regressor():
                 print('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
                 print('median_absolute_error: {:.2f}'.format(scores['median_abs_error']))
                 # print('explained_variance_score: {:.2f}'.format(scores['explained_variance_score']))
-
-        self.scores = scores
-        return self.scores
 
 
     def dump_preds(self, df_data, xdata, target_name, outpath=None):
