@@ -121,11 +121,11 @@ SEED = 0
 
 # Feature prefix (some already present in the tidy dataframe)
 fea_prfx_dict = {'rna': 'cell_rna.',
-                'cnv': 'cell_cnv.',
-                'dsc': 'drug_dsc.',
-                'fng': 'drug_fng.',
-                'clb': 'cell_lbl.',
-                'dlb': 'drug_lbl.'}
+                 'cnv': 'cell_cnv.',
+                 'dsc': 'drug_dsc.',
+                 'fng': 'drug_fng.',
+                 'clb': 'cell_lbl.',
+                 'dlb': 'drug_lbl.'}
 
 
 def run(args):
@@ -144,44 +144,6 @@ def run(args):
 
     # Feature list
     feature_list = cell_features + drug_features + other_features
-    
-    
-    # # ========================================================================
-    # #       Args TODO: add to argparse
-    # # ========================================================================
-    # # Train and infer data
-    # train_sources = ['ccle']  # ['ccle', 'gcsi', 'gdsc', 'ctrp']
-    # infer_sources = ['ccle']
-
-    # # Traget (response)
-    # target_name = 'AUC1'
-
-    # # Features to use
-    # # TODO: instead of using these names, just use the values of fea_prefix dict
-    # cell_features = ['rna'] # ['rna', cnv', 'rna_latent']
-    # drug_features = ['dsc'] # [] # ['dsc', 'fng', 'dsc_latent', 'fng_latent']
-    # other_features = [] # ['drug_labels'] # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
-    # feature_list = cell_features + drug_features + other_features
-
-    # # Feature prefix (some already present in the tidy dataframe)
-    # fea_prfx_dict = {'rna': 'cell_rna.',
-    #                 'cnv': 'cell_cnv.',
-    #                 'dsc': 'drug_dsc.',
-    #                 'fng': 'drug_fng.',
-    #                 'clb': 'cell_lbl.',
-    #                 'dlb': 'drug_lbl.'}
-
-    # # Models
-    # ml_models = ['lgb_reg']
-
-    # target_trasform = False
-    # outlier_remove = False  # IsolationForest
-    # verbose = True
-    # n_jobs = 4
-
-    # # Train
-    # n_splits = 5
-    # cv_split_method = 'simple' # 'simple', 'group', (TODO: implement 'stratified')
 
 
 
@@ -518,6 +480,7 @@ def run(args):
 
 
 def main(args):
+# def main(parser):    
     parser = argparse.ArgumentParser(description="Cell-drug sensitivity parser.")
     # https://docs.python.org/3/library/argparse.html#argparse.ArgumentParser.add_argument
     
@@ -541,7 +504,7 @@ def main(args):
     parser.add_argument("-tr", "--train_sources", nargs="+",
         default=["ccle"], choices=["ccle", "gcsi", "gdsc", "ctrp"],
         help="Data sources to use for training.")
-    parser.add_argument("-te", "--test_sources",
+    parser.add_argument("-te", "--test_sources", nargs="+",
         default=["ccle"], choices=["ccle", "gcsi", "gdsc", "ctrp"],
         help="Data sources to use for testing.")
 
@@ -575,7 +538,7 @@ def main(args):
         help="Number cross-val folds.")
 
     # Take care of utliers
-    # parser.add_argument("-otlr", "--outlier_remove", default=False)
+    # parser.add_argument("--outlier", default=False)
 
     # Define verbosity
     parser.add_argument("-v", "--verbose",
@@ -591,6 +554,7 @@ def main(args):
     
 
 if __name__ == '__main__':
+    # python -m pdb src/models/train_from_combined.py -te ccle gcsi -tr gcsi
     """ __name__ == '__main__' explained:
     https://www.youtube.com/watch?v=sugvnHA7ElY
     """
@@ -602,4 +566,11 @@ if __name__ == '__main__':
         import train_from_combined.py
         train_from_combined.main([tr_src, tst_src])
     """
+    # python -m pdb src/models/train_from_combined.py -te ccle gcsi -tr gcsi
     main(sys.argv[1:])
+    
+    # parser = argparse.ArgumentParser(description="Cell-drug sensitivity parser.")
+    # main(parser)
+
+    # args = vars(sys.argv[1:])
+    # main(args)
