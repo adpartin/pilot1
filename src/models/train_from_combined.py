@@ -103,7 +103,7 @@ from sklearn.model_selection import learning_curve
 # Utils
 # file_path = os.getcwd()
 # file_path = os.path.join(file_path, 'src/models')
-# os.chdir(file_path)b
+# os.chdir(file_path)
 
 file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
 ##utils_path = os.path.abspath(os.path.join(file_path, 'utils'))
@@ -129,6 +129,7 @@ fea_prfx_dict = {'rna': 'cell_rna.',
 
 
 def run(args):
+    print(args)
     train_sources = args.train_sources
     test_sources = args.test_sources
     target_name = args.target_name
@@ -136,7 +137,7 @@ def run(args):
     cell_features = args.cell_features
     drug_features = args.drug_features
     other_features = args.other_features
-    ml_models = args.ml_models
+    model_name = args.ml_models
     cv_method = args.cv_method
     cv_folds = args.cv_folds
     verbose = args.verbose
@@ -159,7 +160,7 @@ def run(args):
     logger = utils.setup_logger(logfilename=logfilename)
 
     logger.info(f'File path: {file_path}')
-    logger.info(f'Num of system CPUs: {psutil.cpu_count()}')
+    logger.info(f'System CPUs: {psutil.cpu_count()}')
     logger.info(f'n_jobs: {n_jobs}')
 
 
@@ -175,7 +176,7 @@ def run(args):
     # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
 
 
-    # Replace characters that are illegal for xgboost feature names
+    # Replace characters that are illegal for xgboost/lightgbm feature names
     # xdata.columns = list(map(lambda s: s.replace('[','_').replace(']','_'), xdata.columns.tolist())) # required by xgboost
     import re
     regex = re.compile(r'\[|\]|<', re.IGNORECASE)
@@ -187,15 +188,15 @@ def run(args):
     te_data = data[data['SOURCE'].isin(test_sources)].reset_index(drop=True)
     logger.info(f'te_data.shape {te_data.shape}')
     logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(te_data)/1e9))
-    # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+    logger.info(te_data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
 
 
-    # Extract training sources
+    # Extract train sources
     logger.info('\nExtract train sources ... {}'.format(train_sources))
     data = data[data['SOURCE'].isin(train_sources)].reset_index(drop=True)
     logger.info(f'data.shape {data.shape}')
     logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
-    # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+    logger.info(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
 
 
     # Assign type to categoricals
@@ -216,10 +217,11 @@ def run(args):
 
     # Plots
     utils.boxplot_rsp_per_drug(df=data, target_name=target_name,
-                               path=os.path.join(run_outdir, f'{target_name}_per_drug_boxplot.png'))
+        path=os.path.join(run_outdir, f'{target_name}_per_drug_boxplot.png'))
     utils.plot_hist(x=data[target_name], var_name=target_name,
-                    path=os.path.join(run_outdir, target_name+'_hist.png'))
-    utils.plot_qq(x=data[target_name], var_name=target_name, path=os.path.join(run_outdir, target_name+'_qqplot.png'))
+        path=os.path.join(run_outdir, target_name+'_hist.png'))
+    utils.plot_qq(x=data[target_name], var_name=target_name,
+        path=os.path.join(run_outdir, target_name+'_qqplot.png'))
     utils.plot_hist_drugs(x=data['DRUG'], path=os.path.join(run_outdir, 'drugs_hist.png'))
 
 
@@ -281,117 +283,199 @@ def run(args):
 
 
     # ========================================================================
-    #       Run CV training
+    #       Initialize ML model
     # ========================================================================
+    from ml_models import LGBM_REGRESSOR, RF_REGRESSOR
+    def init_model(model_name, logger):
+        if 'lgb_reg' in model_name:
+            logger.info('ML Model: lgb regressor')
+            model = LGBM_REGRESSOR(random_state=SEED, logger=logger)
+            fit_params = {'verbose': False}
+        elif 'rf_reg' in model_name:
+            logger.info('ML Model: rf regressor')
+            model = RF_REGRESSOR(random_state=SEED, logger=logger)
+            fit_params = None
+        return model, fit_params
+
+
+    # ========================================================================
+    #       Run CV validation (my implementation)
+    # ========================================================================
+    # logger.info('\n=====================================================')
+    # logger.info(f'Run CV validation (my implementation) ...')
+    # logger.info('=====================================================')
     from split_tr_vl import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
-    from ml_models import LGBM_Regressor
+    # from ml_models import LGBM_REGRESSOR, RF_REGRESSOR
 
 
-    def print_feature_shapes(df, name, logger):
-        """ Print features shapes. """
-        logger.info(f'\n{name}')
-        for prefx in np.unique(list(map(lambda x: x.split('.')[0], df.columns.tolist()))):
-            cols = df.columns[[True if prefx in c else False for c in df.columns.tolist()]]
-            logger.info('{}: {}'.format(prefx, df[cols].shape))
+    # # Split tr/vl data
+    # if cv_method=='simple':
+    #     splitter = SimpleSplit(n_splits=cv_folds, random_state=SEED)
+    #     splitter.split(X=data)
+    # elif cv_method=='group':
+    #     splitter = GroupSplit(n_splits=cv_folds, random_state=SEED)
+    #     splitter.split(X=data, groups=data['CELL'])
+    # elif cv_method=='stratify':
+    #     pass
+    # else:
+    #     raise ValueError('This cv_method ({}) is not supported'.format(cv_method))
 
 
-    def cv_scores_to_df(scores, decimals=3):
-        """ Convert a list of cv scores into df and compute mean and std. """
-        scores = pd.DataFrame(scores).T
-        scores['mean'] = scores.mean(axis=1)
-        scores['std'] = scores.std(axis=1)
-        scores = scores.round(decimals=decimals)
-        return scores
+    # # Run CV training
+    # logger.info(f'\nCV splitting method: {cv_method}')
+    # tr_scores = []
+    # vl_scores = []
+    # for i in range(splitter.n_splits):
+    #     logger.info(f'\nFold {i+1}/{splitter.n_splits}')
+    #     tr_idx = splitter.tr_cv_idx[i]
+    #     vl_idx = splitter.vl_cv_idx[i]
+    #     tr_data = data.iloc[tr_idx, :]
+    #     vl_data = data.iloc[vl_idx, :]
 
+    #     # print(tr_idx[:5])
+    #     # print(vl_idx[:5])
+
+    #     # tr_cells = set(tr_data['CELL'].values)
+    #     # vl_cells = set(vl_data['CELL'].values)
+    #     # print('total cell intersections btw tr and vl: ', len(tr_cells.intersection(vl_cells)))
+    #     # print('a few intersections : ', list(tr_cells.intersection(vl_cells))[:3])
+
+    #     xtr, _ = utils_tidy.split_features_and_other_cols(tr_data, fea_prfx_dict=fea_prfx_dict)
+    #     xvl, _ = utils_tidy.split_features_and_other_cols(vl_data, fea_prfx_dict=fea_prfx_dict)
+
+    #     # utils_tidy.print_feature_shapes(df=xtr, logger=logger)
+    #     # utils_tidy.print_feature_shapes(df=xvl, logger=logger)
+
+    #     ytr = utils_tidy.extract_target(data=tr_data, target_name=target_name)
+    #     yvl = utils_tidy.extract_target(data=vl_data, target_name=target_name)
+
+    #     title = f'{target_name}; split {str(i)}'
+    #     plot_ytr_yvl_dist(ytr, yvl, title=title, outpath=os.path.join(run_outdir, title+'.png'))
+
+    #     # Train model
+    #     lgb_reg = LGBM_Regressor(target_name=target_name, random_state=SEED, logger=logger)
+    #     lgb_reg.fit(xtr, ytr, eval_set=[(xtr, ytr), (xvl, yvl)])
+
+    #     # Calc and save scores
+    #     tr_scores.append(lgb_reg.calc_scores(xdata=xtr, ydata=ytr, to_print=False))
+    #     vl_scores.append(lgb_reg.calc_scores(xdata=xvl, ydata=yvl, to_print=False))
+
+
+    # # Summarize cv scores
+    # cv_tr_scores = utils.cv_scores_to_df(tr_scores)
+    # cv_vl_scores = utils.cv_scores_to_df(vl_scores)
+    # print('\ntr scores\n{}'.format(cv_tr_scores))
+    # print('\nvl scores\n{}'.format(cv_vl_scores))
+    # cv_tr_scores.to_csv(os.path.join(run_outdir, 'cv_tr_scores.csv'))
+    # cv_vl_scores.to_csv(os.path.join(run_outdir, 'cv_vl_scores.csv'))
+
+
+
+    # ========================================================================
+    #       Automatic CV validation
+    # ========================================================================
+    logger.info('\n=====================================================')
+    logger.info(f'Automatic CV validation ...')
+    logger.info('=====================================================')
+    # https://scikit-learn.org/stable/modules/cross_validation.html
+    from sklearn.model_selection import cross_val_score, cross_validate, learning_curve
+    from sklearn.model_selection import ShuffleSplit, GroupShuffleSplit, KFold, GroupKFold
+    from sklearn.ensemble import RandomForestRegressor
+
+    # Prepare data
+    xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+    ydata = utils_tidy.extract_target(data=data, target_name=target_name)
+    utils_tidy.print_feature_shapes(df=xdata, logger=logger)
 
     # Split tr/vl data
     if cv_method=='simple':
-        splitter = SimpleSplit(n_splits=cv_folds, random_state=SEED)
-        splitter.split(X=data)
+        cv = KFold(n_splits=cv_folds, random_state=SEED)
     elif cv_method=='group':
-        splitter = GroupSplit(n_splits=cv_folds, random_state=SEED)
-        splitter.split(X=data, groups=data['CELL'])
+        cv = GroupKFold(n_splits=cv_folds, random_state=SEED)
     elif cv_method=='stratify':
         pass
     else:
         raise ValueError('This cv_method ({}) is not supported'.format(cv_method))
 
 
-    # Run CV training
-    logger.info(f'\nCV splitting method: {cv_method}')
-    tr_scores = []
-    vl_scores = []
-    for i in range(splitter.n_splits):
-        logger.info(f'\nFold {i+1}/{splitter.n_splits}')
-        tr_idx = splitter.tr_cv_idx[i]
-        vl_idx = splitter.vl_cv_idx[i]
-        tr_data = data.iloc[tr_idx, :]
-        vl_data = data.iloc[vl_idx, :]
-
-        # print(tr_idx[:5])
-        # print(vl_idx[:5])
-
-        # tr_cells = set(tr_data['CELL'].values)
-        # vl_cells = set(vl_data['CELL'].values)
-        # print('total cell intersections btw tr and vl: ', len(tr_cells.intersection(vl_cells)))
-        # print('a few intersections : ', list(tr_cells.intersection(vl_cells))[:3])
-
-        xtr, _ = utils_tidy.split_features_and_other_cols(tr_data, fea_prfx_dict=fea_prfx_dict)
-        xvl, _ = utils_tidy.split_features_and_other_cols(vl_data, fea_prfx_dict=fea_prfx_dict)
-
-        # print_feature_shapes(df=xtr, name='xtr', logger=logger)
-        # print_feature_shapes(df=xvl, name='xvl', logger=logger)
-
-        ytr = utils_tidy.extract_target(data=tr_data, target_name=target_name)
-        yvl = utils_tidy.extract_target(data=vl_data, target_name=target_name)
-
-        title = f'{target_name}; split {str(i)}'
-        plot_ytr_yvl_dist(ytr, yvl, title=title, outpath=os.path.join(run_outdir, title+'.png'))
-
-        # Train model
-        lgb_reg = LGBM_Regressor(target_name=target_name, random_state=SEED, logger=logger)
-        lgb_reg.fit(xtr, ytr, eval_set=[(xtr, ytr), (xvl, yvl)])
-
-        # Calc and save scores
-        tr_scores.append(lgb_reg.calc_scores(xdata=xtr, ydata=ytr, to_print=False))
-        vl_scores.append(lgb_reg.calc_scores(xdata=xvl, ydata=yvl, to_print=False))
+    # Run CV estimator
+    # https://scikit-learn.org/stable/modules/model_evaluation.html#scoring-parameter
+    # logger.info("\nStart cross_val_score ...")
+    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=logger)
+    # t0 = time.time()
+    # scores = cross_val_score(estimator=lgb_reg.model, X=xdata, y=ydata,
+    #                          scoring='r2', cv=cv, n_jobs=n_jobs,
+    #                          fit_params={'verbose': False, 'early_stopping_rounds': 10})    
+    # logger.info('Run-time: {:.3f} mins'.format((time.time()-t0)/60))
+    # logger.info(scores)
 
 
-    # Summarize cv scores
-    cv_tr_scores = cv_scores_to_df(tr_scores)
-    cv_vl_scores = cv_scores_to_df(vl_scores)
-    print('\ntr scores\n{}'.format(cv_tr_scores))
-    print('\nvl scores\n{}'.format(cv_vl_scores))
-    cv_tr_scores.to_csv(os.path.join(run_outdir, 'cv_tr_scores.csv'))
-    cv_vl_scores.to_csv(os.path.join(run_outdir, 'cv_vl_scores.csv'))
+    logger.info("\nStart cross_validate ...")
+    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=logger)
+    model, fit_params = init_model(model_name, logger)
+    t0 = time.time()
+    score_metric = ['r2', 'neg_mean_absolute_error']
+    scores = cross_validate(
+        estimator=model.model, X=xdata, y=ydata,
+        scoring=score_metric, cv=cv, n_jobs=n_jobs,
+        fit_params=fit_params)
+    logger.info('Run-time: {:.3f} mins'.format((time.time()-t0)/60))
+    for k, v in scores.items():
+        logger.info(f'{k}: {v}')
 
+
+    logger.info("\nStart learning_curve ...")
+    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=logger)
+    model, _ = init_model(model_name, logger)
+    t0 = time.time()
+    score_metric = 'r2'
+    rslt = learning_curve(estimator=model.model, X=xdata, y=ydata,
+                          train_sizes=np.linspace(0.1, 1.0, 5),
+                          scoring=score_metric, cv=cv, n_jobs=n_jobs,
+                          exploit_incremental_learning=False, random_state=SEED)
+    logger.info('Run-time: {:.3f} mins'.format((time.time()-t0)/60))
+    
+
+    from size_vs_score import plot_learning_curve
+    plot_learning_curve(rslt=rslt, score_metric=score_metric,
+                        path=os.path.join(run_outdir, 'scores_vs_train_size.png'))
+    
 
 
     # ========================================================================
     #       Train final model (entire dataset)
     # ========================================================================
     logger.info('\n=====================================================')
-    logger.info(f'Train final model (use entire dataset) ...')
+    logger.info(f'Train final model (use entire dataset) ... {train_sources}')
     logger.info('=====================================================')
     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
-    print_feature_shapes(df=xdata, name='xdata', logger=logger)
+    utils_tidy.print_feature_shapes(df=xdata, logger=logger)
 
     # Train model
-    lgb_reg_final = LGBM_Regressor(target_name=target_name, random_state=SEED, logger=logger)
-    lgb_reg_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])
+    # lgb_reg_final = LGBM_REGRESSOR(random_state=SEED, logger=logger)
+    model_final, _ = init_model(model_name, logger)
+    # lgb_reg_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])
+    if 'lgb_reg' in model_name:
+        model_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])
+    else:
+        model_final.fit(xdata, ydata)
 
     # Compute scores
-    scores = lgb_reg_final.calc_scores(xdata=xdata, ydata=ydata, to_print=True)
-    # scores = cv_scores_to_df([scores])
+    # scores = lgb_reg_final.calc_scores(xdata=xdata, ydata=ydata, to_print=True)
+    scores = model_final.calc_scores(xdata=xdata, ydata=ydata, to_print=True)
+    # scores = utils.cv_scores_to_df([scores])
     # lgb_reg_final.plot_fi(outdir=run_outdir)
 
     # Dump preds
-    lgb_reg_final.dump_preds(df_data=data, xdata=xdata, target_name=target_name,
-                            outpath=os.path.join(run_outdir, 'preds.csv'))
+    # lgb_reg_final.dump_preds(df_data=data, xdata=xdata, target_name=target_name,
+    #                          outpath=os.path.join(run_outdir, 'preds.csv'))
+    model_final.dump_preds(df_data=data, xdata=xdata, target_name=target_name,
+                           outpath=os.path.join(run_outdir, 'preds.csv'))
 
     # Save model
-    lgb_reg_final.save_model(outdir=run_outdir)
+    # lgb_reg_final.save_model(outdir=run_outdir)
+    model_final.save_model(outdir=run_outdir)
 
 
 
@@ -402,25 +486,49 @@ def run(args):
     logger.info(f'Inference ... {test_sources}')
     logger.info('=====================================================')
 
-    preds_filename_prefix = 'test'
-    model_name = 'lgb_reg_final'
+    csv_scores = []  # cross-study-validation scores
+    for i, src in enumerate(test_sources):
+        logger.info(f'\nTest source {i+1}:  ___ {src} ___')
 
-    # Prepare test data for predictions
-    te_data = utils_tidy.impute_values(data=te_data, fea_prfx_dict=fea_prfx_dict, logger=logger)
-    xte, _ = utils_tidy.split_features_and_other_cols(te_data, fea_prfx_dict=fea_prfx_dict)
-    yte = utils_tidy.extract_target(data=te_data, target_name=target_name)
+        te_src_data = te_data[te_data['SOURCE'].isin([src])].reset_index(drop=True)
+        logger.info(f'src_data.shape {te_src_data.shape}')
 
-    # Print feature shapes
-    print_feature_shapes(df=xte, name='xte', logger=logger)
+        preds_filename_prefix = 'test_' + src
+        model_name = 'lgb_reg_final'
 
-    # Compute scores
-    scores = lgb_reg_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
-    scores = cv_scores_to_df([scores])
+        # Prepare test data for predictions
+        te_src_data = utils_tidy.impute_values(data=te_src_data, fea_prfx_dict=fea_prfx_dict, logger=logger)
+        xte, _ = utils_tidy.split_features_and_other_cols(te_src_data, fea_prfx_dict=fea_prfx_dict)
+        yte = utils_tidy.extract_target(data=te_src_data, target_name=target_name)
 
-    # Dump preds
-    lgb_reg_final.dump_preds(df_data=te_data, xdata=xte, target_name=target_name,
-                             outpath=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))                 
+        # Plot dist of response
+        utils.plot_hist(x=te_src_data[target_name], var_name=target_name,
+                        path=os.path.join(run_outdir, src+'_'+target_name+'_hist.png'))
 
+        # Print feature shapes
+        logger.info(f'\nxte_'+src)
+        utils_tidy.print_feature_shapes(df=xte, logger=logger)
+
+        # Compute scores
+        # scores = lgb_reg_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
+        scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
+        scores = utils.cv_scores_to_df([scores])
+
+        # Dump preds
+        # lgb_reg_final.dump_preds(df_data=te_src_data, xdata=xte, target_name=target_name,
+        #                          outpath=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))
+        model_final.dump_preds(df_data=te_src_data, xdata=xte, target_name=target_name,
+                               outpath=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))                 
+
+        # Calc and save scores
+        # csv_scores.append(lgb_reg_final.calc_scores(xdata=xte, ydata=yte, to_print=False))
+        csv_scores.append(model_final.calc_scores(xdata=xte, ydata=yte, to_print=False))
+
+    # Summarize cv scores
+    df_csv_scores = pd.DataFrame(csv_scores).T
+    df_csv_scores.columns = test_sources
+    print('\ncsv_scores\n{}'.format(df_csv_scores))
+    df_csv_scores.to_csv(os.path.join(run_outdir, 'df_csv_scores.csv'))
 
 
     # ========================================================================
@@ -526,12 +634,12 @@ def main(args):
 
     # Select ML models
     parser.add_argument("-ml", "--ml_models",
-        default=["lgb_reg"], choices=["lgb_reg"],
+        default=["lgb_reg"], choices=["lgb_reg", "rf_reg"],
         help="ML models to use for training.")
 
     # Select CV scheme
     parser.add_argument("-cvs", "--cv_method",
-        default='simple', choices=["simple", "group"],
+        default="simple", choices=["simple", "group"],
         help="Cross-val split method.")
     parser.add_argument("-cvf", "--cv_folds",
         default=5, type=int,
@@ -542,7 +650,7 @@ def main(args):
 
     # Define verbosity
     parser.add_argument("-v", "--verbose",
-        default='t', choices=['t', 'f'], type=str_to_bool,
+        default="t", choices=["t", "f"], type=str_to_bool,
         help="'t': verbose, 'f': not verbose.")
 
     # Define n_jobs

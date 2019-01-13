@@ -17,6 +17,7 @@ DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
 
 def setup_logger(logfilename='logfile.log'):
     """ Create logger. Output to file and console. """
+    # TODO: create class as shown here --> https://airbrake.io/blog/python-exception-handling/attributeerror
     # Create file handler
     # "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     # "[%(asctime)s %(process)d] %(message)s"
@@ -48,9 +49,9 @@ def setup_logger(logfilename='logfile.log'):
     return logger
 
 
-# =================================================
-# Plotting funcs
-# =================================================
+# ==============================================================================
+# Plot funcs
+# ==============================================================================
 def boxplot_rsp_per_drug(df, target_name, path='boxplot_rsp_per_drug.png'):
     """ Boxplot of response per drug. """
     # https://seaborn.pydata.org/generated/seaborn.catplot.html
@@ -175,9 +176,19 @@ def plot_rf_fi(rf_model, figsize=(8, 5), plot_direction='h', columns=None, max_c
     # plt.tight_layout()
 
     return indices, fig
-# =================================================
+# ==============================================================================
 
 
+def cv_scores_to_df(scores, decimals=3, calc_stats=True):
+    """ Convert a dict of cv scores into df and compute mean and std. """
+    scores = pd.DataFrame(scores).T
+    if calc_stats:
+        scores['mean'] = scores.mean(axis=1)
+        scores['std'] = scores.std(axis=1)
+    scores = scores.round(decimals=decimals)
+    return scores
+
+    
 def print_scores(model, xdata, ydata, logger=None):
     preds = model.predict(xdata)
     model_r2_score = r2_score(ydata, preds)

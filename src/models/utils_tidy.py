@@ -19,7 +19,7 @@ DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
 
 
 def split_features_and_other_cols(data, fea_prfx_dict):
-    """ This func extract two dfs from `data`: fea_data and other_data.
+    """ Extract two dfs from `data`: fea_data and other_data.
     Args:
         data : tidy dataset (df contains multiple cols including features, meta, and target)
     Returns:
@@ -46,14 +46,14 @@ def split_features_and_other_cols(data, fea_prfx_dict):
 
 
 def extract_subset_features(data, feature_list, fea_prfx_dict):
-    """ Extract subset of features for training.
+    """ Extract a subset of features for training.
     Args:
         data : tidy dataset (df contains multiple cols including features, meta, and target)
         feature_list : e.g., (cell_features + drug_features)
         fea_prfx_dict : dict of feature prefixes, e.g.:
             fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.', 'dsc': 'drug_dsc.', 'fng': 'drug_fng.'}
     Returns:
-        data : 
+        data : updated data
     """
     fea_data, other_data = split_features_and_other_cols(data, fea_prfx_dict)
     fea_prfx_list = [fea_prfx_dict[fea] for fea in feature_list if fea in fea_prfx_dict.keys()]
@@ -103,5 +103,17 @@ def extract_target(data, target_name):
     """
     y = data[target_name].copy()
     return y
+
+
+def print_feature_shapes(df, logger):
+    """ Print features shapes.
+    Each feature name starts with a prefix indicating the feature type (`rna.`, `dsc.`, etc).
+    Args:
+        df : dataframe with feature columns
+    """
+    # logger.info(f'\n{name}')
+    for prefx in np.unique(list(map(lambda x: x.split('.')[0], df.columns.tolist()))):
+        cols = df.columns[[True if prefx in c else False for c in df.columns.tolist()]]
+        logger.info('{}: {}'.format(prefx, df[cols].shape))
 
 

@@ -63,6 +63,7 @@ class GroupSplit():
 
 class SimpleSplit():
     """ Split data using KFold or ShuffleSplit.
+    This class supports both single split (i.e. single tr/vl split) or multiple splits via kfold splits.
 
     Example:
         splitter = SimpleSplit(n_splits=5, random_state=SEED)
@@ -99,7 +100,6 @@ class SimpleSplit():
             print(f'\nSplit {i}')
     
 
-
 # class StratifiedSplit():
 #     def __init__(kfolds=1, test_size=0.2, random_state=None):
 #         self.random_state = random_state
@@ -113,8 +113,7 @@ def plot_ytr_yvl_dist(ytr, yvl, title=None, outpath=None):
     fig, ax = plt.subplots()
     plt.hist(ytr, bins=100, label='ytr', color='b', alpha=0.5)
     plt.hist(yvl, bins=100, label='yvl', color='r', alpha=0.5)
-    if title is None:
-        title = ''
+    if title is None: title = ''
     plt.title(title)
     plt.tight_layout()
     plt.grid(True)

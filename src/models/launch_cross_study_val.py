@@ -1,6 +1,6 @@
 """ 
 This script generates the cross-study validation table.
-It launches a script (e.g. train_from_combined.py) that train an ML model using a single source
+It launches a script (e.g. train_from_combined.py) that train ML model(s) using a single source
 and runs predictions (inference) on a specified set of other sources.
 """
 # python -m pdb src/models/launch_cross_study_val.py
@@ -9,21 +9,23 @@ import argparse
 import train_from_combined
 
 src_sets = [
-    {'tr_src': 'ctrp',
+    {'tr_src': ['ctrp'],
      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
 
     {'tr_src': ['gdsc'],
      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
 
     {'tr_src': ['ccle'],
-     'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
+     'te_src': ['ccle', 'gcsi', 'gdsc']}, # ['ctrp', 'gdsc', 'ccle', 'gcsi']
 
     {'tr_src': ['gcsi'],
      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
 ]
 
 # Single run
-train_from_combined.main(['-tr', src_sets[0]['tr_src'], '-te', *src_sets[0]['te_src']])
+idx = 2
+train_from_combined.main(['-tr', *src_sets[idx]['tr_src'],
+                          '-te', *src_sets[idx]['te_src']])
 
 # Multiple runs
 # for i in range(len(src_sets)):

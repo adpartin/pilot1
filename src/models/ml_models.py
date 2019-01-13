@@ -13,11 +13,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+from sklearn.ensemble import RandomForestRegressor
 import lightgbm as lgb
-
-# TODO: create a super class ml model
-# class BASE_ML_MODEL():
-#   common methods: calc_scores(), dump_preds(), 
 
 
 # TODO: create a super class GBM models (xgboost and lightgbm)
@@ -29,19 +26,142 @@ import lightgbm as lgb
 #     # https://www.kaggle.com/spektrum/randomsearchcv-to-hyper-tune-1st-level
 
 
-class LGBM_Regressor():
-    def __init__(self, target_name=None, eval_metric=['l1', 'l2'], n_jobs=1, random_state=None, logger=None):
+class BaseMLModel():
+
+    def calc_scores(self, xdata, ydata, to_print=False):
+        """ Create dict of scores. """
+        # TODO: replace `if` with `try`
+        if hasattr(self, 'model'):
+            preds = self.model.predict(xdata)
+            scores = {}
+            scores['r2_score'] = r2_score(ydata, preds)
+            scores['mean_abs_error'] = mean_absolute_error(ydata, preds)
+            scores['median_abs_error'] = median_absolute_error(ydata, preds)
+            # scores['explained_variance_score'] = explained_variance_score(ydata, preds)
+
+            self.scores = scores
+            if to_print:
+                self.print_scores()
+
+            return self.scores
+
+
+    def print_scores(self):
+        """ Print performance scores. """
+        # TODO: replace `if` with `try`
+        if hasattr(self, 'scores'):
+            scores = self.scores
+
+            if self.logger is not None:
+                self.logger.info('r2_score: {:.2f}'.format(scores['r2_score']))
+                self.logger.info('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
+                self.logger.info('median_absolute_error: {:.2f}'.format(scores['median_abs_error']))
+                # self.logger.info('explained_variance_score: {:.2f}'.format(scores['explained_variance_score']))
+            else:
+                print('r2_score: {:.2f}'.format(scores['r2_score']))
+                print('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
+                print('median_absolute_error: {:.2f}'.format(scores['median_abs_error']))
+                # print('explained_variance_score: {:.2f}'.format(scores['explained_variance_score']))
+
+
+    def dump_preds(self, df_data, xdata, target_name, outpath=None):
+        """
+        Args:
+            df_data : df that contains the cell and drug names, and target value
+            xdata : features to make predictions on
+            target_name : name of the target as it appears in the df (e.g. 'AUC')
+            outpath : full path to store the predictions
+        """
+        # TODO: replace `if` with `try`
+        if hasattr(self, 'model'):
+            combined_cols = ['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]
+            ccle_org_cols = ['CELL', 'DRUG', 'tissuetype', target_name]
+
+            ##df1 = df_data[['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]].copy()
+            if set(combined_cols).issubset(set(df_data.columns.tolist())):
+                df1 = df_data[combined_cols].copy()
+            elif set(ccle_org_cols).issubset(set(df_data.columns.tolist())):
+                df1 = df_data[ccle_org_cols].copy()
+            else:
+                df1 = df_data['CELL', 'DRUG'].copy()
+
+            preds = self.model.predict(xdata)
+            abs_error = abs(df_data[target_name] - preds)
+            squared_error = (df_data[target_name] - preds)**2
+            df2 = pd.DataFrame({target_name+'_pred': self.model.predict(xdata),
+                                target_name+'_error': abs_error,
+                                target_name+'_sq_error': squared_error})
+
+            df_preds = pd.concat([df1, df2], axis=1).reset_index(drop=True)
+
+            if outpath is not None:
+                df_preds.to_csv(outpath)
+            else:
+                df_preds.to_csv('preds.csv')
+
+
+
+class RF_REGRESSOR(BaseMLModel):
+    model_name = 'rf_reg'
+
+    def __init__(self, n_estimators=100, criterion='mse',
+                 max_depth=None, min_samples_split=2,
+                 bootstrap=True, oob_score=True, verbose=0, 
+                 n_jobs=1, random_state=None,
+                 logger=None):
+        self.n_estimators = n_estimators
+        self.criterion = criterion
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.n_jobs = n_jobs
+        self.random_state = random_state
+        self.logger = logger                 
+
+        self.model = RandomForestRegressor(
+            n_estimators=self.n_estimators,
+            criterion=self.criterion,
+            max_depth=self.max_depth,
+            min_samples_split=self.min_samples_split,
+            max_features='sqrt', bootstrap=bootstrap, oob_score=oob_score,
+            verbose=verbose, random_state=self.random_state, n_jobs=self.n_jobs)
+
+
+    def fit(self, X, y):
+        self.X = X
+        self.y = y
+        
+        t0 = time.time()
+        self.model.fit(self.X, self.y)
+        self.train_runtime = time.time() - t0
+
+        if self.logger is not None:
+            self.logger.info('Train time: {:.2f} mins'.format(self.train_runtime/60))
+
+
+    def plot_fi(self):
+        # TODO
+        pass
+
+
+    def save_model(self, outdir='./'):
+        joblib.dump(self.model, filename=os.path.join(outdir, RF_REGRESSOR.model_name+'_model.pkl'))
+        # model_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
+
+
+class LGBM_REGRESSOR(BaseMLModel):
+    # Define class attributes (www.toptal.com/python/python-class-attributes-an-overly-thorough-guide)
+    ml_objective = 'regression'
+    model_name = 'lgb_reg'
+
+    def __init__(self, eval_metric=['l1', 'l2'], n_jobs=1, random_state=None,
+                 logger=None):
         # https://lightgbm.readthedocs.io/en/latest/Python-API.html
         # try:
         #     import lightgbm as lgb
         # except ImportError:  # install??
         #     logger.error('Module not found (lightgbm)')
 
-        ml_objective = 'regression'
-        self.model_name = 'lgb_reg'
-        
         # TODO: use config file to set default parameters (like in candle)
-        self.target_name = target_name
         self.eval_metric = eval_metric
         self.n_jobs = n_jobs
         self.random_state = random_state
@@ -73,18 +193,20 @@ class LGBM_Regressor():
         # ----- lightgbm "Training API" - end 
 
         # ----- lightgbm "sklearn API" - start
-        self.model = lgb.LGBMModel(objective=ml_objective,
+        self.model = lgb.LGBMModel(objective=LGBM_REGRESSOR.ml_objective,
                                    n_jobs=self.n_jobs,
                                    random_state=self.random_state)
 
 
-    def fit(self, xtr, ytr, eval_set=None):
+    def fit(self, X, y, eval_set=None):
         self.eval_set = eval_set
-        self.xtr = xtr
-        self.ytr = ytr
+        self.X = X
+        self.y = y
         
         t0 = time.time()
-        self.model.fit(self.xtr, self.ytr, eval_metric=self.eval_metric, eval_set=self.eval_set,
+        self.model.fit(self.X, self.y,
+                       eval_metric=self.eval_metric,
+                       eval_set=self.eval_set,
                        early_stopping_rounds=10, verbose=False, callbacks=None)
         self.train_runtime = time.time() - t0
 
@@ -92,85 +214,91 @@ class LGBM_Regressor():
             self.logger.info('Train time: {:.2f} mins'.format(self.train_runtime/60))
 
 
-    def save_model(self, outdir='./'):
-        # lgb_reg.save_model(os.path.join(run_outdir, 'lgb_'+ml_type+'_model.txt'))
-        joblib.dump(self.model, filename=os.path.join(outdir, self.model_name+'_model.pkl'))
-        # lgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
-
-
-    def calc_scores(self, xdata, ydata, to_print=False):
-        scores = {}
-        preds = self.model.predict(xdata)
-        scores['r2_score'] = r2_score(ydata, preds)
-        scores['mean_abs_error'] = mean_absolute_error(ydata, preds)
-        scores['median_abs_error'] = median_absolute_error(ydata, preds)
-        # scores['explained_variance_score'] = explained_variance_score(ydata, preds)
-
-        self.scores = scores
-        if to_print:
-            self.print_scores()
-
-        return self.scores
-
-
-    def print_scores(self):
-        if hasattr(self, 'scores'):
-            scores = self.scores
-
-            if self.logger is not None:
-                self.logger.info('r2_score: {:.2f}'.format(scores['r2_score']))
-                self.logger.info('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
-                self.logger.info('median_absolute_error: {:.2f}'.format(scores['median_abs_error']))
-                # self.logger.info('explained_variance_score: {:.2f}'.format(scores['explained_variance_score']))
-            else:
-                print('r2_score: {:.2f}'.format(scores['r2_score']))
-                print('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
-                print('median_absolute_error: {:.2f}'.format(scores['median_abs_error']))
-                # print('explained_variance_score: {:.2f}'.format(scores['explained_variance_score']))
-
-
-    def dump_preds(self, df_data, xdata, target_name, outpath=None):
-        """
-        Args:
-            df_data : df that contains the cell and drug names, and target value
-            xdata : features to make predictions
-            target_name : name of the target as it appears in the df (e.g. 'AUC')
-        """
-        combined_cols = ['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]
-        ccle_org_cols = ['CELL', 'DRUG', 'tissuetype', target_name]
-
-        ##df1 = df_data[['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]].copy()
-        if set(combined_cols).issubset(set(df_data.columns.tolist())):
-            df1 = df_data[combined_cols].copy()
-        elif set(ccle_org_cols).issubset(set(df_data.columns.tolist())):
-            df1 = df_data[ccle_org_cols].copy()
-        else:
-            df1 = df_data['CELL', 'DRUG'].copy()
-
-        preds = self.model.predict(xdata)
-        abs_error = abs(df_data[target_name] - preds)
-        squared_error = (df_data[target_name] - preds)**2
-        df2 = pd.DataFrame({target_name+'_pred': self.model.predict(xdata),
-                            target_name+'_error': abs_error,
-                            target_name+'_sq_error': squared_error})
-
-        df_preds = pd.concat([df1, df2], axis=1).reset_index(drop=True)
-
-        if outpath is not None:
-            df_preds.to_csv(outpath)
-        else:
-            df_preds.to_csv('preds.csv')
-
-
     def plot_fi(self, max_num_features=20, title='LGBMRegressor', outdir=None):
         lgb.plot_importance(booster=self.model, max_num_features=max_num_features, grid=True, title=title)
         plt.tight_layout()
 
-        filename = self.model_name+'_fi.png'
+        filename = LGBM_REGRESSOR.model_name+'_fi.png'
         if outdir is None:
             plt.savefig(filename, bbox_inches='tight')
         else:
             plt.savefig(os.path.join(outdir, filename), bbox_inches='tight')
+
+
+    def save_model(self, outdir='./'):
+        # lgb_reg.save_model(os.path.join(run_outdir, 'lgb_'+ml_type+'_model.txt'))
+        joblib.dump(self.model, filename=os.path.join(outdir, LGBM_REGRESSOR.model_name+'_model.pkl'))
+        # lgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
+
+
+    # def calc_scores(self, xdata, ydata, to_print=False):
+    #     """ Create dict of scores. """
+    #     # TODO: replace `if` with `try`
+    #     if hasattr(self, 'model'):
+    #         scores = {}
+    #         preds = self.model.predict(xdata)
+    #         scores['r2_score'] = r2_score(ydata, preds)
+    #         scores['mean_abs_error'] = mean_absolute_error(ydata, preds)
+    #         scores['median_abs_error'] = median_absolute_error(ydata, preds)
+    #         # scores['explained_variance_score'] = explained_variance_score(ydata, preds)
+
+    #         self.scores = scores
+    #         if to_print:
+    #             self.print_scores()
+
+    #         return self.scores
+
+
+    # def print_scores(self):
+    #     if hasattr(self, 'scores'):
+    #         scores = self.scores
+
+    #         if self.logger is not None:
+    #             self.logger.info('r2_score: {:.2f}'.format(scores['r2_score']))
+    #             self.logger.info('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
+    #             self.logger.info('median_absolute_error: {:.2f}'.format(scores['median_abs_error']))
+    #             # self.logger.info('explained_variance_score: {:.2f}'.format(scores['explained_variance_score']))
+    #         else:
+    #             print('r2_score: {:.2f}'.format(scores['r2_score']))
+    #             print('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
+    #             print('median_absolute_error: {:.2f}'.format(scores['median_abs_error']))
+    #             # print('explained_variance_score: {:.2f}'.format(scores['explained_variance_score']))
+
+
+    # def dump_preds(self, df_data, xdata, target_name, outpath=None):
+    #     """
+    #     Args:
+    #         df_data : df that contains the cell and drug names, and target value
+    #         xdata : features to make predictions on
+    #         target_name : name of the target as it appears in the df (e.g. 'AUC')
+    #         outpath : full path to store the predictions
+    #     """
+    #     if hasattr(self, 'model'):
+    #         combined_cols = ['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]
+    #         ccle_org_cols = ['CELL', 'DRUG', 'tissuetype', target_name]
+
+    #         ##df1 = df_data[['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]].copy()
+    #         if set(combined_cols).issubset(set(df_data.columns.tolist())):
+    #             df1 = df_data[combined_cols].copy()
+    #         elif set(ccle_org_cols).issubset(set(df_data.columns.tolist())):
+    #             df1 = df_data[ccle_org_cols].copy()
+    #         else:
+    #             df1 = df_data['CELL', 'DRUG'].copy()
+
+    #         preds = self.model.predict(xdata)
+    #         abs_error = abs(df_data[target_name] - preds)
+    #         squared_error = (df_data[target_name] - preds)**2
+    #         df2 = pd.DataFrame({target_name+'_pred': self.model.predict(xdata),
+    #                             target_name+'_error': abs_error,
+    #                             target_name+'_sq_error': squared_error})
+
+    #         df_preds = pd.concat([df1, df2], axis=1).reset_index(drop=True)
+
+    #         if outpath is not None:
+    #             df_preds.to_csv(outpath)
+    #         else:
+    #             df_preds.to_csv('preds.csv')
+
 
 
     # # Plot learning curves
