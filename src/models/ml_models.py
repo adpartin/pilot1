@@ -1,3 +1,6 @@
+"""
+This script contains various ML models.
+"""
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -5,6 +8,7 @@ import os
 import time
 import numpy as np
 import pandas as pd
+from collections import OrderedDict
 from sklearn.externals import joblib
 from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error, explained_variance_score
 
@@ -14,7 +18,11 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from sklearn.ensemble import RandomForestRegressor
-import lightgbm as lgb
+
+try:
+    import lightgbm as lgb
+except ImportError:  # install??
+    print('Module not found (lightgbm).')
 
 
 # TODO: create a super class GBM models (xgboost and lightgbm)
@@ -27,14 +35,27 @@ import lightgbm as lgb
 
 
 class BaseMLModel():
+    """ A parent class with some general methods for children ML classes.
+    The children classes are specific ML models such random forest regressor, lightgbm regressor, etc.
+    """
+    def __adj_r_squared(self, ydata, preds):
+        """ Calc adjusted r^2.
+        https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2
+        https://dziganto.github.io/data%20science/linear%20regression/machine%20learning/python/Linear-Regression-101-Metrics/
+        """
+        r2 = r2_score(ydata, preds)
+        adj_r2 = 1 - (1 - r2) * (self.x_size[0] - 1)/(self.x_size[0] - self.x_size[1] - 1)
+        return adj_r2
+
 
     def calc_scores(self, xdata, ydata, to_print=False):
         """ Create dict of scores. """
         # TODO: replace `if` with `try`
         if hasattr(self, 'model'):
             preds = self.model.predict(xdata)
-            scores = {}
+            scores = OrderedDict()
             scores['r2_score'] = r2_score(ydata, preds)
+            scores['adj_r2_score'] = self.__adj_r_squared(ydata, preds)
             scores['mean_abs_error'] = mean_absolute_error(ydata, preds)
             scores['median_abs_error'] = median_absolute_error(ydata, preds)
             # scores['explained_variance_score'] = explained_variance_score(ydata, preds)
@@ -54,11 +75,13 @@ class BaseMLModel():
 
             if self.logger is not None:
                 self.logger.info('r2_score: {:.2f}'.format(scores['r2_score']))
+                self.logger.info('adj_r2_score: {:.2f}'.format(scores['adj_r2_score']))
                 self.logger.info('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
                 self.logger.info('median_absolute_error: {:.2f}'.format(scores['median_abs_error']))
                 # self.logger.info('explained_variance_score: {:.2f}'.format(scores['explained_variance_score']))
             else:
                 print('r2_score: {:.2f}'.format(scores['r2_score']))
+                print('adj_r2_score: {:.2f}'.format(scores['adj_r2_score']))
                 print('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
                 print('median_absolute_error: {:.2f}'.format(scores['median_abs_error']))
                 # print('explained_variance_score: {:.2f}'.format(scores['explained_variance_score']))
@@ -102,6 +125,8 @@ class BaseMLModel():
 
 
 class RF_REGRESSOR(BaseMLModel):
+    """ Random forest regressor. """
+    # Define class attributes (www.toptal.com/python/python-class-attributes-an-overly-thorough-guide)
     model_name = 'rf_reg'
 
     def __init__(self, n_estimators=100, criterion='mse',
@@ -149,7 +174,7 @@ class RF_REGRESSOR(BaseMLModel):
 
 
 class LGBM_REGRESSOR(BaseMLModel):
-    # Define class attributes (www.toptal.com/python/python-class-attributes-an-overly-thorough-guide)
+    """ Lightgbm regressor. """
     ml_objective = 'regression'
     model_name = 'lgb_reg'
 
@@ -159,7 +184,7 @@ class LGBM_REGRESSOR(BaseMLModel):
         # try:
         #     import lightgbm as lgb
         # except ImportError:  # install??
-        #     logger.error('Module not found (lightgbm)')
+        #     logger.error('Module not found (lightgbm).')
 
         # TODO: use config file to set default parameters (like in candle)
         self.eval_metric = eval_metric
@@ -202,6 +227,8 @@ class LGBM_REGRESSOR(BaseMLModel):
         self.eval_set = eval_set
         self.X = X
         self.y = y
+
+        self.x_size = X.shape  # this is used to calc adjusteed r^2
         
         t0 = time.time()
         self.model.fit(self.X, self.y,
@@ -229,76 +256,6 @@ class LGBM_REGRESSOR(BaseMLModel):
         # lgb_reg.save_model(os.path.join(run_outdir, 'lgb_'+ml_type+'_model.txt'))
         joblib.dump(self.model, filename=os.path.join(outdir, LGBM_REGRESSOR.model_name+'_model.pkl'))
         # lgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
-
-
-    # def calc_scores(self, xdata, ydata, to_print=False):
-    #     """ Create dict of scores. """
-    #     # TODO: replace `if` with `try`
-    #     if hasattr(self, 'model'):
-    #         scores = {}
-    #         preds = self.model.predict(xdata)
-    #         scores['r2_score'] = r2_score(ydata, preds)
-    #         scores['mean_abs_error'] = mean_absolute_error(ydata, preds)
-    #         scores['median_abs_error'] = median_absolute_error(ydata, preds)
-    #         # scores['explained_variance_score'] = explained_variance_score(ydata, preds)
-
-    #         self.scores = scores
-    #         if to_print:
-    #             self.print_scores()
-
-    #         return self.scores
-
-
-    # def print_scores(self):
-    #     if hasattr(self, 'scores'):
-    #         scores = self.scores
-
-    #         if self.logger is not None:
-    #             self.logger.info('r2_score: {:.2f}'.format(scores['r2_score']))
-    #             self.logger.info('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
-    #             self.logger.info('median_absolute_error: {:.2f}'.format(scores['median_abs_error']))
-    #             # self.logger.info('explained_variance_score: {:.2f}'.format(scores['explained_variance_score']))
-    #         else:
-    #             print('r2_score: {:.2f}'.format(scores['r2_score']))
-    #             print('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
-    #             print('median_absolute_error: {:.2f}'.format(scores['median_abs_error']))
-    #             # print('explained_variance_score: {:.2f}'.format(scores['explained_variance_score']))
-
-
-    # def dump_preds(self, df_data, xdata, target_name, outpath=None):
-    #     """
-    #     Args:
-    #         df_data : df that contains the cell and drug names, and target value
-    #         xdata : features to make predictions on
-    #         target_name : name of the target as it appears in the df (e.g. 'AUC')
-    #         outpath : full path to store the predictions
-    #     """
-    #     if hasattr(self, 'model'):
-    #         combined_cols = ['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]
-    #         ccle_org_cols = ['CELL', 'DRUG', 'tissuetype', target_name]
-
-    #         ##df1 = df_data[['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]].copy()
-    #         if set(combined_cols).issubset(set(df_data.columns.tolist())):
-    #             df1 = df_data[combined_cols].copy()
-    #         elif set(ccle_org_cols).issubset(set(df_data.columns.tolist())):
-    #             df1 = df_data[ccle_org_cols].copy()
-    #         else:
-    #             df1 = df_data['CELL', 'DRUG'].copy()
-
-    #         preds = self.model.predict(xdata)
-    #         abs_error = abs(df_data[target_name] - preds)
-    #         squared_error = (df_data[target_name] - preds)**2
-    #         df2 = pd.DataFrame({target_name+'_pred': self.model.predict(xdata),
-    #                             target_name+'_error': abs_error,
-    #                             target_name+'_sq_error': squared_error})
-
-    #         df_preds = pd.concat([df1, df2], axis=1).reset_index(drop=True)
-
-    #         if outpath is not None:
-    #             df_preds.to_csv(outpath)
-    #         else:
-    #             df_preds.to_csv('preds.csv')
-
 
 
     # # Plot learning curves

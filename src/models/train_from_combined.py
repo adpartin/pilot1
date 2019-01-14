@@ -1,10 +1,8 @@
 """
 TODO:
 1. ML models
-- train multiple models
-  create super class ML_Model (this sklearn API class will implement hyperparam grid search)
 - rank models based on performance
-- optimize each model using hyperparam search
+- optimize models using hyperparam search
   https://stats.stackexchange.com/questions/183984/how-to-use-xgboost-cv-with-hyperparameters-optimization
   https://github.com/raymon-tian/trend_ml_toolkit_xgboost/blob/master/xg_train_slower.py
   https://github.com/LevinJ/Supply-demand-forecasting/blob/master/utility/xgbbasemodel.py
@@ -15,7 +13,7 @@ TODO:
 - best practices
   http://dnc1994.com/2016/05/rank-10-percent-in-first-kaggle-competition-en/
 
-Explore Auto-ML:
+Explore AutoML:
 - tpot
 - auto-sklearn
 - data robot
@@ -35,9 +33,6 @@ ML models:
 Hyperparam schemes:
 - CANDLE
 - https://medium.com/@mikkokotila/a-comprehensive-list-of-hyperparameter-optimization-tuning-solutions-88e067f19d9
-
-2. Learning curve (performance vs training set size)
-https://scikit-learn.org/stable/auto_examples/model_selection/plot_learning_curve.html
 
 3. Outliers and transformations
 https://www.analyticsvidhya.com/blog/2015/11/8-ways-deal-continuous-variables-predictive-modeling/
