@@ -11,7 +11,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-def plot_learning_curve(rslt, score_metric='score', path=None):
+def plot_learning_curve(rslt, score_metric='score', title=None, path=None):
     """ 
     Args:
         rslt : output from sklearn.model_selection.learning_curve()
@@ -37,7 +37,10 @@ def plot_learning_curve(rslt, score_metric='score', path=None):
                         te_scores_mean + te_scores_std,
                         alpha=0.1, color="g")
     
-    plt.title('Training set size vs score')
+    if title is not None:
+        plt.title(title)
+    else:
+        plt.title('Training set size vs score')
     plt.xlabel('Training set size')
     plt.ylabel(score_metric)
     plt.legend(loc='best')

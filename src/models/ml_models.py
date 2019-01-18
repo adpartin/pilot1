@@ -266,6 +266,11 @@ class LGBM_REGRESSOR(BaseMLModel):
     #     plt.savefig(os.path.join(run_outdir, model_name+'_learning_curve_'+m+'.png'))
 
 
+class XGBM_REGRESSOR(BaseMLModel):
+    """ xgboost regressor. """
+    ml_objective = 'regression'
+    model_name = 'xgb_reg'
+
 
 # # ========================================================================
 # #       Train models - the code below was in train_from_combined.py

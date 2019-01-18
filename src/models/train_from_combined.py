@@ -78,11 +78,14 @@ import sys
 import time
 import datetime
 import logging
-import argparse
 import psutil
 from collections import OrderedDict
 import numpy as np
 import pandas as pd
+
+import argparse
+import configparser
+# import configargparse
 
 import matplotlib
 # matplotlib.use('TkAgg')
@@ -105,10 +108,12 @@ file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.pa
 ##sys.path.append(utils_path)
 import utils
 import utils_tidy
+import arg_parser
 
 DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
-FILENAME = 'tidy_data_no_fibro.parquet'
+DATAFILENAME = 'tidy_data_no_fibro.parquet'
+CONFIGFILENAME = 'config_params.txt'
 # FILENAME = 'tidy_data.parquet'
 os.makedirs(OUTDIR, exist_ok=True)
 
@@ -149,7 +154,8 @@ def run(args):
     t = datetime.datetime.now()
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
-    run_outdir = os.path.join(OUTDIR, 'run_'+t)
+    name_sufix = '~' + '.'.join(model_name + [cv_method] + cell_features + drug_features + [target_name])
+    run_outdir = os.path.join(OUTDIR, 'run_' + t + name_sufix)
     os.makedirs(run_outdir)
     logfilename = os.path.join(run_outdir, 'logfile.log')
     logger = utils.setup_logger(logfilename=logfilename)
@@ -163,7 +169,7 @@ def run(args):
     # ========================================================================
     #       Load data and pre-proc
     # ========================================================================
-    datapath = os.path.join(DATADIR, FILENAME)
+    datapath = os.path.join(DATADIR, DATAFILENAME)
     logger.info(f'\nLoad tidy data ... {datapath}')
     data = pd.read_parquet(datapath, engine='auto', columns=None)
     logger.info(f'data.shape {data.shape}')
@@ -367,10 +373,10 @@ def run(args):
 
 
     # ========================================================================
-    #       Automatic CV validation
+    #       Automatic CV runs
     # ========================================================================
     logger.info('\n=====================================================')
-    logger.info(f'Automatic CV validation ...')
+    logger.info(f'Automatic CV runs ...')
     logger.info('=====================================================')
     # https://scikit-learn.org/stable/modules/cross_validation.html
     from sklearn.model_selection import cross_val_score, cross_validate, learning_curve
@@ -433,6 +439,7 @@ def run(args):
 
     from size_vs_score import plot_learning_curve
     plot_learning_curve(rslt=rslt, score_metric=score_metric,
+                        title='Training set size vs score (target: {})'.format(target_name),
                         path=os.path.join(run_outdir, 'scores_vs_train_size.png'))
     
 
@@ -583,76 +590,102 @@ def run(args):
 
 
 def main(args):
-# def main(parser):    
-    parser = argparse.ArgumentParser(description="Cell-drug sensitivity parser.")
-    # https://docs.python.org/3/library/argparse.html#argparse.ArgumentParser.add_argument
+# def main(parser):  
+
+    config_fname = os.path.join(file_path, CONFIGFILENAME)
+    args = arg_parser.get_args(args=args, config_fname=config_fname)
+
+
+    # # Parsing priority: command-file > config-file > defualt params
+    # defaults = {
+    #     'target_name': 'AUC',
+    #     'target_trasform': 'f',
+    #     'train_sources': 'ccle',
+    #     'test_sources': 'ccle',
+    #     'tissue_type': ___ ,
+    #     'cell_features': 'rna', 
+    #     'drug_features': 'dsc',
+    #     'other_features': ___ ,
+    #     'ml_models': 'lgb_reg',
+    #     'cv_method': 'simple',
+    #     'cv_folds': 5,
+    #     'verbose': 't',
+    #     'n_jobs': 4
+    # }  ## new
     
-    def str_to_bool(s):
-        """ Convert string to bool (in argparse context).
-        https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
-        """
-        if s.lower() not in ['t', 'f']:
-            raise ValueError("Need 't' or 'f'; got %r" % s)
-        return {'t': True, 'f': False}[s.lower()]
+    # parser = argparse.ArgumentParser(description="Cell-drug sensitivity parser.")
+    # # https://docs.python.org/3/library/argparse.html#argparse.ArgumentParser.add_argument
 
-    # Select target to predict
-    parser.add_argument("-t", "--target_name",
-        default="AUC1", choices=['AUC', 'AUC1', 'IC50'],
-        help="Column name of the target variable.") # target_name = 'AUC1'
-    parser.add_argument("-tt", "--target_trasform",
-        default='f', choices=['t', 'f'], type=str_to_bool,
-        help="'t': transform target, 'f': do not transform target.") # target_name = 'AUC1'
+    # def str_to_bool(s):
+    #     """ Convert string to bool (in argparse context).
+    #     https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
+    #     """
+    #     if s.lower() not in ['t', 'f']:
+    #         raise ValueError("Need 't' or 'f'; got %r" % s)
+    #     return {'t': True, 'f': False}[s.lower()]
 
-    # Select train and test (inference) sources
-    parser.add_argument("-tr", "--train_sources", nargs="+",
-        default=["ccle"], choices=["ccle", "gcsi", "gdsc", "ctrp"],
-        help="Data sources to use for training.")
-    parser.add_argument("-te", "--test_sources", nargs="+",
-        default=["ccle"], choices=["ccle", "gcsi", "gdsc", "ctrp"],
-        help="Data sources to use for testing.")
+    # # Select target to predict
+    # parser.add_argument("-t", "--target_name",
+    #     default="AUC", choices=["AUC", "AUC1", "IC50"],
+    #     help="Column name of the target variable.") # target_name = 'AUC1'
+    # parser.add_argument("-tt", "--target_trasform",
+    #     default='f', choices=['t', 'f'], type=str_to_bool,
+    #     help="'t': transform target, 'f': do not transform target.") # target_name = 'AUC1'
 
-    # Select tissue types
-    parser.add_argument("--tissue_type",
-        default=argparse.SUPPRESS, choices=[],
-        help="Tissue types to use.")
+    # # Select train and test (inference) sources
+    # parser.add_argument("-tr", "--train_sources", nargs="+",
+    #     default=["ccle"], choices=["ccle", "gcsi", "gdsc", "ctrp"],
+    #     help="Data sources to use for training.")
+    # parser.add_argument("-te", "--test_sources", nargs="+",
+    #     default=["ccle"], choices=["ccle", "gcsi", "gdsc", "ctrp"],
+    #     help="Data sources to use for testing.")
 
-    # Select feature types
-    parser.add_argument("-cf", "--cell_features", nargs="+",
-        default=['rna'], choices=["rna", "cnv"],
-        help="Cell line feature types.") # ['rna', cnv', 'rna_latent']
-    parser.add_argument("-df", "--drug_features", nargs="+",
-        default=['dsc'], choices=["dsc", "fng"],
-        help="Drug feature types.") # ['dsc', 'fng', 'dsc_latent', 'fng_latent']
-    parser.add_argument("-of", "--other_features", default=[],
-        choices=[],
-        help="Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).") # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
+    # # Select tissue types
+    # parser.add_argument("-ts", "--tissue_type",
+    #     default=argparse.SUPPRESS, choices=[],
+    #     help="Tissue types to use.")
 
-    # Select ML models
-    parser.add_argument("-ml", "--ml_models",
-        default=["lgb_reg"], choices=["lgb_reg", "rf_reg"],
-        help="ML models to use for training.")
+    # # Select feature types
+    # parser.add_argument("-cf", "--cell_features", nargs="+",
+    #     default=['rna'], choices=["rna", "cnv"],
+    #     help="Cell line feature types.") # ['rna', cnv', 'rna_latent']
+    # parser.add_argument("-df", "--drug_features", nargs="+",
+    #     default=['dsc'], choices=["dsc", "fng"],
+    #     help="Drug feature types.") # ['dsc', 'fng', 'dsc_latent', 'fng_latent']
+    # parser.add_argument("-of", "--other_features", default=[],
+    #     choices=[],
+    #     help="Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).") # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
 
-    # Select CV scheme
-    parser.add_argument("-cvs", "--cv_method",
-        default="simple", choices=["simple", "group"],
-        help="Cross-val split method.")
-    parser.add_argument("-cvf", "--cv_folds",
-        default=5, type=int,
-        help="Number cross-val folds.")
+    # # Select ML models
+    # parser.add_argument("-ml", "--ml_models",
+    #     default=["lgb_reg"], choices=["lgb_reg", "rf_reg"],
+    #     help="ML models to use for training.")
 
-    # Take care of utliers
-    # parser.add_argument("--outlier", default=False)
+    # # Select CV scheme
+    # parser.add_argument("-cvs", "--cv_method",
+    #     default="simple", choices=["simple", "group"],
+    #     help="Cross-val split method.")
+    # parser.add_argument("-cvf", "--cv_folds",
+    #     default=5, type=int,
+    #     help="Number cross-val folds.")
 
-    # Define verbosity
-    parser.add_argument("-v", "--verbose",
-        default="t", choices=["t", "f"], type=str_to_bool,
-        help="'t': verbose, 'f': not verbose.")
+    # # Take care of utliers
+    # # parser.add_argument("--outlier", default=False)
 
-    # Define n_jobs
-    parser.add_argument("--n_jobs", default=4, type=int)
+    # # Define verbosity
+    # parser.add_argument("-v", "--verbose",
+    #     default="t", choices=["t", "f"], type=str_to_bool,
+    #     help="'t': verbose, 'f': not verbose.")
 
-    # Parse the args
-    args = parser.parse_args(args)
+    # # Define n_jobs
+    # parser.add_argument("--n_jobs", default=4, type=int)
+
+    # # parser.set_defaults(**defaults)  ## new
+
+    # # Parse the args
+    # args = parser.parse_args(args)
+    # # args = parser.parse_known_args(args)
+
     run(args)
     
 

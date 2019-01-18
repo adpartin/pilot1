@@ -39,7 +39,7 @@ file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.pa
 ##sys.path.append(utils_path)
 import utils_data as utils
 
-# TODO: fix this similar to CANDLE
+# TODO: fix this similar to CANDLE (i.e. download file server)
 if sys.platform == 'darwin':
     DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
 else:
