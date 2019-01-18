@@ -14,41 +14,7 @@ from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error
 
 DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
 
-
-def setup_logger(logfilename='logfile.log'):
-    """ Create logger. Output to file and console. """
-    # TODO: create class as shown here --> https://airbrake.io/blog/python-exception-handling/attributeerror
-    # Create file handler
-    # "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    # "[%(asctime)s %(process)d] %(message)s"
-    # fileFormatter = logging.Formatter("%(asctime)s : %(threadName)-12.12s : %(levelname)-5.5s : %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    fileFormatter = logging.Formatter("%(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    fileHandler = logging.FileHandler(filename=logfilename)
-    fileHandler.setFormatter(fileFormatter)
-    fileHandler.setLevel(logging.INFO)
-
-    # Create console handler
-    # consoleFormatter = logging.Formatter("%(name)-12s : %(levelname)-8s : %(message)s")
-    consoleFormatter = logging.Formatter("%(message)s")
-    consoleHandler = logging.StreamHandler()
-    consoleHandler.setFormatter(consoleFormatter)
-    consoleHandler.setLevel(logging.INFO)
-
-    # Create logger and add handlers
-    # logger = logging.getLogger(__name__)
-    logger = logging.getLogger('')
-    logger.setLevel(logging.INFO)
-    logger.addHandler(fileHandler)
-    logger.addHandler(consoleHandler)
-
-    # from combo (when use candle)
-    # for log in [logger, uno_data.logger]:
-    #     log.setLevel(logging.DEBUG)
-    #     log.addHandler(fh)
-    #     log.addHandler(sh)
-    return logger
-
-
+    
 # ==============================================================================
 # Plot funcs
 # ==============================================================================
@@ -177,6 +143,15 @@ def plot_rf_fi(rf_model, figsize=(8, 5), plot_direction='h', columns=None, max_c
 
     return indices, fig
 # ==============================================================================
+
+
+def subsample(df, v, axis=0):
+    assert v > 0, f'sample must be >0; got {sample}'
+    if v <= 1.0:
+        df = df.sample(frac=v, axis=axis).reset_index(drop=True)
+    else:
+        df = df.sample(n=v, axis=axis).reset_index(drop=True)
+    return df
 
 
 def cv_scores_to_df(scores, decimals=3, calc_stats=True):

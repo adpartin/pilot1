@@ -79,6 +79,7 @@ import time
 import datetime
 import logging
 import psutil
+from pprint import pprint
 from collections import OrderedDict
 import numpy as np
 import pandas as pd
@@ -108,7 +109,8 @@ file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.pa
 ##sys.path.append(utils_path)
 import utils
 import utils_tidy
-import arg_parser
+import argparser
+import classlogger
 
 DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
@@ -129,9 +131,10 @@ fea_prfx_dict = {'rna': 'cell_rna.',
 
 
 def run(args):
-    print(args)
     train_sources = args.train_sources
     test_sources = args.test_sources
+    row_sample = args.row_sample
+    col_sample = args.col_sample
     target_name = args.target_name
     target_trasform = args.target_trasform
     cell_features = args.cell_features
@@ -154,15 +157,15 @@ def run(args):
     t = datetime.datetime.now()
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
-    name_sufix = '~' + '.'.join(model_name + [cv_method] + cell_features + drug_features + [target_name])
+    name_sufix = '~' + '.'.join(train_sources + [model_name] + [cv_method] + cell_features + drug_features + [target_name])
     run_outdir = os.path.join(OUTDIR, 'run_' + t + name_sufix)
     os.makedirs(run_outdir)
     logfilename = os.path.join(run_outdir, 'logfile.log')
-    logger = utils.setup_logger(logfilename=logfilename)
+    lg = classlogger.Logger(logfilename=logfilename)
 
-    logger.info(f'File path: {file_path}')
-    logger.info(f'System CPUs: {psutil.cpu_count()}')
-    logger.info(f'n_jobs: {n_jobs}')
+    lg.logger.info(f'File path: {file_path}')
+    lg.logger.info(f'System CPUs: {psutil.cpu_count()}')
+    lg.logger.info(f'n_jobs: {n_jobs}')
 
 
 
@@ -170,10 +173,10 @@ def run(args):
     #       Load data and pre-proc
     # ========================================================================
     datapath = os.path.join(DATADIR, DATAFILENAME)
-    logger.info(f'\nLoad tidy data ... {datapath}')
+    lg.logger.info(f'\nLoad tidy data ... {datapath}')
     data = pd.read_parquet(datapath, engine='auto', columns=None)
-    logger.info(f'data.shape {data.shape}')
-    logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
+    lg.logger.info(f'data.shape {data.shape}')
+    lg.logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
     # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
 
 
@@ -184,20 +187,30 @@ def run(args):
     data.columns = [regex.sub('_', c) if any(x in str(c) for x in set(('[', ']', '<'))) else c for c in data.columns.values]
 
 
+    # Subsample
+    if row_sample:
+        data = utils.subsample(df=data, v=row_sample, axis=0)
+        print('data.shape', data.shape)
+
+    if col_sample:
+        data = utils.subsample(df=data, v=col_sample, axis=1)
+        print('data.shape', data.shape)
+
+
     # Extract test sources
-    logger.info('\nExtract test sources ... {}'.format(test_sources))
+    lg.logger.info('\nExtract test sources ... {}'.format(test_sources))
     te_data = data[data['SOURCE'].isin(test_sources)].reset_index(drop=True)
-    logger.info(f'te_data.shape {te_data.shape}')
-    logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(te_data)/1e9))
-    logger.info(te_data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+    lg.logger.info(f'te_data.shape {te_data.shape}')
+    lg.logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(te_data)/1e9))
+    lg.logger.info(te_data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
 
 
     # Extract train sources
-    logger.info('\nExtract train sources ... {}'.format(train_sources))
+    lg.logger.info('\nExtract train sources ... {}'.format(train_sources))
     data = data[data['SOURCE'].isin(train_sources)].reset_index(drop=True)
-    logger.info(f'data.shape {data.shape}')
-    logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
-    logger.info(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+    lg.logger.info(f'data.shape {data.shape}')
+    lg.logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
+    lg.logger.info(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
 
 
     # Assign type to categoricals
@@ -244,7 +257,7 @@ def run(args):
 
 
     if 'dlb' in other_features:
-        logger.info('\nAdd drug labels to features ...')
+        lg.logger.info('\nAdd drug labels to features ...')
         # print(data['DRUG'].value_counts())
 
         # http://queirozf.com/entries/one-hot-encoding-a-feature-on-a-pandas-dataframe-an-example
@@ -258,8 +271,8 @@ def run(args):
 
         # Concat drug labels and other features
         data = pd.concat([dlb, data], axis=1).reset_index(drop=True)
-        logger.info(f'dlb.shape {dlb.shape}')
-        logger.info(f'data.shape {data.shape}')
+        lg.logger.info(f'dlb.shape {dlb.shape}')
+        lg.logger.info(f'data.shape {data.shape}')
 
 
     if 'rna_clusters' in other_features:
@@ -279,7 +292,7 @@ def run(args):
     #       Keep a set of training features and impute missing values
     # ========================================================================
     data = utils_tidy.extract_subset_features(data=data, feature_list=feature_list, fea_prfx_dict=fea_prfx_dict)
-    data = utils_tidy.impute_values(data=data, fea_prfx_dict=fea_prfx_dict, logger=logger)
+    data = utils_tidy.impute_values(data=data, fea_prfx_dict=fea_prfx_dict, logger=lg.logger)
 
 
 
@@ -302,9 +315,9 @@ def run(args):
     # ========================================================================
     #       Run CV validation (my implementation)
     # ========================================================================
-    # logger.info('\n=====================================================')
-    # logger.info(f'Run CV validation (my implementation) ...')
-    # logger.info('=====================================================')
+    # lg.logger.info('\n=====================================================')
+    # lg.logger.info(f'Run CV validation (my implementation) ...')
+    # lg.logger.info('=====================================================')
     from split_tr_vl import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
     # from ml_models import LGBM_REGRESSOR, RF_REGRESSOR
 
@@ -323,11 +336,11 @@ def run(args):
 
 
     # # Run CV training
-    # logger.info(f'\nCV splitting method: {cv_method}')
+    # lg.logger.info(f'\nCV splitting method: {cv_method}')
     # tr_scores = []
     # vl_scores = []
     # for i in range(splitter.n_splits):
-    #     logger.info(f'\nFold {i+1}/{splitter.n_splits}')
+    #     lg.logger.info(f'\nFold {i+1}/{splitter.n_splits}')
     #     tr_idx = splitter.tr_cv_idx[i]
     #     vl_idx = splitter.vl_cv_idx[i]
     #     tr_data = data.iloc[tr_idx, :]
@@ -344,8 +357,8 @@ def run(args):
     #     xtr, _ = utils_tidy.split_features_and_other_cols(tr_data, fea_prfx_dict=fea_prfx_dict)
     #     xvl, _ = utils_tidy.split_features_and_other_cols(vl_data, fea_prfx_dict=fea_prfx_dict)
 
-    #     # utils_tidy.print_feature_shapes(df=xtr, logger=logger)
-    #     # utils_tidy.print_feature_shapes(df=xvl, logger=logger)
+    #     # utils_tidy.print_feature_shapes(df=xtr, logger=lg.logger)
+    #     # utils_tidy.print_feature_shapes(df=xvl, logger=lg.logger)
 
     #     ytr = utils_tidy.extract_target(data=tr_data, target_name=target_name)
     #     yvl = utils_tidy.extract_target(data=vl_data, target_name=target_name)
@@ -354,7 +367,7 @@ def run(args):
     #     plot_ytr_yvl_dist(ytr, yvl, title=title, outpath=os.path.join(run_outdir, title+'.png'))
 
     #     # Train model
-    #     lgb_reg = LGBM_Regressor(target_name=target_name, random_state=SEED, logger=logger)
+    #     lgb_reg = LGBM_Regressor(target_name=target_name, random_state=SEED, logger=lg.logger)
     #     lgb_reg.fit(xtr, ytr, eval_set=[(xtr, ytr), (xvl, yvl)])
 
     #     # Calc and save scores
@@ -375,9 +388,9 @@ def run(args):
     # ========================================================================
     #       Automatic CV runs
     # ========================================================================
-    logger.info('\n=====================================================')
-    logger.info(f'Automatic CV runs ...')
-    logger.info('=====================================================')
+    lg.logger.info('\n{}'.format('='*50))
+    lg.logger.info('Automatic CV runs ...')
+    lg.logger.info('='*50)
     # https://scikit-learn.org/stable/modules/cross_validation.html
     from sklearn.model_selection import cross_val_score, cross_validate, learning_curve
     from sklearn.model_selection import ShuffleSplit, GroupShuffleSplit, KFold, GroupKFold
@@ -386,7 +399,7 @@ def run(args):
     # Prepare data
     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
-    utils_tidy.print_feature_shapes(df=xdata, logger=logger)
+    utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
 
     # Split tr/vl data
     if cv_method=='simple':
@@ -401,40 +414,40 @@ def run(args):
 
     # Run CV estimator
     # https://scikit-learn.org/stable/modules/model_evaluation.html#scoring-parameter
-    # logger.info("\nStart cross_val_score ...")
-    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=logger)
+    # lg.logger.info("\nStart cross_val_score ...")
+    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=lg.logger)
     # t0 = time.time()
     # scores = cross_val_score(estimator=lgb_reg.model, X=xdata, y=ydata,
     #                          scoring='r2', cv=cv, n_jobs=n_jobs,
     #                          fit_params={'verbose': False, 'early_stopping_rounds': 10})    
-    # logger.info('Run-time: {:.3f} mins'.format((time.time()-t0)/60))
-    # logger.info(scores)
+    # lg.logger.info('Run-time: {:.3f} mins'.format((time.time()-t0)/60))
+    # lg.logger.info(scores)
 
 
-    logger.info("\nStart cross_validate ...")
-    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=logger)
-    model, fit_params = init_model(model_name, logger)
+    lg.logger.info("\nStart cross_validate ...")
+    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=lg.logger)
+    model, fit_params = init_model(model_name, lg.logger)
     t0 = time.time()
     score_metric = ['r2', 'neg_mean_absolute_error']
     scores = cross_validate(
         estimator=model.model, X=xdata, y=ydata,
         scoring=score_metric, cv=cv, n_jobs=n_jobs,
         fit_params=fit_params)
-    logger.info('Run-time: {:.3f} mins'.format((time.time()-t0)/60))
+    lg.logger.info('Run-time: {:.3f} mins'.format((time.time()-t0)/60))
     for k, v in scores.items():
-        logger.info(f'{k}: {v}')
+        lg.logger.info(f'{k}: {v}')
 
 
-    logger.info("\nStart learning_curve ...")
-    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=logger)
-    model, _ = init_model(model_name, logger)
+    lg.logger.info("\nStart learning_curve ...")
+    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=lg.logger)
+    model, _ = init_model(model_name, lg.logger)
     t0 = time.time()
     score_metric = 'r2'
     rslt = learning_curve(estimator=model.model, X=xdata, y=ydata,
                           train_sizes=np.linspace(0.1, 1.0, 5),
                           scoring=score_metric, cv=cv, n_jobs=n_jobs,
                           exploit_incremental_learning=False, random_state=SEED)
-    logger.info('Run-time: {:.3f} mins'.format((time.time()-t0)/60))
+    lg.logger.info('Run-time: {:.3f} mins'.format((time.time()-t0)/60))
     
 
     from size_vs_score import plot_learning_curve
@@ -447,16 +460,16 @@ def run(args):
     # ========================================================================
     #       Train final model (entire dataset)
     # ========================================================================
-    logger.info('\n=====================================================')
-    logger.info(f'Train final model (use entire dataset) ... {train_sources}')
-    logger.info('=====================================================')
+    lg.logger.info('\n{}'.format('='*50))
+    lg.logger.info(f'Train final model (use entire dataset) ... {train_sources}')
+    lg.logger.info('='*50)
     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
-    utils_tidy.print_feature_shapes(df=xdata, logger=logger)
+    utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
 
     # Train model
-    # lgb_reg_final = LGBM_REGRESSOR(random_state=SEED, logger=logger)
-    model_final, _ = init_model(model_name, logger)
+    # lgb_reg_final = LGBM_REGRESSOR(random_state=SEED, logger=lg.logger)
+    model_final, _ = init_model(model_name, lg.logger)
     # lgb_reg_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])
     if 'lgb_reg' in model_name:
         model_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])
@@ -484,22 +497,24 @@ def run(args):
     # ========================================================================
     #       Infer
     # ========================================================================
-    logger.info('\n=====================================================')
-    logger.info(f'Inference ... {test_sources}')
-    logger.info('=====================================================')
+    lg.logger.info('\n{}'.format('='*50))
+    lg.logger.info(f'Inference ... {test_sources}')
+    lg.logger.info('='*50)
 
     csv_scores = []  # cross-study-validation scores
     for i, src in enumerate(test_sources):
-        logger.info(f'\nTest source {i+1}:  ___ {src} ___')
+        lg.logger.info(f'\nTest source {i+1}:  _____ {src} _____')
 
         te_src_data = te_data[te_data['SOURCE'].isin([src])].reset_index(drop=True)
-        logger.info(f'src_data.shape {te_src_data.shape}')
+        lg.logger.info(f'src_data.shape {te_src_data.shape}')
+        if te_src_data.shape[0] == 0:
+            continue
 
         preds_filename_prefix = 'test_' + src
         model_name = 'lgb_reg_final'
 
         # Prepare test data for predictions
-        te_src_data = utils_tidy.impute_values(data=te_src_data, fea_prfx_dict=fea_prfx_dict, logger=logger)
+        te_src_data = utils_tidy.impute_values(data=te_src_data, fea_prfx_dict=fea_prfx_dict, logger=lg.logger)
         xte, _ = utils_tidy.split_features_and_other_cols(te_src_data, fea_prfx_dict=fea_prfx_dict)
         yte = utils_tidy.extract_target(data=te_src_data, target_name=target_name)
 
@@ -508,10 +523,11 @@ def run(args):
                         path=os.path.join(run_outdir, src+'_'+target_name+'_hist.png'))
 
         # Print feature shapes
-        logger.info(f'\nxte_'+src)
-        utils_tidy.print_feature_shapes(df=xte, logger=logger)
+        lg.logger.info(f'\nxte_'+src)
+        utils_tidy.print_feature_shapes(df=xte, logger=lg.logger)
 
         # Compute scores
+        lg.logger.info('\nscores:')
         # scores = lgb_reg_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
         scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
         scores = utils.cv_scores_to_df([scores])
@@ -526,11 +542,14 @@ def run(args):
         # csv_scores.append(lgb_reg_final.calc_scores(xdata=xte, ydata=yte, to_print=False))
         csv_scores.append(model_final.calc_scores(xdata=xte, ydata=yte, to_print=False))
 
+
     # Summarize cv scores
     df_csv_scores = pd.DataFrame(csv_scores).T
     df_csv_scores.columns = test_sources
-    print('\ncsv_scores\n{}'.format(df_csv_scores))
-    df_csv_scores.to_csv(os.path.join(run_outdir, 'df_csv_scores.csv'))
+    df_csv_scores = df_csv_scores.reset_index().rename(columns={'index': 'metric'})
+    df_csv_scores.insert(loc=1, column='train_src', value='_'.join(train_sources))
+    lg.logger.info('\ncsv_scores\n{}'.format(df_csv_scores))
+    df_csv_scores.to_csv(os.path.join(run_outdir, 'df_csv_scores.csv'), index=False)
 
 
     # ========================================================================
@@ -588,105 +607,18 @@ def run(args):
     # ========================================================================
     # pass                         
 
+    # Kill logger
+    lg.kill_logger()
+
+    return df_csv_scores
+
 
 def main(args):
-# def main(parser):  
-
     config_fname = os.path.join(file_path, CONFIGFILENAME)
-    args = arg_parser.get_args(args=args, config_fname=config_fname)
-
-
-    # # Parsing priority: command-file > config-file > defualt params
-    # defaults = {
-    #     'target_name': 'AUC',
-    #     'target_trasform': 'f',
-    #     'train_sources': 'ccle',
-    #     'test_sources': 'ccle',
-    #     'tissue_type': ___ ,
-    #     'cell_features': 'rna', 
-    #     'drug_features': 'dsc',
-    #     'other_features': ___ ,
-    #     'ml_models': 'lgb_reg',
-    #     'cv_method': 'simple',
-    #     'cv_folds': 5,
-    #     'verbose': 't',
-    #     'n_jobs': 4
-    # }  ## new
-    
-    # parser = argparse.ArgumentParser(description="Cell-drug sensitivity parser.")
-    # # https://docs.python.org/3/library/argparse.html#argparse.ArgumentParser.add_argument
-
-    # def str_to_bool(s):
-    #     """ Convert string to bool (in argparse context).
-    #     https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
-    #     """
-    #     if s.lower() not in ['t', 'f']:
-    #         raise ValueError("Need 't' or 'f'; got %r" % s)
-    #     return {'t': True, 'f': False}[s.lower()]
-
-    # # Select target to predict
-    # parser.add_argument("-t", "--target_name",
-    #     default="AUC", choices=["AUC", "AUC1", "IC50"],
-    #     help="Column name of the target variable.") # target_name = 'AUC1'
-    # parser.add_argument("-tt", "--target_trasform",
-    #     default='f', choices=['t', 'f'], type=str_to_bool,
-    #     help="'t': transform target, 'f': do not transform target.") # target_name = 'AUC1'
-
-    # # Select train and test (inference) sources
-    # parser.add_argument("-tr", "--train_sources", nargs="+",
-    #     default=["ccle"], choices=["ccle", "gcsi", "gdsc", "ctrp"],
-    #     help="Data sources to use for training.")
-    # parser.add_argument("-te", "--test_sources", nargs="+",
-    #     default=["ccle"], choices=["ccle", "gcsi", "gdsc", "ctrp"],
-    #     help="Data sources to use for testing.")
-
-    # # Select tissue types
-    # parser.add_argument("-ts", "--tissue_type",
-    #     default=argparse.SUPPRESS, choices=[],
-    #     help="Tissue types to use.")
-
-    # # Select feature types
-    # parser.add_argument("-cf", "--cell_features", nargs="+",
-    #     default=['rna'], choices=["rna", "cnv"],
-    #     help="Cell line feature types.") # ['rna', cnv', 'rna_latent']
-    # parser.add_argument("-df", "--drug_features", nargs="+",
-    #     default=['dsc'], choices=["dsc", "fng"],
-    #     help="Drug feature types.") # ['dsc', 'fng', 'dsc_latent', 'fng_latent']
-    # parser.add_argument("-of", "--other_features", default=[],
-    #     choices=[],
-    #     help="Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).") # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
-
-    # # Select ML models
-    # parser.add_argument("-ml", "--ml_models",
-    #     default=["lgb_reg"], choices=["lgb_reg", "rf_reg"],
-    #     help="ML models to use for training.")
-
-    # # Select CV scheme
-    # parser.add_argument("-cvs", "--cv_method",
-    #     default="simple", choices=["simple", "group"],
-    #     help="Cross-val split method.")
-    # parser.add_argument("-cvf", "--cv_folds",
-    #     default=5, type=int,
-    #     help="Number cross-val folds.")
-
-    # # Take care of utliers
-    # # parser.add_argument("--outlier", default=False)
-
-    # # Define verbosity
-    # parser.add_argument("-v", "--verbose",
-    #     default="t", choices=["t", "f"], type=str_to_bool,
-    #     help="'t': verbose, 'f': not verbose.")
-
-    # # Define n_jobs
-    # parser.add_argument("--n_jobs", default=4, type=int)
-
-    # # parser.set_defaults(**defaults)  ## new
-
-    # # Parse the args
-    # args = parser.parse_args(args)
-    # # args = parser.parse_known_args(args)
-
-    run(args)
+    args = argparser.get_args(args=args, config_fname=config_fname)
+    pprint(vars(args))
+    df_csv_scores = run(args)
+    return df_csv_scores, OUTDIR
     
 
 if __name__ == '__main__':
@@ -704,9 +636,3 @@ if __name__ == '__main__':
     """
     # python -m pdb src/models/train_from_combined.py -te ccle gcsi -tr gcsi
     main(sys.argv[1:])
-    
-    # parser = argparse.ArgumentParser(description="Cell-drug sensitivity parser.")
-    # main(parser)
-
-    # args = vars(sys.argv[1:])
-    # main(args)

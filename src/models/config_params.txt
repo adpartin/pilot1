@@ -1,11 +1,13 @@
 [Global_Params]
-target_name = 'IC50'
+target_name = 'AUC'
 target_trasform = 'f'
-train_sources = 'ctrp'
-test_sources = ['ccle', 'ctrp', 'gcsi']
+train_sources = ['ccle']
+test_sources = ['ccle', 'gcsi']
+row_sample = 1000
+col_sample = None
 tissue_type = None
-cell_features = 'rna'
-drug_features = 'dsc'
+cell_features = ['rna']
+drug_features = ['dsc']
 other_features = []
 ml_models = 'lgb_reg'
 cv_method = 'simple'

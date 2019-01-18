@@ -1,18 +1,20 @@
 # Parsing priority: command-line > config-file > defualt params
-
 import argparse
 import configparser
+from collections import OrderedDict
 
 
 # Default (arg, value) pairs for argparse object
 dflt_args = {
     'target_name': 'AUC',
     'target_trasform': 'f',
-    'train_sources': 'ccle',
-    'test_sources': 'ccle',
+    'train_sources': ['ccle'],
+    'test_sources': ['ccle'],
+    'row_sample': None,
+    'col_sample': None,
     'tissue_type': None,
-    'cell_features': 'rna', 
-    'drug_features': 'dsc',
+    'cell_features': ['rna'], 
+    'drug_features': ['dsc'],
     'other_features': [] ,
     'ml_models': 'lgb_reg',
     'cv_method': 'simple',
@@ -28,17 +30,15 @@ def get_args(args, config_fname):
         args : args from command line.
         config_fname : config file name that contains (arg, value) pair. This will override the dflt_args.
     """
-    parser = get_cli_args(args)
-    config_params = read_config_file(file=config_fname)
+    parser = get_cli_args(args)  # get command line args
+    config_params = read_config_file(file=config_fname)  # get config file args
 
     dflt_args_new = override_dflt_with_config(
         dflt_args=dflt_args,
         config_params=config_params)
 
     parser.set_defaults(**dflt_args_new)
-    
     args = parser.parse_args(args)
-    # args, unk_args = parser.parse_known_args(args)
     return args
 
 
@@ -48,24 +48,30 @@ def get_cli_args(args=None):
     parser = argparse.ArgumentParser(description="Cell-drug sensitivity parser.")
 
     # Select target to predict
-    parser.add_argument("-t", "--target_name",
+    parser.add_argument('-t', '--target_name',
         # default="AUC",
-        choices=["AUC", "AUC1", "IC50"],
-        help="Column name of the target variable.") # target_name = 'AUC1'
-    parser.add_argument("-tt", "--target_trasform",
+        choices=['AUC', 'AUC1', 'IC50'],
+        help='Column name of the target variable.') # target_name = 'AUC1'
+    parser.add_argument('-tt', '--target_trasform',
         # default='f',
         choices=['t', 'f'], type=str_to_bool,
         help="'t': transform target, 'f': do not transform target.")
 
     # Select train and test (inference) sources
-    parser.add_argument("-tr", "--train_sources", nargs="+",
+    parser.add_argument('-tr', '--train_sources', nargs='+',
         # default=["ccle"],
-        choices=["ccle", "gcsi", "gdsc", "ctrp"],
-        help="Data sources to use for training.")
-    parser.add_argument("-te", "--test_sources", nargs="+",
+        choices=['ccle', 'gcsi', 'gdsc', 'ctrp'],
+        help='Data sources to use for training.')
+    parser.add_argument('-te', '--test_sources', nargs='+',
         # default=["ccle"],
-        choices=["ccle", "gcsi", "gdsc", "ctrp"],
-        help="Data sources to use for testing.")
+        choices=['ccle', 'gcsi', 'gdsc', 'ctrp'],
+        help='Data sources to use for testing.')
+
+    # Keep a subset of row/cols
+    parser.add_argument('--row_sample',
+        help='Sample a subset of rows (float in the range (0.0, 1.0], or int for the exact num of rows to keep).')
+    parser.add_argument('--col_sample',
+        help='Sample a subset of cols (float in the range (0.0, 1.0], or int for the exact num of rows to keep).')
 
     # Select tissue types
     parser.add_argument('-ts', '--tissue_type',
@@ -117,13 +123,6 @@ def get_cli_args(args=None):
         # default=4,
         type=int)
 
-    # Set deatuls from dict
-    # parser.set_defaults(**defaults)
-
-    # Parse the args
-    # args = parser.parse_args(args)
-    # args, unk_args = parser.parse_known_args(args)
-    # return args
     return parser
 
 
@@ -141,8 +140,8 @@ def read_config_file(file):
             if not param in fileparams:
                 fileparams[param] = eval(value)
 
-    print('\nConfig file params:')
-    print(fileparams)
+    # print('\nConfig file params:')
+    # print(fileparams)
     return fileparams
 
 
