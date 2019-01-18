@@ -8,7 +8,7 @@ import sys
 import argparse
 import train_from_combined
 
-src_sets = [
+cross_study_sets = [
     {'tr_src': ['ctrp'],
      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
 
@@ -24,12 +24,14 @@ src_sets = [
 
 # Single run
 idx = 2
-train_from_combined.main(['-tr', *src_sets[idx]['tr_src'],
-                          '-te', *src_sets[idx]['te_src']])
+train_from_combined.main(['-tr', *cross_study_sets[idx]['tr_src'],
+                          '-te', *cross_study_sets[idx]['te_src']])
 
 # Multiple runs
-# for i in range(len(src_sets)):
-#     train_from_combined.main(['-tr', src_sets[i]['tr_src'], '-te', *src_sets[i]['te_src']])
+for i in range(len(cross_study_sets)):
+    train_from_combined.main(['-tr', *cross_study_sets[i]['tr_src'],
+                              '-te', *cross_study_sets[i]['te_src']])
+
 
 # ================================================================================================
 # parser = argparse.ArgumentParser('Launcher of cross-study validation.')
