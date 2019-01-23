@@ -2,6 +2,7 @@ import os
 import logging
 import numpy as np
 import pandas as pd
+from collections import OrderedDict
 
 import matplotlib
 # matplotlib.use('TkAgg')
@@ -10,6 +11,8 @@ import matplotlib.pyplot as plt
 
 import seaborn as sns
 from scipy import stats
+
+import sklearn
 from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error, explained_variance_score
 
 DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
@@ -146,7 +149,8 @@ def plot_rf_fi(rf_model, figsize=(8, 5), plot_direction='h', columns=None, max_c
 
 
 def subsample(df, v, axis=0):
-    assert v > 0, f'sample must be >0; got {sample}'
+    """ Extract a random subset of rows or cols from df. """
+    assert v > 0, f'sample must be >0; got {v}'
     if v <= 1.0:
         df = df.sample(frac=v, axis=axis).reset_index(drop=True)
     else:
@@ -157,10 +161,38 @@ def subsample(df, v, axis=0):
 def cv_scores_to_df(scores, decimals=3, calc_stats=True):
     """ Convert a dict of cv scores into df and compute mean and std. """
     scores = pd.DataFrame(scores).T
+    scores.columns = ['f'+str(c) for c in scores.columns]
     if calc_stats:
-        scores['mean'] = scores.mean(axis=1)
-        scores['std'] = scores.std(axis=1)
+        scores.insert(loc=0, column='mean', value=scores.mean(axis=1))
+        scores.insert(loc=1, column='std', value=scores.std(axis=1))
+        # scores['mean'] = scores.mean(axis=1)
+        # scores['std'] = scores.std(axis=1)
     scores = scores.round(decimals=decimals)
+    scores = scores.reset_index().rename(columns={'index': 'metric'})
+    return scores
+
+
+def adj_r2_score(ydata, preds, x_size):
+    """ Calc adjusted r^2.
+    https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2
+    https://dziganto.github.io/data%20science/linear%20regression/machine%20learning/python/Linear-Regression-101-Metrics/
+    https://stats.stackexchange.com/questions/334004/can-r2-be-greater-than-1
+    """
+    r2 = r2_score(ydata, preds)
+    adj_r2 = 1 - (1 - r2) * (x_size[0] - 1)/(x_size[0] - x_size[1] - 1)
+    return adj_r2
+
+
+def calc_scores(model, xdata, ydata):
+    """ Create dict of scores. """
+    # TODO: replace `if` with `try`
+    preds = model.predict(xdata)
+    scores = OrderedDict()
+    scores['r2_score'] = sklearn.metrics.r2_score(ydata, preds)
+    scores['adj_r2_score'] = adj_r2_score(ydata, preds, x_size=xdata.shape)
+    scores['mean_abs_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
+    scores['median_abs_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
+    # scores['explained_variance_score'] = sklearn.metrics.explained_variance_score(ydata, preds)
     return scores
 
     
@@ -169,17 +201,10 @@ def print_scores(model, xdata, ydata, logger=None):
     model_r2_score = r2_score(ydata, preds)
     model_mean_abs_error = mean_absolute_error(ydata, preds)
     model_median_abs_error = median_absolute_error(ydata, preds)
-    model_explained_variance_score = explained_variance_score(ydata, preds)
     if logger is not None:
         logger.info(f'r2_score: {model_r2_score:.2f}')
-        logger.info(f'mean_absolute_error: {model_mean_abs_error:.2f}')
-        logger.info(f'median_absolute_error: {model_median_abs_error:.2f}')
-        logger.info(f'model_explained_variance_score: {model_explained_variance_score:.2f}')
-    else:
-        print(f'r2_score: {model_r2_score:.2f}')
-        print(f'mean_absolute_error: {model_mean_abs_error:.2f}')
-        print(f'median_absolute_error: {model_median_abs_error:.2f}')
-        print(f'model_explained_variance_score: {model_explained_variance_score:.2f}')
+        logger.info(f'mean_abs_error: {model_mean_abs_error:.2f}')
+        logger.info(f'median_abs_error: {model_median_abs_error:.2f}')
 
 
 def dump_preds(model, df_data, xdata, target_name, path, model_name=None):

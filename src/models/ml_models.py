@@ -9,8 +9,8 @@ import time
 import numpy as np
 import pandas as pd
 from collections import OrderedDict
+import sklearn
 from sklearn.externals import joblib
-from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error, explained_variance_score
 
 import matplotlib
 # matplotlib.use('TkAgg')
@@ -38,12 +38,13 @@ class BaseMLModel():
     """ A parent class with some general methods for children ML classes.
     The children classes are specific ML models such random forest regressor, lightgbm regressor, etc.
     """
-    def __adj_r_squared(self, ydata, preds):
+    def __adj_r2_score(self, ydata, preds):
         """ Calc adjusted r^2.
         https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2
         https://dziganto.github.io/data%20science/linear%20regression/machine%20learning/python/Linear-Regression-101-Metrics/
+        https://stats.stackexchange.com/questions/334004/can-r2-be-greater-than-1
         """
-        r2 = r2_score(ydata, preds)
+        r2 = sklearn.metrics.r2_score(ydata, preds)
         adj_r2 = 1 - (1 - r2) * (self.x_size[0] - 1)/(self.x_size[0] - self.x_size[1] - 1)
         return adj_r2
 
@@ -54,11 +55,11 @@ class BaseMLModel():
         if hasattr(self, 'model'):
             preds = self.model.predict(xdata)
             scores = OrderedDict()
-            scores['r2_score'] = r2_score(ydata, preds)
-            scores['adj_r2_score'] = self.__adj_r_squared(ydata, preds)
-            scores['mean_abs_error'] = mean_absolute_error(ydata, preds)
-            scores['median_abs_error'] = median_absolute_error(ydata, preds)
-            # scores['explained_variance_score'] = explained_variance_score(ydata, preds)
+            scores['r2_score'] = sklearn.metrics.r2_score(ydata, preds)
+            scores['adj_r2_score'] = self.__adj_r2_score(ydata, preds)
+            scores['mean_abs_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
+            scores['median_abs_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
+            # scores['explained_variance_score'] = sklearn.metrics.explained_variance_score(ydata, preds)
 
             self.scores = scores
             if to_print:
@@ -72,19 +73,11 @@ class BaseMLModel():
         # TODO: replace `if` with `try`
         if hasattr(self, 'scores'):
             scores = self.scores
-
             if self.logger is not None:
                 self.logger.info('r2_score: {:.2f}'.format(scores['r2_score']))
                 self.logger.info('adj_r2_score: {:.2f}'.format(scores['adj_r2_score']))
-                self.logger.info('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
-                self.logger.info('median_absolute_error: {:.2f}'.format(scores['median_abs_error']))
-                # self.logger.info('explained_variance_score: {:.2f}'.format(scores['explained_variance_score']))
-            else:
-                print('r2_score: {:.2f}'.format(scores['r2_score']))
-                print('adj_r2_score: {:.2f}'.format(scores['adj_r2_score']))
-                print('mean_absolute_error: {:.2f}'.format(scores['mean_abs_error']))
-                print('median_absolute_error: {:.2f}'.format(scores['median_abs_error']))
-                # print('explained_variance_score: {:.2f}'.format(scores['explained_variance_score']))
+                self.logger.info('mean_abs_error: {:.2f}'.format(scores['mean_abs_error']))
+                self.logger.info('median_abs_error: {:.2f}'.format(scores['median_abs_error']))
 
 
     def dump_preds(self, df_data, xdata, target_name, outpath=None):
@@ -151,7 +144,11 @@ class RF_REGRESSOR(BaseMLModel):
             verbose=verbose, random_state=self.random_state, n_jobs=self.n_jobs)
 
 
-    def fit(self, X, y):
+    def fit(self, X, y, eval_set=None):
+        """ 
+        Args:
+            eval_set : Always ignored, exists for compatibility.
+        """
         self.X = X
         self.y = y
         

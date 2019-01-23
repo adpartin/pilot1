@@ -6,6 +6,7 @@ and runs predictions (inference) on a specified set of other sources.
 # python -m pdb src/models/launch_cross_study_val.py
 import os
 import sys
+import time
 import argparse
 from collections import OrderedDict
 import numpy as np
@@ -15,6 +16,8 @@ import train_from_combined
 
 
 def main(args):
+
+    t0 = time.time()
 
     # Full set
     cross_study_sets = [
@@ -43,16 +46,19 @@ def main(args):
 
     # Single run
     # idx = 2
-    # train_from_combined.main(['-tr', *cross_study_sets[idx]['tr_src'],
-    #                           '-te', *cross_study_sets[idx]['te_src']])
+    # df_csv_scores, outdir = train_from_combined.main(
+    #     ['-tr', *cross_study_sets[idx]['tr_src'],
+    #     '-te', *cross_study_sets[idx]['te_src'],
+    #     *args])
+
 
     # Multiple runs
     dfs = []
-    for i in range(len(cross_study_sets)):
-        print('{} Run {} {}'.format('-'*30, i+1, '-'*30))
+    for run_id in range(len(cross_study_sets)):
+        print('{} Run {} {}'.format('-'*30, run_id+1, '-'*30))
         df_csv_scores, outdir = train_from_combined.main(
-            ['-tr', *cross_study_sets[i]['tr_src'],
-             '-te', *cross_study_sets[i]['te_src'],
+            ['-tr', *cross_study_sets[run_id]['tr_src'],
+             '-te', *cross_study_sets[run_id]['te_src'],
              *args])   
         dfs.append(df_csv_scores)
 
@@ -66,9 +72,12 @@ def main(args):
         # Sort rows and cols
         csv = csv.sort_values('train_src')
         csv = csv[[csv.columns[0]] + sorted(csv.columns[1:])]
-        
+
         # save table
         csv.to_csv(os.path.join(outdir, f'cross-study-val-{m}.csv'), index=False)
 
+    print('\n\nnTotal runtime {:.3f}'.format((time.time()-t0)/60))
+
 
 main(sys.argv[1:])
+

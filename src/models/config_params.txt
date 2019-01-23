@@ -1,9 +1,9 @@
 [Global_Params]
 target_name = 'AUC'
 target_trasform = 'f'
-train_sources = ['ccle']
-test_sources = ['ccle', 'gcsi']
-row_sample = 1000
+train_sources = ['gcsi']
+test_sources = ['gcsi']
+row_sample = None
 col_sample = None
 tissue_type = None
 cell_features = ['rna']

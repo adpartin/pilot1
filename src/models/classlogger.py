@@ -41,7 +41,7 @@ class Logger():
         #     log.addHandler(fh)
         #     log.addHandler(sh)
 
-        self.logger.info('{}'.format('-'*70))
+        self.logger.info('{}'.format('-'*90))
         #return logger
 
 

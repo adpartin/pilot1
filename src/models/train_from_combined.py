@@ -67,8 +67,8 @@ When running on Mac, lightgbm gives an error:
 - This has been solved by installing "nomkl":  conda install nomkl
 - What is nomkl: https://docs.continuum.io/mkl-optimizations/
 """
-from __future__ import division
 from __future__ import print_function
+from __future__ import division
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -86,7 +86,6 @@ import pandas as pd
 
 import argparse
 import configparser
-# import configargparse
 
 import matplotlib
 # matplotlib.use('TkAgg')
@@ -96,8 +95,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from scipy import stats
+import sklearn
 from sklearn.preprocessing import Imputer, OneHotEncoder, OrdinalEncoder
 from sklearn.model_selection import learning_curve
+from sklearn.model_selection import cross_val_score, cross_validate, learning_curve
+from sklearn.model_selection import ShuffleSplit, GroupShuffleSplit, KFold, GroupKFold
 
 # Utils
 # file_path = os.getcwd()
@@ -105,12 +107,14 @@ from sklearn.model_selection import learning_curve
 # os.chdir(file_path)
 
 file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
-##utils_path = os.path.abspath(os.path.join(file_path, 'utils'))
-##sys.path.append(utils_path)
+# utils_path = os.path.abspath(os.path.join(file_path, 'utils'))
+# sys.path.append(utils_path)
 import utils
 import utils_tidy
 import argparser
 import classlogger
+import lrn_curve
+from cvsplitter import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
 
 DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
@@ -129,14 +133,17 @@ fea_prfx_dict = {'rna': 'cell_rna.',
                  'clb': 'cell_lbl.',
                  'dlb': 'drug_lbl.'}
 
+np.set_printoptions(precision=3)
+
 
 def run(args):
+    target_name = args.target_name
+    target_trasform = args.target_trasform    
     train_sources = args.train_sources
     test_sources = args.test_sources
     row_sample = args.row_sample
     col_sample = args.col_sample
-    target_name = args.target_name
-    target_trasform = args.target_trasform
+    tissue_type = args.tissue_type
     cell_features = args.cell_features
     drug_features = args.drug_features
     other_features = args.other_features
@@ -187,12 +194,18 @@ def run(args):
     data.columns = [regex.sub('_', c) if any(x in str(c) for x in set(('[', ']', '<'))) else c for c in data.columns.values]
 
 
+    if tissue_type is not None:
+        data = data[data[''].isin([tissue_type])].reset_index(drop=True)
+
+
     # Subsample
     if row_sample:
+        row_sample = eval(row_sample)
         data = utils.subsample(df=data, v=row_sample, axis=0)
         print('data.shape', data.shape)
 
     if col_sample:
+        col_sample = eval(col_sample)
         data = utils.subsample(df=data, v=col_sample, axis=1)
         print('data.shape', data.shape)
 
@@ -300,101 +313,92 @@ def run(args):
     #       Initialize ML model
     # ========================================================================
     from ml_models import LGBM_REGRESSOR, RF_REGRESSOR
-    def init_model(model_name, logger):
+    def init_model(model_name, logger, verbose=False):
         if 'lgb_reg' in model_name:
-            logger.info('ML Model: lgb regressor')
-            model = LGBM_REGRESSOR(random_state=SEED, logger=logger)
+            if verbose:
+                logger.info('ML Model: lgb regressor')
+            model = LGBM_REGRESSOR(n_jobs=n_jobs, random_state=SEED, logger=logger)
             fit_params = {'verbose': False}
         elif 'rf_reg' in model_name:
-            logger.info('ML Model: rf regressor')
-            model = RF_REGRESSOR(random_state=SEED, logger=logger)
-            fit_params = None
+            if verbose:
+                logger.info('ML Model: rf regressor')
+            model = RF_REGRESSOR(n_jobs=4, random_state=SEED, logger=logger)
+            fit_params = {'verbose': False, 'n_jobs': n_jobs, 'random_state': SEED}
         return model, fit_params
 
 
     # ========================================================================
-    #       Run CV validation (my implementation)
-    # ========================================================================
-    # lg.logger.info('\n=====================================================')
-    # lg.logger.info(f'Run CV validation (my implementation) ...')
-    # lg.logger.info('=====================================================')
-    from split_tr_vl import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
-    # from ml_models import LGBM_REGRESSOR, RF_REGRESSOR
-
-
-    # # Split tr/vl data
-    # if cv_method=='simple':
-    #     splitter = SimpleSplit(n_splits=cv_folds, random_state=SEED)
-    #     splitter.split(X=data)
-    # elif cv_method=='group':
-    #     splitter = GroupSplit(n_splits=cv_folds, random_state=SEED)
-    #     splitter.split(X=data, groups=data['CELL'])
-    # elif cv_method=='stratify':
-    #     pass
-    # else:
-    #     raise ValueError('This cv_method ({}) is not supported'.format(cv_method))
-
-
-    # # Run CV training
-    # lg.logger.info(f'\nCV splitting method: {cv_method}')
-    # tr_scores = []
-    # vl_scores = []
-    # for i in range(splitter.n_splits):
-    #     lg.logger.info(f'\nFold {i+1}/{splitter.n_splits}')
-    #     tr_idx = splitter.tr_cv_idx[i]
-    #     vl_idx = splitter.vl_cv_idx[i]
-    #     tr_data = data.iloc[tr_idx, :]
-    #     vl_data = data.iloc[vl_idx, :]
-
-    #     # print(tr_idx[:5])
-    #     # print(vl_idx[:5])
-
-    #     # tr_cells = set(tr_data['CELL'].values)
-    #     # vl_cells = set(vl_data['CELL'].values)
-    #     # print('total cell intersections btw tr and vl: ', len(tr_cells.intersection(vl_cells)))
-    #     # print('a few intersections : ', list(tr_cells.intersection(vl_cells))[:3])
-
-    #     xtr, _ = utils_tidy.split_features_and_other_cols(tr_data, fea_prfx_dict=fea_prfx_dict)
-    #     xvl, _ = utils_tidy.split_features_and_other_cols(vl_data, fea_prfx_dict=fea_prfx_dict)
-
-    #     # utils_tidy.print_feature_shapes(df=xtr, logger=lg.logger)
-    #     # utils_tidy.print_feature_shapes(df=xvl, logger=lg.logger)
-
-    #     ytr = utils_tidy.extract_target(data=tr_data, target_name=target_name)
-    #     yvl = utils_tidy.extract_target(data=vl_data, target_name=target_name)
-
-    #     title = f'{target_name}; split {str(i)}'
-    #     plot_ytr_yvl_dist(ytr, yvl, title=title, outpath=os.path.join(run_outdir, title+'.png'))
-
-    #     # Train model
-    #     lgb_reg = LGBM_Regressor(target_name=target_name, random_state=SEED, logger=lg.logger)
-    #     lgb_reg.fit(xtr, ytr, eval_set=[(xtr, ytr), (xvl, yvl)])
-
-    #     # Calc and save scores
-    #     tr_scores.append(lgb_reg.calc_scores(xdata=xtr, ydata=ytr, to_print=False))
-    #     vl_scores.append(lgb_reg.calc_scores(xdata=xvl, ydata=yvl, to_print=False))
-
-
-    # # Summarize cv scores
-    # cv_tr_scores = utils.cv_scores_to_df(tr_scores)
-    # cv_vl_scores = utils.cv_scores_to_df(vl_scores)
-    # print('\ntr scores\n{}'.format(cv_tr_scores))
-    # print('\nvl scores\n{}'.format(cv_vl_scores))
-    # cv_tr_scores.to_csv(os.path.join(run_outdir, 'cv_tr_scores.csv'))
-    # cv_vl_scores.to_csv(os.path.join(run_outdir, 'cv_vl_scores.csv'))
-
-
-
-    # ========================================================================
-    #       Automatic CV runs
+    #       Run CV validation
     # ========================================================================
     lg.logger.info('\n{}'.format('='*50))
-    lg.logger.info('Automatic CV runs ...')
+    lg.logger.info('Run CV training ...')
     lg.logger.info('='*50)
-    # https://scikit-learn.org/stable/modules/cross_validation.html
-    from sklearn.model_selection import cross_val_score, cross_validate, learning_curve
-    from sklearn.model_selection import ShuffleSplit, GroupShuffleSplit, KFold, GroupKFold
-    from sklearn.ensemble import RandomForestRegressor
+
+    # ------------
+    # My CV method
+    # ------------
+    # from cvrun import my_cv_run
+    # model, _ = init_model(model_name, logger=lg.logger)
+    # tr_cv_scores, vl_cv_scores = my_cv_run(
+    #     data=data,
+    #     target_name=target_name,
+    #     model=model.model,
+    #     fea_prfx_dict=fea_prfx_dict,
+    #     cv_method=cv_method, cv_folds=cv_folds,
+    #     logger=lg.logger, verbose=True, random_state=SEED, outdir=run_outdir)
+
+
+    # ----------------------------
+    # sklearn CV method - method 1
+    # ----------------------------
+    # Split tr/vl data
+    if cv_method=='simple':
+        cv = KFold(n_splits=cv_folds, shuffle=False, random_state=SEED)
+        groups = None
+    elif cv_method=='group':
+        cv = GroupKFold(n_splits=cv_folds)
+        groups = data['CELL']
+    elif cv_method=='stratify':
+        pass
+    else:
+        raise ValueError(f'This cv_method ({cv_method}) is not supported')
+
+    # Get the data
+    xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+    ydata = utils_tidy.extract_target(data=data, target_name=target_name)
+
+    model, fit_params = init_model(model_name, logger=lg.logger)
+    scores = cross_validate(
+        estimator=sklearn.base.clone(model.model),
+        X=xdata, y=ydata,
+        scoring=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error'],
+        cv=cv, groups=groups,
+        n_jobs=n_jobs, fit_params=fit_params)
+    scores.pop('fit_time', None)
+    scores.pop('train_time', None)
+    scores.pop('score_time', None)
+    scores = utils.cv_scores_to_df(scores, decimals=3, calc_stats=True)
+    lg.logger.info(f'scores\n{scores}')
+
+
+    # ----------------------------
+    # sklearn CV method - method 2
+    # ----------------------------
+    # # https://scikit-learn.org/stable/modules/model_evaluation.html#scoring-parameter
+    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=lg.logger)
+    # scores = cross_val_score(estimator=lgb_reg.model, X=xdata, y=ydata,
+    #                          scoring='r2', cv=cv, n_jobs=n_jobs,
+    #                          fit_params={'verbose': False, 'early_stopping_rounds': 10})    
+    # lg.logger.info(scores)
+
+
+
+    # ========================================================================
+    #       Generate learning curves
+    # ========================================================================
+    lg.logger.info('\n{}'.format('='*50))
+    lg.logger.info('Generate learning curves ...')
+    lg.logger.info('='*50)
 
     # Prepare data
     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
@@ -403,58 +407,96 @@ def run(args):
 
     # Split tr/vl data
     if cv_method=='simple':
-        cv = KFold(n_splits=cv_folds, random_state=SEED)
+        cv = KFold(n_splits=cv_folds, shuffle=False, random_state=SEED)
+        groups = None
     elif cv_method=='group':
-        cv = GroupKFold(n_splits=cv_folds, random_state=SEED)
+        cv = GroupKFold(n_splits=cv_folds)
+        groups = data['CELL']
     elif cv_method=='stratify':
         pass
     else:
         raise ValueError('This cv_method ({}) is not supported'.format(cv_method))
 
 
-    # Run CV estimator
-    # https://scikit-learn.org/stable/modules/model_evaluation.html#scoring-parameter
-    # lg.logger.info("\nStart cross_val_score ...")
-    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=lg.logger)
-    # t0 = time.time()
-    # scores = cross_val_score(estimator=lgb_reg.model, X=xdata, y=ydata,
-    #                          scoring='r2', cv=cv, n_jobs=n_jobs,
-    #                          fit_params={'verbose': False, 'early_stopping_rounds': 10})    
-    # lg.logger.info('Run-time: {:.3f} mins'.format((time.time()-t0)/60))
-    # lg.logger.info(scores)
+    # -----------------------------------------------
+    # Generate learning curve - my method
+    # (*) ...
+    # -----------------------------------------------
+    # from cvrun import my_cv_run
+    # df_tr = []
+    # df_vl = []
+    # lr_curve_ticks = 5
+    # data_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
+    # data_sizes = [int(n) for n in data.shape[0]*data_sizes_frac]
+    
+    # model, _ = init_model(model_name, logger=lg.logger)
+    # for d_size in data_sizes:
+    #     lg.logger.info(f'Data size: {d_size}')
+    #     data_sample = data.sample(n=d_size)
+
+    #     tr_cv_scores, vl_cv_scores = my_cv_run(
+    #         data=data_sample,
+    #         target_name=target_name,
+    #         fea_prfx_dict=fea_prfx_dict,
+    #         model=model.model, #model_name=model_name,
+    #         cv_method=cv_method, cv_folds=cv_folds,
+    #         logger=lg.logger, random_state=SEED, outdir=run_outdir)
+
+    #     # Add col that indicates d_size
+    #     tr_cv_scores.insert(loc=1, column='data_size', value=data_sample.shape[0])
+    #     vl_cv_scores.insert(loc=1, column='data_size', value=data_sample.shape[0])
+        
+    #     # Append results to master dfs
+    #     df_tr.append(tr_cv_scores)
+    #     df_vl.append(vl_cv_scores)
+
+    # # Concat the results for all the data_sizes
+    # df_tr = pd.concat(df_tr, axis=0)
+    # df_vl = pd.concat(df_vl, axis=0)
+
+    # lrn_curve.plt_learning_curve_multi_metric(df_tr=df_tr, df_vl=df_vl,
+    #                                           cv_folds=cv_folds, target_name=target_name,
+    #                                           outdir=run_outdir)
 
 
-    lg.logger.info("\nStart cross_validate ...")
-    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=lg.logger)
-    model, fit_params = init_model(model_name, lg.logger)
-    t0 = time.time()
-    score_metric = ['r2', 'neg_mean_absolute_error']
-    scores = cross_validate(
-        estimator=model.model, X=xdata, y=ydata,
-        scoring=score_metric, cv=cv, n_jobs=n_jobs,
-        fit_params=fit_params)
-    lg.logger.info('Run-time: {:.3f} mins'.format((time.time()-t0)/60))
-    for k, v in scores.items():
-        lg.logger.info(f'{k}: {v}')
+    # -----------------------------------------------
+    # Generate learning curve - semi automatic method
+    # (*) uses cross_validate from sklearn.
+    # -----------------------------------------------
+    # Generate learning curves
+    model, fit_params = init_model(model_name='lgb_reg', logger=lg.logger)
+    lrn_curve.my_learning_curve(
+        estimator=model.model,
+        X=xdata, Y=ydata,  # data
+        target_name=target_name,
+        fit_params=fit_params,
+        lr_curve_ticks=5, data_sizes_frac=None,
+        metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error'],
+        cv_method=cv_method, cv_folds=cv_folds, groups=None,
+        n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
 
 
-    lg.logger.info("\nStart learning_curve ...")
-    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=lg.logger)
+    # -------------------------------------------------
+    # Generate learning curve - complete sklearn method
+    # (*) can't generate multiple metrics.
+    # -------------------------------------------------
+    lg.logger.info("\nStart sklearn.model_selection.learning_curve ...")
     model, _ = init_model(model_name, lg.logger)
+    metric_name = 'r2' # 'neg_mean_absolute_error', 'neg_median_absolute_error'
+    lr_curve_ticks = 5
+    train_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
     t0 = time.time()
-    score_metric = 'r2'
     rslt = learning_curve(estimator=model.model, X=xdata, y=ydata,
-                          train_sizes=np.linspace(0.1, 1.0, 5),
-                          scoring=score_metric, cv=cv, n_jobs=n_jobs,
-                          exploit_incremental_learning=False, random_state=SEED)
+                          train_sizes=train_sizes_frac, cv=cv, groups=groups,
+                          scoring=metric_name,
+                          n_jobs=n_jobs, exploit_incremental_learning=False,
+                          random_state=SEED, verbose=1, shuffle=False)
     lg.logger.info('Run-time: {:.3f} mins'.format((time.time()-t0)/60))
     
+    lrn_curve.plt_learning_curve(rslt=rslt, metric_name=metric_name,
+        title='Learning curve (target: {})'.format(target_name),
+        path=os.path.join(run_outdir, 'auto_learning_curve_' + metric_name + '.png'))
 
-    from size_vs_score import plot_learning_curve
-    plot_learning_curve(rslt=rslt, score_metric=score_metric,
-                        title='Training set size vs score (target: {})'.format(target_name),
-                        path=os.path.join(run_outdir, 'scores_vs_train_size.png'))
-    
 
 
     # ========================================================================
@@ -463,34 +505,27 @@ def run(args):
     lg.logger.info('\n{}'.format('='*50))
     lg.logger.info(f'Train final model (use entire dataset) ... {train_sources}')
     lg.logger.info('='*50)
+
     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
     utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
 
     # Train model
-    # lgb_reg_final = LGBM_REGRESSOR(random_state=SEED, logger=lg.logger)
     model_final, _ = init_model(model_name, lg.logger)
-    # lgb_reg_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])
     if 'lgb_reg' in model_name:
         model_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])
     else:
         model_final.fit(xdata, ydata)
 
-    # Compute scores
-    # scores = lgb_reg_final.calc_scores(xdata=xdata, ydata=ydata, to_print=True)
-    scores = model_final.calc_scores(xdata=xdata, ydata=ydata, to_print=True)
-    # scores = utils.cv_scores_to_df([scores])
-    # lgb_reg_final.plot_fi(outdir=run_outdir)
+    # # Compute scores
+    # scores = model_final.calc_scores(xdata=xdata, ydata=ydata, to_print=True)
 
-    # Dump preds
-    # lgb_reg_final.dump_preds(df_data=data, xdata=xdata, target_name=target_name,
-    #                          outpath=os.path.join(run_outdir, 'preds.csv'))
-    model_final.dump_preds(df_data=data, xdata=xdata, target_name=target_name,
-                           outpath=os.path.join(run_outdir, 'preds.csv'))
+    # # Dump preds
+    # model_final.dump_preds(df_data=data, xdata=xdata, target_name=target_name,
+    #                        outpath=os.path.join(run_outdir, 'preds.csv'))
 
-    # Save model
-    # lgb_reg_final.save_model(outdir=run_outdir)
-    model_final.save_model(outdir=run_outdir)
+    # # Save model
+    # model_final.save_model(outdir=run_outdir)
 
 
 
@@ -528,18 +563,14 @@ def run(args):
 
         # Compute scores
         lg.logger.info('\nscores:')
-        # scores = lgb_reg_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
         scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
         scores = utils.cv_scores_to_df([scores])
 
         # Dump preds
-        # lgb_reg_final.dump_preds(df_data=te_src_data, xdata=xte, target_name=target_name,
-        #                          outpath=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))
         model_final.dump_preds(df_data=te_src_data, xdata=xte, target_name=target_name,
                                outpath=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))                 
 
         # Calc and save scores
-        # csv_scores.append(lgb_reg_final.calc_scores(xdata=xte, ydata=yte, to_print=False))
         csv_scores.append(model_final.calc_scores(xdata=xte, ydata=yte, to_print=False))
 
 
@@ -618,7 +649,7 @@ def main(args):
     args = argparser.get_args(args=args, config_fname=config_fname)
     pprint(vars(args))
     df_csv_scores = run(args)
-    return df_csv_scores, OUTDIR
+    return df_csv_scores, OUTDIR  # TODO: instead of OUTDIR, return all globals(??)
     
 
 if __name__ == '__main__':
