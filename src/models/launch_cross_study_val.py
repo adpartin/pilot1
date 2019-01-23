@@ -7,12 +7,15 @@ and runs predictions (inference) on a specified set of other sources.
 import os
 import sys
 import time
+import datetime
 import argparse
 from collections import OrderedDict
 import numpy as np
 import pandas as pd
 
 import train_from_combined
+
+file_path = os.path.dirname(os.path.realpath(__file__))
 
 
 def main(args):

@@ -85,7 +85,7 @@ prfx_dtypes = {'rna': np.float32,
 t = datetime.datetime.now()
 t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
 t = ''.join([str(i) for i in t])
-logfilename = os.path.join(OUTDIR, 'tidy_data_'+t+'.log')
+logfilename = os.path.join(OUTDIR, 'tidy_data_' + t + '.log')
 logger = utils.setup_logger(logfilename=logfilename)
 
 logger.info(f'File path: {file_path}')

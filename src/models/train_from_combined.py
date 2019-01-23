@@ -331,7 +331,7 @@ def run(args):
     #       Run CV validation
     # ========================================================================
     lg.logger.info('\n{}'.format('='*50))
-    lg.logger.info('Run CV training ...')
+    lg.logger.info('CV training ...')
     lg.logger.info('='*50)
 
     # ------------
@@ -368,12 +368,14 @@ def run(args):
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
 
     model, fit_params = init_model(model_name, logger=lg.logger)
+    t0 = time.time()
     scores = cross_validate(
         estimator=sklearn.base.clone(model.model),
         X=xdata, y=ydata,
         scoring=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error'],
         cv=cv, groups=groups,
         n_jobs=n_jobs, fit_params=fit_params)
+    lg.logger.info('Runtime: {:.3f}'.format((time.time()-t0)/60))
     scores.pop('fit_time', None)
     scores.pop('train_time', None)
     scores.pop('score_time', None)
@@ -397,7 +399,7 @@ def run(args):
     #       Generate learning curves
     # ========================================================================
     lg.logger.info('\n{}'.format('='*50))
-    lg.logger.info('Generate learning curves ...')
+    lg.logger.info('Learning curves ...')
     lg.logger.info('='*50)
 
     # Prepare data
@@ -464,7 +466,9 @@ def run(args):
     # (*) uses cross_validate from sklearn.
     # -----------------------------------------------
     # Generate learning curves
+    lg.logger.info('\nStart learning curve ... (my method)')
     model, fit_params = init_model(model_name='lgb_reg', logger=lg.logger)
+    t0 = time.time()
     lrn_curve.my_learning_curve(
         estimator=model.model,
         X=xdata, Y=ydata,  # data
@@ -474,6 +478,7 @@ def run(args):
         metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error'],
         cv_method=cv_method, cv_folds=cv_folds, groups=None,
         n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
+    lg.logger.info('Runtime: {:.3f}'.format((time.time()-t0)/60))
 
 
     # -------------------------------------------------
