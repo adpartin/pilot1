@@ -103,17 +103,19 @@ class BaseMLModel():
 
             preds = self.model.predict(xdata)
             abs_error = abs(df_data[target_name] - preds)
-            squared_error = (df_data[target_name] - preds)**2
+            #squared_error = (df_data[target_name] - preds)**2
             df2 = pd.DataFrame({target_name+'_pred': self.model.predict(xdata),
-                                target_name+'_error': abs_error,
-                                target_name+'_sq_error': squared_error})
+                                target_name+'_abs_err': abs_error,
+                                #target_name+'_sq_err': squared_error
+                                })
+            df2 = df2.round(5)
 
             df_preds = pd.concat([df1, df2], axis=1).reset_index(drop=True)
 
             if outpath is not None:
                 df_preds.to_csv(outpath)
             else:
-                df_preds.to_csv('preds.csv')
+                df_preds.to_csv('preds.csv', index=False)
 
 
 

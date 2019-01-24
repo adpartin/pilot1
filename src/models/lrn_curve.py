@@ -112,7 +112,6 @@ def my_learning_curve(estimator,
         target_name=target_name, outdir=outdir)
 
 
-
 def plt_learning_curve_multi_metric(df_tr, df_vl, cv_folds, target_name, outdir):
     """
     Args:

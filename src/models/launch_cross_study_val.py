@@ -23,28 +23,28 @@ def main(args):
     t0 = time.time()
 
     # Full set
-    cross_study_sets = [
-        {'tr_src': ['ctrp'],
-        'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
+    # cross_study_sets = [
+    #     {'tr_src': ['gcsi'],
+    #     'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
 
-        {'tr_src': ['gdsc'],
-        'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
+    #     {'tr_src': ['ccle'],
+    #     'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
 
-        {'tr_src': ['ccle'],
-        'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
+    #     {'tr_src': ['gdsc'],
+    #     'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
 
-        {'tr_src': ['gcsi'],
-        'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
-    ]
+    #     {'tr_src': ['ctrp'],
+    #     'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
+    # ]
 
     # Smaller set
-    # cross_study_sets = [
-    #     {'tr_src': ['ccle'],
-    #      'te_src': ['ccle', 'gcsi']},
+    cross_study_sets = [
+        {'tr_src': ['gcsi'],
+         'te_src': ['ccle', 'gcsi', 'ctrp']},
 
-    #     {'tr_src': ['gcsi'],
-    #      'te_src': ['ccle', 'gcsi']},
-    # ]
+        {'tr_src': ['ccle'],
+         'te_src': ['ccle', 'gcsi']},
+    ]
 
 
     # Single run
@@ -58,26 +58,35 @@ def main(args):
     # Multiple runs
     dfs = []
     for run_id in range(len(cross_study_sets)):
-        print('{} Run {} {}'.format('-'*30, run_id+1, '-'*30))
-        df_csv_scores, outdir = train_from_combined.main(
+        print('{} Run {} {}'.format('-'*40, run_id+1, '-'*40))
+        csv_scores_all, outdir = train_from_combined.main(
             ['-tr', *cross_study_sets[run_id]['tr_src'],
              '-te', *cross_study_sets[run_id]['te_src'],
              *args])   
-        dfs.append(df_csv_scores)
+        dfs.append(csv_scores_all)
+
+
+    # Create folder to store results
+    csv_outdir = os.path.join(outdir, 'cross_val_rslts')
+    os.makedirs(csv_outdir, exist_ok=True)
 
 
     # Create csv table for each available metric 
-    df = pd.concat(dfs, axis=0)
+    df = pd.concat(dfs, axis=0, sort=False)
     for m in df['metric'].unique():
         csv = df[df['metric']==m].reset_index(drop=True)
         csv.drop(columns=['metric'], inplace=True)
 
         # Sort rows and cols
+        tr_src = csv['train_src']
+        csv.drop(columns='train_src', inplace=True)
+        csv = csv[sorted(csv.columns)]
+        csv = pd.concat([tr_src, csv], axis=1, sort=False)
         csv = csv.sort_values('train_src')
-        csv = csv[[csv.columns[0]] + sorted(csv.columns[1:])]
 
         # save table
-        csv.to_csv(os.path.join(outdir, f'cross-study-val-{m}.csv'), index=False)
+        csv = csv.round(2)
+        csv.to_csv(os.path.join(csv_outdir, f'cross-study-val-{m}.csv'), index=False)
 
     print('\n\nnTotal runtime {:.3f}'.format((time.time()-t0)/60))
 

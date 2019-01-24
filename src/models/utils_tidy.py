@@ -20,6 +20,7 @@ DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
 
 def split_features_and_other_cols(data, fea_prfx_dict):
     """ Extract two dfs from `data`: fea_data and other_data.
+    TODO: this script is also in src/data/utils_data (put in a single place)
     Args:
         data : tidy dataset (df contains multiple cols including features, meta, and target)
     Returns:
@@ -66,6 +67,7 @@ def extract_subset_features(data, feature_list, fea_prfx_dict):
 
 def impute_values(data, fea_prfx_dict, logger=None):
     """ Impute missing values.
+    TODO: this script is also in src/data/utils_data (put in a single place)
     Args:
         data : tidy dataset (df contains multiple cols including features, meta, and target)
         fea_prfx_dict : dict of feature prefixes, e.g.:
@@ -76,23 +78,29 @@ def impute_values(data, fea_prfx_dict, logger=None):
     - try regressor (impute continuous features) or classifier (impute discrete features)
     """
     from sklearn.impute import SimpleImputer, MissingIndicator
+    data = data.copy()
+    logger.info('\nImpute missing features ... ({})'.format(list(fea_prfx_dict.keys())))
 
     # Extract df that contains only features (no meta or response)
     fea_data, other_data = split_features_and_other_cols(data=data, fea_prfx_dict=fea_prfx_dict)
-    colnames = fea_data.columns
+    tot_miss_feas = sum(fea_data.isna().sum(axis=0) > 0)
+    logger.info('Total features with missing values (before imputation): {}'.format(tot_miss_feas))
 
-    # Impute missing values
-    imputer = SimpleImputer(missing_values=np.nan, strategy='mean', verbose=1)
-    fea_data_imputed = imputer.fit_transform(fea_data)
-    fea_data_imputed = pd.DataFrame(fea_data_imputed, columns=colnames)
+    if tot_miss_feas > 0:
+        colnames = fea_data.columns
 
-    if logger is not None:
-        logger.info('\nImpute missing features ...')
-        logger.info('Total features with missing values: {}'.format(sum(fea_data.isna().sum() > 1)))
-        logger.info('Total features with missing values (after impute): {}'.format(sum(fea_data_imputed.isna().sum() > 1)))
+        # Impute missing values
+        imputer = SimpleImputer(missing_values=np.nan, strategy='mean', verbose=1)
+        dtypes_dict = fea_data.dtypes # keep the original dtypes because fit_transform casts to np.float64
+        fea_data_imputed = imputer.fit_transform(fea_data)
+        fea_data_imputed = pd.DataFrame(fea_data_imputed, columns=colnames)
+        fea_data_imputed = fea_data_imputed.astype(dtypes_dict) # cast back to the original data type
 
-    # Concat features (xdata_imputed) and other cols (other_data)
-    data = pd.concat([other_data, fea_data_imputed], axis=1)
+        logger.info('Total features with missing values (after impute): {}'.format(sum(fea_data_imputed.isna().sum(axis=0) > 0)))
+
+        # Concat features (xdata_imputed) and other cols (other_data)
+        data = pd.concat([other_data, fea_data_imputed], axis=1)
+        
     return data
 
 

@@ -96,7 +96,6 @@ import seaborn as sns
 
 from scipy import stats
 import sklearn
-from sklearn.preprocessing import Imputer, OneHotEncoder, OrdinalEncoder
 from sklearn.model_selection import learning_curve
 from sklearn.model_selection import cross_val_score, cross_validate, learning_curve
 from sklearn.model_selection import ShuffleSplit, GroupShuffleSplit, KFold, GroupKFold
@@ -183,7 +182,7 @@ def run(args):
     lg.logger.info(f'\nLoad tidy data ... {datapath}')
     data = pd.read_parquet(datapath, engine='auto', columns=None)
     lg.logger.info(f'data.shape {data.shape}')
-    lg.logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
+    lg.logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(data)/1e9))
     # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
 
 
@@ -214,7 +213,7 @@ def run(args):
     lg.logger.info('\nExtract test sources ... {}'.format(test_sources))
     te_data = data[data['SOURCE'].isin(test_sources)].reset_index(drop=True)
     lg.logger.info(f'te_data.shape {te_data.shape}')
-    lg.logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(te_data)/1e9))
+    lg.logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(te_data)/1e9))
     lg.logger.info(te_data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
 
 
@@ -222,7 +221,7 @@ def run(args):
     lg.logger.info('\nExtract train sources ... {}'.format(train_sources))
     data = data[data['SOURCE'].isin(train_sources)].reset_index(drop=True)
     lg.logger.info(f'data.shape {data.shape}')
-    lg.logger.info('data memory usage (GB): {:.3f}'.format(sys.getsizeof(data)/1e9))
+    lg.logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(data)/1e9))
     lg.logger.info(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
 
 
@@ -305,7 +304,7 @@ def run(args):
     #       Keep a set of training features and impute missing values
     # ========================================================================
     data = utils_tidy.extract_subset_features(data=data, feature_list=feature_list, fea_prfx_dict=fea_prfx_dict)
-    data = utils_tidy.impute_values(data=data, fea_prfx_dict=fea_prfx_dict, logger=lg.logger)
+    # data = utils_tidy.impute_values(data=data, fea_prfx_dict=fea_prfx_dict, logger=lg.logger)
 
 
 
@@ -330,7 +329,7 @@ def run(args):
     # ========================================================================
     #       Run CV validation
     # ========================================================================
-    lg.logger.info('\n{}'.format('='*50))
+    lg.logger.info('\n\n{}'.format('='*50))
     lg.logger.info('CV training ...')
     lg.logger.info('='*50)
 
@@ -369,18 +368,18 @@ def run(args):
 
     model, fit_params = init_model(model_name, logger=lg.logger)
     t0 = time.time()
-    scores = cross_validate(
+    cv_scores = cross_validate(
         estimator=sklearn.base.clone(model.model),
         X=xdata, y=ydata,
         scoring=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error'],
         cv=cv, groups=groups,
         n_jobs=n_jobs, fit_params=fit_params)
-    lg.logger.info('Runtime: {:.3f}'.format((time.time()-t0)/60))
-    scores.pop('fit_time', None)
-    scores.pop('train_time', None)
-    scores.pop('score_time', None)
-    scores = utils.cv_scores_to_df(scores, decimals=3, calc_stats=True)
-    lg.logger.info(f'scores\n{scores}')
+    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+    cv_scores.pop('fit_time', None)
+    cv_scores.pop('train_time', None)
+    cv_scores.pop('score_time', None)
+    cv_scores = utils.cv_scores_to_df(cv_scores, decimals=3, calc_stats=True)
+    lg.logger.info(f'cv_scores\n{cv_scores}')
 
 
     # ----------------------------
@@ -398,7 +397,7 @@ def run(args):
     # ========================================================================
     #       Generate learning curves
     # ========================================================================
-    lg.logger.info('\n{}'.format('='*50))
+    lg.logger.info('\n\n{}'.format('='*50))
     lg.logger.info('Learning curves ...')
     lg.logger.info('='*50)
 
@@ -466,7 +465,7 @@ def run(args):
     # (*) uses cross_validate from sklearn.
     # -----------------------------------------------
     # Generate learning curves
-    lg.logger.info('\nStart learning curve ... (my method)')
+    lg.logger.info('\nStart learning curve (my method) ...')
     model, fit_params = init_model(model_name='lgb_reg', logger=lg.logger)
     t0 = time.time()
     lrn_curve.my_learning_curve(
@@ -478,14 +477,14 @@ def run(args):
         metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error'],
         cv_method=cv_method, cv_folds=cv_folds, groups=None,
         n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
-    lg.logger.info('Runtime: {:.3f}'.format((time.time()-t0)/60))
+    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
 
     # -------------------------------------------------
     # Generate learning curve - complete sklearn method
     # (*) can't generate multiple metrics.
     # -------------------------------------------------
-    lg.logger.info("\nStart sklearn.model_selection.learning_curve ...")
+    lg.logger.info("\nStart learning_curve (sklearn) ...")
     model, _ = init_model(model_name, lg.logger)
     metric_name = 'r2' # 'neg_mean_absolute_error', 'neg_median_absolute_error'
     lr_curve_ticks = 5
@@ -496,7 +495,7 @@ def run(args):
                           scoring=metric_name,
                           n_jobs=n_jobs, exploit_incremental_learning=False,
                           random_state=SEED, verbose=1, shuffle=False)
-    lg.logger.info('Run-time: {:.3f} mins'.format((time.time()-t0)/60))
+    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
     
     lrn_curve.plt_learning_curve(rslt=rslt, metric_name=metric_name,
         title='Learning curve (target: {})'.format(target_name),
@@ -517,10 +516,12 @@ def run(args):
 
     # Train model
     model_final, _ = init_model(model_name, lg.logger)
+    t0 = time.time()
     if 'lgb_reg' in model_name:
         model_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])
     else:
         model_final.fit(xdata, ydata)
+    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
     # # Compute scores
     # scores = model_final.calc_scores(xdata=xdata, ydata=ydata, to_print=True)
@@ -544,6 +545,7 @@ def run(args):
     csv_scores = []  # cross-study-validation scores
     for i, src in enumerate(test_sources):
         lg.logger.info(f'\nTest source {i+1}:  _____ {src} _____')
+        t0 = time.time()
 
         te_src_data = te_data[te_data['SOURCE'].isin([src])].reset_index(drop=True)
         lg.logger.info(f'src_data.shape {te_src_data.shape}')
@@ -554,7 +556,7 @@ def run(args):
         model_name = 'lgb_reg_final'
 
         # Prepare test data for predictions
-        te_src_data = utils_tidy.impute_values(data=te_src_data, fea_prfx_dict=fea_prfx_dict, logger=lg.logger)
+        # te_src_data = utils_tidy.impute_values(data=te_src_data, fea_prfx_dict=fea_prfx_dict, logger=lg.logger)
         xte, _ = utils_tidy.split_features_and_other_cols(te_src_data, fea_prfx_dict=fea_prfx_dict)
         yte = utils_tidy.extract_target(data=te_src_data, target_name=target_name)
 
@@ -566,26 +568,28 @@ def run(args):
         lg.logger.info(f'\nxte_'+src)
         utils_tidy.print_feature_shapes(df=xte, logger=lg.logger)
 
-        # Compute scores
+        # Calc and save scores
         lg.logger.info('\nscores:')
         scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
-        scores = utils.cv_scores_to_df([scores])
-
+        csv_scores.append(scores)
+        
         # Dump preds
         model_final.dump_preds(df_data=te_src_data, xdata=xte, target_name=target_name,
                                outpath=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))                 
 
-        # Calc and save scores
-        csv_scores.append(model_final.calc_scores(xdata=xte, ydata=yte, to_print=False))
+        lg.logger.info('\nRuntime: {:.3f}'.format((time.time()-t0)/60))
 
 
     # Summarize cv scores
-    df_csv_scores = pd.DataFrame(csv_scores).T
-    df_csv_scores.columns = test_sources
-    df_csv_scores = df_csv_scores.reset_index().rename(columns={'index': 'metric'})
-    df_csv_scores.insert(loc=1, column='train_src', value='_'.join(train_sources))
-    lg.logger.info('\ncsv_scores\n{}'.format(df_csv_scores))
-    df_csv_scores.to_csv(os.path.join(run_outdir, 'df_csv_scores.csv'), index=False)
+    #df_csv_scores = utils.cv_scores_to_df(csv_scores, decimals=3, calc_stats=False)  # TODO: try this
+    csv_scores_all = pd.DataFrame(csv_scores).T
+    csv_scores_all.columns = test_sources
+    csv_scores_all = csv_scores_all.round(decimals=3)
+    csv_scores_all = csv_scores_all.reset_index().rename(columns={'index': 'metric'})
+    csv_scores_all.insert(loc=1, column='train_src', value='_'.join(train_sources))
+    lg.logger.info('\ncsv_scores\n{}'.format(csv_scores_all))
+    csv_scores_all.to_csv(os.path.join(run_outdir, 'csv_scores_' + '_'.join(train_sources) + '.csv'), index=False)
+
 
 
     # ========================================================================
@@ -646,15 +650,16 @@ def run(args):
     # Kill logger
     lg.kill_logger()
 
-    return df_csv_scores
+    del data, xdata, ydata, model, model_final
+    return csv_scores_all
 
 
 def main(args):
     config_fname = os.path.join(file_path, CONFIGFILENAME)
     args = argparser.get_args(args=args, config_fname=config_fname)
     pprint(vars(args))
-    df_csv_scores = run(args)
-    return df_csv_scores, OUTDIR  # TODO: instead of OUTDIR, return all globals(??)
+    csv_scores_all = run(args)
+    return csv_scores_all, OUTDIR  # TODO: instead of OUTDIR, return all globals(??)
     
 
 if __name__ == '__main__':

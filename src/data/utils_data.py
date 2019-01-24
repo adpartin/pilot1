@@ -51,7 +51,75 @@ def setup_logger(logfilename='logfile.log'):
     #     log.setLevel(logging.DEBUG)
     #     log.addHandler(fh)
     #     log.addHandler(sh)
+
+    logger.info('{}'.format('-'*90))
     return logger
+
+
+def split_features_and_other_cols(data, fea_prfx_dict):
+    """ Extract two dfs from `data`: fea_data and other_data.
+    TODO: this script is also in src/models/utils_tidy (put in a single place)
+    Args:
+        data : tidy dataset (df contains multiple cols including features, meta, and target)
+    Returns:
+        fea_data : contains only training features
+        other_data : contains other cols (meta, target)
+    """
+    # Extract df that contains only features (no meta or response)
+    other_data = data.copy()
+    df_fea_list = []
+
+    for prfx in fea_prfx_dict.values():
+
+        # get cols with specific feature prfx
+        cols = data.columns[[True if prfx in c else False for c in data.columns.tolist()]]
+
+        # if feature present in data, add it to df_fea_list, and drop from other_data
+        if len(cols) > 0:  
+            df = data[cols].copy()
+            other_data.drop(columns=cols, inplace=True)
+            df_fea_list.append(df)
+
+    fea_data = pd.DataFrame(pd.concat(df_fea_list, axis=1))
+    return fea_data, other_data
+
+
+def impute_values(data, fea_prfx_dict, logger):
+    """ Impute missing values.
+    TODO: this script is also in src/models/utils_tidy (put in a single place)
+    Args:
+        data : tidy dataset (df contains multiple cols including features, meta, and target)
+        fea_prfx_dict : dict of feature prefixes, e.g.:
+            fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.', 'dsc': 'drug_dsc.', 'fng': 'drug_fng.'}
+        logger : logging object
+    TODO: consider more advanced imputation methods:
+    - https://www.rdocumentation.org/packages/Amelia/versions/1.7.4/topics/amelia
+    - try regressor (impute continuous features) or classifier (impute discrete features)
+    """
+    from sklearn.impute import SimpleImputer, MissingIndicator
+    logger.info('\nImpute missing features ... ({})'.format(list(fea_prfx_dict.keys())))
+
+    # Extract df that contains only features (no meta or response)
+    fea_data, other_data = split_features_and_other_cols(data=data, fea_prfx_dict=fea_prfx_dict)
+    tot_miss_feas = sum(fea_data.isna().sum() > 1)
+    logger.info('Total features with missing values (before imputation): {}'.format(tot_miss_feas))
+
+    if tot_miss_feas > 0:
+        colnames = fea_data.columns
+
+        # Impute missing values
+        imputer = SimpleImputer(missing_values=np.nan, strategy='mean', verbose=1)
+        dtypes_dict = fea_data.dtypes # keep the original dtypes because fit_transform casts to np.float64
+        fea_data_imputed = imputer.fit_transform(fea_data)
+        fea_data_imputed = pd.DataFrame(fea_data_imputed, columns=colnames)
+        fea_data_imputed = fea_data_imputed.astype(dtypes_dict) # cast back to the original data type
+
+        logger.info('Total features with missing values (after impute): {}'.format(sum(fea_data_imputed.isna().sum() > 1)))
+
+        # Concat features (xdata_imputed) and other cols (other_data)
+        data = pd.concat([other_data, fea_data_imputed], axis=1)
+        
+    return data
 
 
 def plot_rsp_dists(rsp, rsp_cols, savepath=None):
@@ -143,10 +211,12 @@ class CombinedRNASeqLINCS():
         else:
             raise ValueError(f'The passed dataset ({DATASET}) is not supported.')
             
+        data_type = np.float32
+
         # Load RNA-Seq
         path = os.path.join(datadir, DATASET)
         cols = pd.read_table(path, nrows=0, sep='\t')
-        dtype_dict = {c: np.float32 for c in cols.columns[1:]}
+        dtype_dict = {c: data_type for c in cols.columns[1:]}
         df_rna = pd.read_table(path, dtype=dtype_dict, sep='\t', na_values=na_values, warn_bad_lines=True)
         df_rna = self._keep_sources(df_rna, sources=sources) 
 

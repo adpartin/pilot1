@@ -1,9 +1,6 @@
 """
-Notes:
-- Imputation of missing values is done in src/models.
-
 TODO:
-- create tidy data from chemparter.
+- add chemparter data to the tidy df.
 """
 from __future__ import division
 from __future__ import print_function
@@ -97,7 +94,7 @@ logger.info(f'Num of system CPUs: {psutil.cpu_count()}')
 # ========================================================================
 # filename = 'ChemPartner_single_response_agg'
 filename = 'combined_single_response_agg'
-logger.info(f'\nLoading combined response ... {filename}')
+logger.info(f'\n\nLoading combined response ... {filename}')
 rsp_cols = ['AUC', 'AUC1', 'EC50', 'EC50se',
             'R2fit', 'Einf', 'IC50',
             'HS', 'AAC1', 'DSS1']
@@ -115,9 +112,10 @@ logger.info(f'rsp.shape {rsp.shape}')
 rsp.replace([np.inf, -np.inf], value=np.nan, inplace=True)
 
 if verbose:
+    logger.info('rsp memory usage: {:.3f} GB'.format(sys.getsizeof(rsp)/1e9))
+    logger.info('')
     logger.info(rsp.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
-    logger.info('rsp memory usage (GB): {:.3f}'.format(sys.getsizeof(rsp)/1e9))
-
+    
 # Plot distributions of target variables
 utils.plot_rsp_dists(rsp=rsp, rsp_cols=rsp_cols, savepath=os.path.join(OUTDIR, 'rsp_dists.png'))
 
@@ -133,7 +131,7 @@ utils.plot_rsp_dists(rsp=rsp, rsp_cols=rsp_cols, savepath=os.path.join(OUTDIR, '
 # ========================================================================
 #   Load rna (combined_dataset)
 # ========================================================================
-logger.info('\nLoading rna-seq ... ')
+logger.info('\n\nLoading rna-seq ... ')
 lincs = utils.CombinedRNASeqLINCS(datadir=DATADIR, dataset='raw', sources=sources, na_values=na_values, verbose=False)
 rna, cmeta = lincs._df_rna, lincs._meta
 rna.rename(columns={'Sample': 'CELL'}, inplace=True)
@@ -141,20 +139,24 @@ cmeta.rename(columns={'Sample': 'CELL', 'source': 'SOURCE'}, inplace=True)
 rna = rna.rename(columns={c: fea_prfx_dict['rna']+c for c in rna.columns[1:] if fea_prfx_dict['rna'] not in c}) # add fea prefix
 logger.info(f'rna.shape {rna.shape}')
 
+# Impute missing values
+rna = utils.impute_values(data=rna, fea_prfx_dict=fea_prfx_dict, logger=logger)
+
 if verbose:
+    logger.info('rna memory usage: {:.3f} GB'.format(sys.getsizeof(rna)/1e9))
+    logger.info('')
     logger.info(cmeta.groupby('SOURCE').agg({'CELL': 'nunique', 'ctype': 'nunique', 'csite': 'nunique'}).reset_index())
     # print(cmeta.groupby(['SOURCE', 'csite']).agg({'CELL': 'nunique'}).reset_index())
-    logger.info('rna memory usage (GB): {:.3f}'.format(sys.getsizeof(rna)/1e9))
 
 
 # ========================================================================
 #   Load drug descriptors
 # ========================================================================
 filename = 'Combined_PubChem_dragon7_descriptors.tsv'
-logger.info('\nLoading drug descriptors ... {}'.format('Combined_PubChem_dragon7_descriptors.tsv'))
+logger.info('\n\nLoading drug descriptors ... {}'.format('Combined_PubChem_dragon7_descriptors.tsv'))
 path = os.path.join(DATADIR, filename)
 cols = pd.read_table(path, engine='c', nrows=0)
-dtype_dict = {c: np.float32 for c in cols.columns[1:]}
+dtype_dict = {c: prfx_dtypes['dsc'] for c in cols.columns[1:]}
 dsc = pd.read_table(path, dtype=dtype_dict, na_values=na_values, warn_bad_lines=True)
 dsc.rename(columns={'NAME': 'PUBCHEM'}, inplace=True)
 dsc = dsc.rename(columns={c: fea_prfx_dict['dsc']+c for c in dsc.columns[1:] if fea_prfx_dict['dsc'] not in c}) # add fea prefix
@@ -188,20 +190,20 @@ logger.info(f'dsc.shape {dsc.shape}')
 # dsc.nunique(dropna=True).value_counts().sort_index()[:10]
 
 # Impute missing values
-# TODO: 
+dsc = utils.impute_values(data=dsc, fea_prfx_dict=fea_prfx_dict, logger=logger)
 
 # Drop low var cols
 # tmp, idx = utils_all.drop_low_var_cols(df=dsc, skipna=False)
 
 if verbose:
-    logger.info('dsc memory usage (GB): {:.3f}'.format(sys.getsizeof(dsc)/1e9))
+    logger.info('dsc memory usage: {:.3f} GB'.format(sys.getsizeof(dsc)/1e9))
     
 
 # ========================================================================
 #   Load drug meta
 # ========================================================================
 filename = 'drug_info'
-logger.info(f'\nLoading drug metadata ... {filename}')
+logger.info(f'\n\nLoading drug metadata ... {filename}')
 dmeta = pd.read_table(os.path.join(DATADIR, filename), dtype=object)
 dmeta['PUBCHEM'] = 'PubChem.CID.' + dmeta['PUBCHEM']
 dmeta.insert(loc=0, column='SOURCE', value=dmeta['ID'].map(lambda x: x.split('.')[0].lower()))
@@ -211,6 +213,7 @@ logger.info(f'dmeta.shape {dmeta.shape}')
 if verbose:
     # Number of unique drugs in each data source
     # TODO: What's going on with CTRP and GDSC? Why counts are not consistent across the fields??
+    logger.info('')
     logger.info(dmeta.groupby('SOURCE').agg({'DRUG': 'nunique', 'NAME': 'nunique',
                                              'CLEAN_NAME': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
 
@@ -219,14 +222,14 @@ if verbose:
 #   Drop fibroblast
 # ========================================================================
 if drop_fibro:
-    logger.info('\nDrop fibroblast samples ...')
+    logger.info('\n\nDrop fibroblast samples ...')
     rna = rna[rna['CELL'].map(lambda x: False if x in fibro_names else True)]
     cmeta = cmeta[cmeta['CELL'].map(lambda x: False if x in fibro_names else True)]
     rsp = rsp[rsp['CELL'].map(lambda x: False if x in fibro_names else True)]
     logger.info(f'rsp.shape   {rsp.shape}')
     logger.info(f'rna.shape   {rna.shape}')
     logger.info(f'cmeta.shape {cmeta.shape}')
-    
+
     tidy_data_name = 'tidy_data_no_fibro'
 else:
     tidy_data_name = 'tidy_data'
@@ -240,7 +243,7 @@ Data tables: rsp, rna, dsc, cmeta, dmeta
 (rsp, rna): on 'CELL'
 (rsp, dsc): on pubchem through fields in dmeta
 """
-logger.info('\n==========================')
+logger.info('\n\n==========================')
 logger.info('... Start merging data ...')
 logger.info('==========================')
 
@@ -251,9 +254,8 @@ logger.info(f'dmeta.shape {dmeta.shape}')
 rsp = pd.merge(rsp, dmeta[['DRUG', 'PUBCHEM']], on='DRUG', how='left')
 logger.info(f'rsp.shape   {rsp.shape}')
 logger.info('NA values after merging rsp and dmeta: \n{}'.format(rsp[['DRUG', 'PUBCHEM']].isna().sum()))
-
-if verbose:
-    logger.info(rsp.groupby('SOURCE').agg({'DRUG': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
+logger.info('')
+logger.info(rsp.groupby('SOURCE').agg({'DRUG': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
 
 
 # --------------------
@@ -264,6 +266,7 @@ logger.info(f'rsp.shape   {rsp.shape}')
 logger.info(f'cmeta.shape {cmeta.shape}')
 rsp1 = pd.merge(rsp, cmeta[['CELL', 'core_str', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype']], on='CELL', how='left')
 logger.info(f'rsp1.shape  {rsp1.shape}')
+logger.info('')
 logger.info(rsp1.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique',
                                         'PUBCHEM': 'nunique'}).reset_index())
 del rsp
@@ -276,6 +279,7 @@ logger.info(f'rsp1.shape {rsp1.shape}')
 logger.info(f'rna.shape  {rna.shape}')
 rsp2 = pd.merge(rsp1, rna, on='CELL', how='inner')
 logger.info(f'rsp2.shape {rsp2.shape}')
+logger.info('')
 logger.info(rsp2.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique',
                                         'PUBCHEM': 'nunique'}).reset_index())
 del rsp1
@@ -288,19 +292,20 @@ logger.info(f'rsp2.shape {rsp2.shape}')
 logger.info(f'dsc.shape  {dsc.shape}')
 data = pd.merge(rsp2, dsc, on='PUBCHEM', how='inner')
 logger.info(f'data.shape {data.shape}')
+logger.info('')
 logger.info(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique',
                                         'PUBCHEM': 'nunique'}).reset_index())
 del rsp2
 
 
 # Summary of memory usage
-logger.info('\nMemory usage per feature set in the tidy dataframe: {:.3f}'.format(sys.getsizeof(data)/1e9))
+logger.info('\nTidy dataframe: {:.3f} GB'.format(sys.getsizeof(data)/1e9))
 if verbose:
     for prfx in prfx_dtypes.keys():
         cols = [c for c in data.columns if prfx in c]
         tmp = data[cols]
         mem = 0 if tmp.shape[1]==0 else sys.getsizeof(tmp)/1e9
-        logger.info("Number of '{}' features: {} ({:.2f} GB memory)".format(prfx, len(cols), mem))
+        logger.info("# of '{}' features: {} ({:.2f} GB)".format(prfx, len(cols), mem))
 
 
 # Cast features
@@ -326,7 +331,7 @@ if tidy_data_format == 'parquet':
 else: 
     tidy_filepath = os.path.join(OUTDIR, 'tidy_data')
     data.to_csv(tidy_filepath, sep='\t')
-logger.info('Time to save tidy data to disk: {:.2f} mins'.format((time.time()-t0)/60))
+logger.info('Save tidy data to disk: {:.2f} mins'.format((time.time()-t0)/60))
 
 # Check that the saved data is the same as original one
 logger.info(f'\nLoad tidy dataframe {tidy_data_format} ...')
@@ -335,7 +340,7 @@ if tidy_data_format == 'parquet':
     data_fromfile = pd.read_parquet(tidy_filepath, engine='auto', columns=None)
 else:
     data_fromfile = pd.read_table(tidy_filepath, sep='\t')
-logger.info('Time to load tidy data to disk: {:.2f} mins'.format((time.time()-t0)/60))
+logger.info('Load tidy data to disk: {:.2f} mins'.format((time.time()-t0)/60))
 
 logger.info(f'\nLoaded data is the same as original: {data.equals(data_fromfile)}')
 
