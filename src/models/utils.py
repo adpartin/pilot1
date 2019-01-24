@@ -158,17 +158,22 @@ def subsample(df, v, axis=0):
     return df
 
 
-def cv_scores_to_df(scores, decimals=3, calc_stats=True):
-    """ Convert a dict of cv scores into df and compute mean and std. """
+def cv_scores_to_df(scores, decimals=3, calc_stats=False):
+    """ Convert a dict of cv scores to df.
+    Args:
+        scores : that's the output from sklearn.model_selection.cross_validate()
+    """
+    # Drop keys that come from cross_validate()
+    for k in ['fit_time', 'train_time', 'score_time']:
+        if k in scores.keys():
+            del scores[k]  # scores.pop(k, None)
+
     scores = pd.DataFrame(scores).T
     scores.columns = ['f'+str(c) for c in scores.columns]
     if calc_stats:
         scores.insert(loc=0, column='mean', value=scores.mean(axis=1))
         scores.insert(loc=1, column='std', value=scores.std(axis=1))
-        # scores['mean'] = scores.mean(axis=1)
-        # scores['std'] = scores.std(axis=1)
     scores = scores.round(decimals=decimals)
-    scores = scores.reset_index().rename(columns={'index': 'metric'})
     return scores
 
 

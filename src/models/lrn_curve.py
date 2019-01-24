@@ -14,15 +14,14 @@ import sklearn
 from sklearn.model_selection import cross_validate
 from sklearn.model_selection import ShuffleSplit, GroupShuffleSplit, KFold, GroupKFold
 
+import utils
 # from cvsplitter import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
 
 
-def my_learning_curve(estimator,
-                      X, Y,  # data
-                      target_name,
-                      fit_params=None,
+def my_learning_curve(estimator, X, Y,
+                      args=None, fit_params=None,
                       lr_curve_ticks=5, data_sizes_frac=None,
-                      metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error'],
+                      metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'mean_squared_error'],
                       cv_method='simple', cv_folds=5, groups=None,
                       n_jobs=1, random_state=None, logger=None, outdir='./'):
     """
@@ -34,6 +33,7 @@ def my_learning_curve(estimator,
         estimator : estimator that is consistent with sklearn api 
         X : features matrix
         Y : target
+        args : command line args
         lr_curve_ticks : number of ticks in the learning curve (used is data_sizes_frac is None)
         data_sizes_frac : relative numbers of training samples that will be used to generate the learning curve
         cv_method : 'simple', 'group'
@@ -54,17 +54,14 @@ def my_learning_curve(estimator,
         data_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
     data_sizes = [int(n) for n in X.shape[0]*data_sizes_frac]
 
-    # Lists to collect results for the data size runs
-    df_tr = []
-    df_vl = []
+    # List to collect cv trianing scores for different data sizes
+    scores_all_list = [] 
 
+    # Start across data sizes
     idx = np.random.permutation(len(X))
     for d_size in data_sizes:
         if logger:
-            logger.info(f'Data size: {d_size}')
-        #data_sample = data.sample(n=d_size)
-        #xdata, _ = utils_tidy.split_features_and_other_cols(data=data_sample, fea_prfx_dict=fea_prfx_dict)
-        #ydata = utils_tidy.extract_target(data=data_sample, target_name=target_name)        
+            logger.info(f'Data size: {d_size}')      
 
         xdata = X.iloc[idx[:d_size], :]
         ydata = Y[idx[:d_size]]
@@ -74,10 +71,8 @@ def my_learning_curve(estimator,
             X=xdata, y=ydata,
             scoring=metrics, cv=cv, groups=groups,
             n_jobs=n_jobs, fit_params=fit_params)
-        
-        df = pd.DataFrame(scores).drop(columns=['fit_time', 'score_time']).T
-        df.columns = ['f'+str(c) for c in df.columns]
-        
+
+        df = utils.cv_scores_to_df(scores, decimals=3, calc_stats=False)
         df.insert(loc=0, column='data_size', value=d_size)
 
         v = list(map(lambda x: '_'.join(x.split('_')[1:]), df.index))
@@ -91,44 +86,39 @@ def my_learning_curve(estimator,
                 df.iloc[i, -cv_folds:] = abs(df.iloc[i, -cv_folds:])
         df['metric'] = df['metric'].map(lambda s: s.split('neg_')[-1] if 'neg_' in s else s)
 
-        df.reset_index(inplace=True)
-        v = list(map(lambda x: 'tr' if 'train' in x else 'vl', df['index'].values))
-        df.insert(loc=1, column='type', value=v)
-        
-        tr_cv_scores = df[df['type']=='tr'].drop(columns=['index'])
-        vl_cv_scores = df[df['type']=='vl'].drop(columns=['index'])
-        
-        # Append results to master dfs
-        df_tr.append(tr_cv_scores)
-        df_vl.append(vl_cv_scores)
+        v = list(map(lambda x: True if 'train' in x else False, df.index))
+        df.insert(loc=1, column='train_set', value=v)
+                
+        # Append results to master df
+        scores_all_list.append(df)
 
     # Concat results for data_sizes
-    df_tr = pd.concat(df_tr, axis=0)
-    df_vl = pd.concat(df_vl, axis=0)
+    scores_all_df = pd.concat(scores_all_list, axis=0).reset_index(drop=True)
 
     # Plot learning curves
-    plt_learning_curve_multi_metric(
-        df_tr=df_tr, df_vl=df_vl, cv_folds=cv_folds,
-        target_name=target_name, outdir=outdir)
+    plt_learning_curve_multi_metric(df=scores_all_df, cv_folds=cv_folds,
+                                    outdir=outdir, args=args)
+    return scores_all_df
 
 
-def plt_learning_curve_multi_metric(df_tr, df_vl, cv_folds, target_name, outdir):
+def plt_learning_curve_multi_metric(df, cv_folds, outdir, args=None):
     """
     Args:
-        df_tr : (df) contains train scores across folds (last cv_folds columns)
-        df_vl : 
+        df : contains train and val scores for cv folds (the scores are the last cv_folds cols)
         cv_folds : (int) number of cv folds
         target_name : (str) target name 
     """
-    data_sizes = sorted(df_tr['data_size'].unique())
+    df = df.copy()
+    data_sizes = sorted(df['data_size'].unique())
 
-    for metric_name in df_tr['metric'].unique():
-        tr = df_tr[df_tr['metric']==metric_name].reset_index(drop=True)
-        tr.sort_values('data_size', inplace=True)
+    for metric_name in df['metric'].unique():
+        aa = df[df['metric']==metric_name].reset_index(drop=True)
+        aa.sort_values('data_size', inplace=True)
+
+        tr = aa[aa['train_set']==True]
+        vl = aa[aa['train_set']==False]
+
         tr = tr.iloc[:, -cv_folds:]
-
-        vl = df_vl[df_vl['metric']==metric_name].reset_index(drop=True)
-        vl.sort_values('data_size', inplace=True)
         vl = vl.iloc[:, -cv_folds:]
 
         rslt = []
@@ -136,9 +126,11 @@ def plt_learning_curve_multi_metric(df_tr, df_vl, cv_folds, target_name, outdir)
         rslt.append(tr.values)
         rslt.append(vl.values)
 
+        fname = 'learning_curve_' + args.target_name + '_' + metric_name + '.png'
+        path = os.path.join(outdir, fname)
         plt_learning_curve(rslt=rslt, metric_name=metric_name,
-            title='Learning curve (target: {})'.format(target_name),
-            path=os.path.join(outdir, 'learning_curve_' + metric_name + '.png'))
+            title='Learning curve (target: {}, data: {})'.format(args.target_name, '_'.join(args.train_sources)),
+            path=path)
 
 
 def plt_learning_curve(rslt, metric_name='score', title=None, path=None):

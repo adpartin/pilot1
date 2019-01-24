@@ -118,8 +118,8 @@ from cvsplitter import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
 DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
 DATAFILENAME = 'tidy_data_no_fibro.parquet'
+# DATAFILENAME = 'tidy_data.parquet'
 CONFIGFILENAME = 'config_params.txt'
-# FILENAME = 'tidy_data.parquet'
 os.makedirs(OUTDIR, exist_ok=True)
 
 SEED = 0
@@ -205,7 +205,9 @@ def run(args):
 
     if col_sample:
         col_sample = eval(col_sample)
-        data = utils.subsample(df=data, v=col_sample, axis=1)
+        fea_data, other_data = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+        fea_data = utils.subsample(df=fea_data, v=col_sample, axis=1)
+        data = pd.concat([fea_data, other_data], axis=1)
         print('data.shape', data.shape)
 
 
@@ -375,10 +377,10 @@ def run(args):
         cv=cv, groups=groups,
         n_jobs=n_jobs, fit_params=fit_params)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-    cv_scores.pop('fit_time', None)
-    cv_scores.pop('train_time', None)
-    cv_scores.pop('score_time', None)
     cv_scores = utils.cv_scores_to_df(cv_scores, decimals=3, calc_stats=True)
+    cv_scores = cv_scores.reset_index()
+    cv_scores = cv_scores.rename(columns={'index': 'metric'})
+    cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + '_'.join(train_sources) + '.csv'), index=False)
     lg.logger.info(f'cv_scores\n{cv_scores}')
 
 
@@ -387,10 +389,10 @@ def run(args):
     # ----------------------------
     # # https://scikit-learn.org/stable/modules/model_evaluation.html#scoring-parameter
     # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=lg.logger)
-    # scores = cross_val_score(estimator=lgb_reg.model, X=xdata, y=ydata,
-    #                          scoring='r2', cv=cv, n_jobs=n_jobs,
-    #                          fit_params={'verbose': False, 'early_stopping_rounds': 10})    
-    # lg.logger.info(scores)
+    # cv_scores = cross_val_score(estimator=lgb_reg.model, X=xdata, y=ydata,
+    #                             scoring='r2', cv=cv, n_jobs=n_jobs,
+    #                             fit_params={'verbose': False, 'early_stopping_rounds': 10})    
+    # lg.logger.info(cv_scores)
 
 
 
@@ -467,17 +469,19 @@ def run(args):
     # Generate learning curves
     lg.logger.info('\nStart learning curve (my method) ...')
     model, fit_params = init_model(model_name='lgb_reg', logger=lg.logger)
+    lrn_cruve_metrics = ['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'mean_squared_error']
     t0 = time.time()
-    lrn_curve.my_learning_curve(
+    lrn_curve_scores = lrn_curve.my_learning_curve(
         estimator=model.model,
-        X=xdata, Y=ydata,  # data
-        target_name=target_name,
+        X=xdata, Y=ydata,
+        args=args,
         fit_params=fit_params,
         lr_curve_ticks=5, data_sizes_frac=None,
-        metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error'],
+        metrics=lrn_cruve_metrics,
         cv_method=cv_method, cv_folds=cv_folds, groups=None,
         n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+    lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores.csv'), index=False)
 
 
     # -------------------------------------------------
@@ -486,20 +490,23 @@ def run(args):
     # -------------------------------------------------
     lg.logger.info("\nStart learning_curve (sklearn) ...")
     model, _ = init_model(model_name, lg.logger)
-    metric_name = 'r2' # 'neg_mean_absolute_error', 'neg_median_absolute_error'
+    metric_name = 'r2' # 'neg_mean_absolute_error', 'neg_median_absolute_error', 'mean_squared_error'
     lr_curve_ticks = 5
     train_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
     t0 = time.time()
-    rslt = learning_curve(estimator=model.model, X=xdata, y=ydata,
-                          train_sizes=train_sizes_frac, cv=cv, groups=groups,
-                          scoring=metric_name,
-                          n_jobs=n_jobs, exploit_incremental_learning=False,
-                          random_state=SEED, verbose=1, shuffle=False)
+    lrn_curve_scores = learning_curve(
+        estimator=model.model, X=xdata, y=ydata,
+        train_sizes=train_sizes_frac, cv=cv, groups=groups,
+        scoring=metric_name,
+        n_jobs=n_jobs, exploit_incremental_learning=False,
+        random_state=SEED, verbose=1, shuffle=False)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+    # lrn_curve_scores = utils.cv_scores_to_df(lrn_curve_scores, decimals=3, calc_stats=False) # this func won't work
+    # lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores_auto.csv'), index=False)
     
-    lrn_curve.plt_learning_curve(rslt=rslt, metric_name=metric_name,
-        title='Learning curve (target: {})'.format(target_name),
-        path=os.path.join(run_outdir, 'auto_learning_curve_' + metric_name + '.png'))
+    lrn_curve.plt_learning_curve(rslt=lrn_curve_scores, metric_name=metric_name,
+        title='Learning curve (target: {}, data: {})'.format(target_name, '_'.join(train_sources)),
+        path=os.path.join(run_outdir, 'auto_learning_curve_' + target_name + '_' + metric_name + '.png'))
 
 
 
@@ -552,9 +559,6 @@ def run(args):
         if te_src_data.shape[0] == 0:
             continue
 
-        preds_filename_prefix = 'test_' + src
-        model_name = 'lgb_reg_final'
-
         # Prepare test data for predictions
         # te_src_data = utils_tidy.impute_values(data=te_src_data, fea_prfx_dict=fea_prfx_dict, logger=lg.logger)
         xte, _ = utils_tidy.split_features_and_other_cols(te_src_data, fea_prfx_dict=fea_prfx_dict)
@@ -562,7 +566,7 @@ def run(args):
 
         # Plot dist of response
         utils.plot_hist(x=te_src_data[target_name], var_name=target_name,
-                        path=os.path.join(run_outdir, src+'_'+target_name+'_hist.png'))
+                        path=os.path.join(run_outdir, target_name + '_hist_' + src + '.png'))
 
         # Print feature shapes
         lg.logger.info(f'\nxte_'+src)
@@ -574,8 +578,9 @@ def run(args):
         csv_scores.append(scores)
         
         # Dump preds
+        preds_fname = 'preds_' + src + '_' + model_name + '.csv'
         model_final.dump_preds(df_data=te_src_data, xdata=xte, target_name=target_name,
-                               outpath=os.path.join(run_outdir, preds_filename_prefix+'_'+model_name+'_preds.csv'))                 
+                               outpath=os.path.join(run_outdir, preds_fname))                 
 
         lg.logger.info('\nRuntime: {:.3f}'.format((time.time()-t0)/60))
 

@@ -10,6 +10,7 @@ warnings.filterwarnings('ignore')
 
 import os
 import sys
+import platform
 import time
 import datetime
 import argparse
@@ -37,8 +38,10 @@ file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.pa
 import utils_data as utils
 
 # TODO: fix this similar to CANDLE (i.e. download file server)
-if sys.platform == 'darwin':
+if sys.platform == 'darwin':  # my mac
     DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
+elif 'theta' in platform.uname()[1]:
+    DATADIR = None # TODO: set this
 else:
     DATADIR = '/vol/ml/apartin/Benchmarks/Data/Pilot1'
 OUTDIR = os.path.join(file_path, '../../data/processed/from_combined')
