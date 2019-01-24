@@ -21,37 +21,33 @@ file_path = os.path.dirname(os.path.realpath(__file__))
 def main(args):
 
     t0 = time.time()
-
-    # Create folder to store results
     t = datetime.datetime.now()
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
-    csv_outdir = os.path.join(outdir, 'cross_val_rslts_'+t)
-    os.makedirs(csv_outdir, exist_ok=True)
 
     # Full set
-    # cross_study_sets = [
-    #     {'tr_src': ['gcsi'],
-    #     'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
-
-    #     {'tr_src': ['ccle'],
-    #     'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
-
-    #     {'tr_src': ['gdsc'],
-    #     'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
-
-    #     {'tr_src': ['ctrp'],
-    #     'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
-    # ]
-
-    # Smaller set
     cross_study_sets = [
         {'tr_src': ['gcsi'],
-         'te_src': ['ccle', 'gcsi', 'ctrp']},
+        'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
 
         {'tr_src': ['ccle'],
-         'te_src': ['ccle', 'gcsi']},
+        'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
+
+        {'tr_src': ['gdsc'],
+        'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
+
+        {'tr_src': ['ctrp'],
+        'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
     ]
+
+    # Smaller set
+    # cross_study_sets = [
+    #     {'tr_src': ['gcsi'],
+    #      'te_src': ['ccle', 'gcsi', 'ctrp']},
+
+    #     {'tr_src': ['ccle'],
+    #      'te_src': ['ccle', 'gcsi']},
+    # ]
 
 
     # Single run
@@ -72,6 +68,12 @@ def main(args):
              *args])   
         dfs.append(csv_scores_all)
 
+    # Create folder to store results
+    t = datetime.datetime.now()
+    t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
+    t = ''.join([str(i) for i in t])
+    csv_outdir = os.path.join(outdir, 'cross_val_rslts_'+t)
+    os.makedirs(csv_outdir, exist_ok=True)
 
     # Create csv table for each available metric 
     df = pd.concat(dfs, axis=0, sort=False)
