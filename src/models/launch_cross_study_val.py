@@ -22,6 +22,13 @@ def main(args):
 
     t0 = time.time()
 
+    # Create folder to store results
+    t = datetime.datetime.now()
+    t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
+    t = ''.join([str(i) for i in t])
+    csv_outdir = os.path.join(outdir, 'cross_val_rslts_'+t)
+    os.makedirs(csv_outdir, exist_ok=True)
+
     # Full set
     # cross_study_sets = [
     #     {'tr_src': ['gcsi'],
@@ -66,11 +73,6 @@ def main(args):
         dfs.append(csv_scores_all)
 
 
-    # Create folder to store results
-    csv_outdir = os.path.join(outdir, 'cross_val_rslts')
-    os.makedirs(csv_outdir, exist_ok=True)
-
-
     # Create csv table for each available metric 
     df = pd.concat(dfs, axis=0, sort=False)
     for m in df['metric'].unique():
@@ -88,7 +90,7 @@ def main(args):
         csv = csv.round(2)
         csv.to_csv(os.path.join(csv_outdir, f'cross-study-val-{m}.csv'), index=False)
 
-    print('\n\nnTotal runtime {:.3f}'.format((time.time()-t0)/60))
+    print('\n\nTotal runtime {:.3f}'.format((time.time()-t0)/60))
 
 
 main(sys.argv[1:])
