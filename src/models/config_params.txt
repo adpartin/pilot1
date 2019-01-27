@@ -1,8 +1,8 @@
 [Global_Params]
 target_name = 'AUC'
 target_trasform = 'f'
-train_sources = ['gcsi']
-test_sources = ['gcsi']
+train_sources = ['ccle']
+test_sources = ['ccle']
 row_sample = None
 col_sample = None
 tissue_type = None
@@ -10,8 +10,9 @@ cell_features = ['rna']
 drug_features = ['dsc']
 other_features = []
 ml_models = 'lgb_reg'
-cv_method = 'simple'
+cv_method = 'group'
 cv_folds = 5
+lc_ticks = 5
 verbose = 't'
 n_jobs = 4
 

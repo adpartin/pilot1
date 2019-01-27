@@ -19,25 +19,30 @@ dflt_args = {
     'ml_models': 'lgb_reg',
     'cv_method': 'simple',
     'cv_folds': 5,
+    'lc_ticks': 5,
     'verbose': 't',
     'n_jobs': 4
 }
 
 
-def get_args(args, config_fname):
+def get_args(args, config_fname=None):
     """ Main function that extracts arguments from command-line and config file.
     Args:
         args : args from command line.
         config_fname : config file name that contains (arg, value) pair. This will override the dflt_args.
     """
     parser = get_cli_args(args)  # get command line args
-    config_params = read_config_file(file=config_fname)  # get config file args
 
-    dflt_args_new = override_dflt_with_config(
-        dflt_args=dflt_args,
-        config_params=config_params)
+    if config_fname is not None:
+        config_params = read_config_file(file=config_fname)  # get config file args
+        dflt_args_new = override_dflt_with_config(
+            dflt_args=dflt_args,
+            config_params=config_params)
+        parser.set_defaults(**dflt_args_new)
+    else:
+        parser.set_defaults(**dflt_args)
 
-    parser.set_defaults(**dflt_args_new)
+    #parser.set_defaults(**dflt_args_new)
     args = parser.parse_args(args)
     return args
 
@@ -109,6 +114,12 @@ def get_cli_args(args=None):
         type=int,
         help='Number cross-val folds.')
 
+    # Learning curve
+    parser.add_argument('--lc_ticks',
+        # default=5,
+        type=int,
+        help='Number of xticks in the learning cure plot.')
+
     # Take care of utliers
     # parser.add_argument("--outlier", default=False)
 
@@ -155,6 +166,7 @@ def override_dflt_with_config(dflt_args, config_params):
         if p in dflt_args.keys():
             dflt_args[p] = v
         else:
+            # TODO
             pass
     return dflt_args
 

@@ -158,6 +158,32 @@ def subsample(df, v, axis=0):
     return df
 
 
+def update_cross_validate_scores(cv_scores):
+    """ Takes dict of scores from cross_validate and convert it to df
+    with certain updates. """
+    # TODO: move this func to cvrun.py (rename cvrun.py utils_cv.py)
+    cv_folds = len(list(cv_scores.values())[0])
+
+    df = cv_scores_to_df(cv_scores, decimals=3, calc_stats=False)
+
+    # Add `metric` col
+    v = list(map(lambda x: '_'.join(x.split('_')[1:]), df.index))
+    df.insert(loc=0, column='metric', value=v)
+
+    # Convert `neg` metric to positive and update metric names (drop `neg_`)
+    # scikit-learn.org/stable/modules/model_evaluation.html --> explains the `neg` in `neg_mean_absolute_error`
+    idx_bool = [True if 'neg_' in s else False for s in df['metric']]
+    for i, bl in enumerate(idx_bool):
+        if bl:
+            df.iloc[i, -cv_folds:] = abs(df.iloc[i, -cv_folds:])
+    df['metric'] = df['metric'].map(lambda s: s.split('neg_')[-1] if 'neg_' in s else s)
+
+    # Add `train_set` col
+    v = list(map(lambda x: True if 'train' in x else False, df.index))
+    df.insert(loc=1, column='train_set', value=v)
+    return df
+
+
 def cv_scores_to_df(scores, decimals=3, calc_stats=False):
     """ Convert a dict of cv scores to df.
     Args:

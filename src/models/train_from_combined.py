@@ -79,6 +79,7 @@ import time
 import datetime
 import logging
 import psutil
+import re
 from pprint import pprint
 from collections import OrderedDict
 import numpy as np
@@ -136,24 +137,32 @@ np.set_printoptions(precision=3)
 
 
 def run(args):
-    target_name = args.target_name
-    target_trasform = args.target_trasform    
-    train_sources = args.train_sources
-    test_sources = args.test_sources
-    row_sample = args.row_sample
-    col_sample = args.col_sample
-    tissue_type = args.tissue_type
-    cell_features = args.cell_features
-    drug_features = args.drug_features
-    other_features = args.other_features
-    model_name = args.ml_models
-    cv_method = args.cv_method
-    cv_folds = args.cv_folds
-    verbose = args.verbose
-    n_jobs = args.n_jobs
+    target_name = args['target_name']
+    target_trasform = args['target_trasform']    
+    train_sources = args['train_sources']
+    test_sources = args['test_sources']
+    row_sample = args['row_sample']
+    col_sample = args['col_sample']
+    tissue_type = args['tissue_type']
+    cell_features = args['cell_features']
+    drug_features = args['drug_features']
+    other_features = args['other_features']
+    model_name = args['ml_models']
+    cv_method = args['cv_method']
+    cv_folds = args['cv_folds']
+    lr_curve_ticks = args['lc_ticks']
+    verbose = args['verbose']
+    n_jobs = args['n_jobs']
 
     # Feature list
     feature_list = cell_features + drug_features + other_features
+
+    # Define names
+    train_sources_name = '_'.join(train_sources)
+
+    # Define metrics
+    # TODO: find a way to pass to calc_scores in ml_models.py
+    metrics = ['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'neg_mean_squared_error']
 
 
 
@@ -163,8 +172,10 @@ def run(args):
     t = datetime.datetime.now()
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
-    name_sufix = '~' + '.'.join(train_sources + [model_name] + [cv_method] + cell_features + drug_features + [target_name])
-    run_outdir = os.path.join(OUTDIR, 'run_' + t + name_sufix)
+    #name_sufix = '~' + '.'.join(train_sources + [model_name] + [cv_method] + cell_features + drug_features + [target_name])
+    #run_outdir = os.path.join(OUTDIR, 'run_' + t + name_sufix)
+    name_sufix = '.'.join(train_sources + [model_name] + [cv_method] + cell_features + drug_features + [target_name])
+    run_outdir = os.path.join(OUTDIR, name_sufix + '~' + t)
     os.makedirs(run_outdir)
     logfilename = os.path.join(run_outdir, 'logfile.log')
     lg = classlogger.Logger(logfilename=logfilename)
@@ -179,69 +190,8 @@ def run(args):
     #       Load data and pre-proc
     # ========================================================================
     datapath = os.path.join(DATADIR, DATAFILENAME)
-    lg.logger.info(f'\nLoad tidy data ... {datapath}')
-    data = pd.read_parquet(datapath, engine='auto', columns=None)
-    lg.logger.info(f'data.shape {data.shape}')
-    lg.logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(data)/1e9))
-    # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
-
-
-    # Replace characters that are illegal for xgboost/lightgbm feature names
-    # xdata.columns = list(map(lambda s: s.replace('[','_').replace(']','_'), xdata.columns.tolist())) # required by xgboost
-    import re
-    regex = re.compile(r'\[|\]|<', re.IGNORECASE)
-    data.columns = [regex.sub('_', c) if any(x in str(c) for x in set(('[', ']', '<'))) else c for c in data.columns.values]
-
-
-    if tissue_type is not None:
-        data = data[data[''].isin([tissue_type])].reset_index(drop=True)
-
-
-    # Subsample
-    if row_sample:
-        row_sample = eval(row_sample)
-        data = utils.subsample(df=data, v=row_sample, axis=0)
-        print('data.shape', data.shape)
-
-    if col_sample:
-        col_sample = eval(col_sample)
-        fea_data, other_data = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-        fea_data = utils.subsample(df=fea_data, v=col_sample, axis=1)
-        data = pd.concat([fea_data, other_data], axis=1)
-        print('data.shape', data.shape)
-
-
-    # Extract test sources
-    lg.logger.info('\nExtract test sources ... {}'.format(test_sources))
-    te_data = data[data['SOURCE'].isin(test_sources)].reset_index(drop=True)
-    lg.logger.info(f'te_data.shape {te_data.shape}')
-    lg.logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(te_data)/1e9))
-    lg.logger.info(te_data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
-
-
-    # Extract train sources
-    lg.logger.info('\nExtract train sources ... {}'.format(train_sources))
-    data = data[data['SOURCE'].isin(train_sources)].reset_index(drop=True)
-    lg.logger.info(f'data.shape {data.shape}')
-    lg.logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(data)/1e9))
-    lg.logger.info(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
-
-
-    # Assign type to categoricals
-    # cat_cols = data.select_dtypes(include='object').columns.tolist()
-    # data[cat_cols] = data[cat_cols].astype('category', ordered=False)
-
-
-    # Shuffle data
-    data = data.sample(frac=1.0, axis=0, random_state=SEED).reset_index(drop=True)
-
-
-    # Filter out AUC>1
-    # print('\nFilter some AUC outliers (>1)')
-    # print('data.shape', data.shape)
-    # data = data[[False if x>1.0 else True for x in data[target_name]]].reset_index(drop=True)
-    # print('data.shape', data.shape)
-
+    data, te_data = utils_tidy.load_data(datapath=datapath, fea_prfx_dict=fea_prfx_dict,
+                                         args=args, logger=lg.logger, random_state=SEED)
 
     # Plots
     utils.boxplot_rsp_per_drug(df=data, target_name=target_name,
@@ -251,47 +201,6 @@ def run(args):
     utils.plot_qq(x=data[target_name], var_name=target_name,
         path=os.path.join(run_outdir, target_name+'_qqplot.png'))
     utils.plot_hist_drugs(x=data['DRUG'], path=os.path.join(run_outdir, 'drugs_hist.png'))
-
-
-    # Transform the target
-    if target_trasform:
-        y = data[target_name].copy()
-        # y = np.log1p(ydata); plot_hist(x=y, var_name=target_name+'_log1p')
-        # # y = np.log(ydata+1); plot_hist(x=y, var_name=target_name+'_log+1')
-        # y = np.log10(ydata+1); plot_hist(x=y, var_name=target_name+'_log10')
-        # y = np.log2(ydata+1); plot_hist(x=y, var_name=target_name+'_log2')
-        # y = ydata**2; plot_hist(x=ydata, var_name=target_name+'_x^2')
-        y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
-        data[target_name] = y
-        # ydata = pd.DataFrame(y)
-
-        y = te_data[target_name].copy()
-        y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
-        te_data[target_name] = y
-
-
-    if 'dlb' in other_features:
-        lg.logger.info('\nAdd drug labels to features ...')
-        # print(data['DRUG'].value_counts())
-
-        # http://queirozf.com/entries/one-hot-encoding-a-feature-on-a-pandas-dataframe-an-example
-        # One-hot encoder
-        dlb = pd.get_dummies(data=data[['DRUG']], prefix=fea_prfx_dict['dlb'],
-                            dummy_na=False).reset_index(drop=True)
-
-        # Label encoder
-        # dlb = data[['DRUG']].astype('category', ordered=False).reset_index(drop=True)
-        # print(dlb.dtype)
-
-        # Concat drug labels and other features
-        data = pd.concat([dlb, data], axis=1).reset_index(drop=True)
-        lg.logger.info(f'dlb.shape {dlb.shape}')
-        lg.logger.info(f'data.shape {data.shape}')
-
-
-    if 'rna_clusters' in other_features:
-        # TODO
-        pass
 
 
 
@@ -373,14 +282,15 @@ def run(args):
     cv_scores = cross_validate(
         estimator=sklearn.base.clone(model.model),
         X=xdata, y=ydata,
-        scoring=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error'],
+        scoring=metrics,
         cv=cv, groups=groups,
         n_jobs=n_jobs, fit_params=fit_params)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-    cv_scores = utils.cv_scores_to_df(cv_scores, decimals=3, calc_stats=True)
-    cv_scores = cv_scores.reset_index()
-    cv_scores = cv_scores.rename(columns={'index': 'metric'})
-    cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + '_'.join(train_sources) + '.csv'), index=False)
+    cv_scores = utils.update_cross_validate_scores(cv_scores)
+    #cv_scores = utils.cv_scores_to_df(cv_scores, decimals=3, calc_stats=True)
+    cv_scores = cv_scores.reset_index(drop=True)
+    #cv_scores = cv_scores.rename(columns={'index': 'metric'})
+    cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
     lg.logger.info(f'cv_scores\n{cv_scores}')
 
 
@@ -428,7 +338,6 @@ def run(args):
     # from cvrun import my_cv_run
     # df_tr = []
     # df_vl = []
-    # lr_curve_ticks = 5
     # data_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
     # data_sizes = [int(n) for n in data.shape[0]*data_sizes_frac]
     
@@ -469,15 +378,15 @@ def run(args):
     # Generate learning curves
     lg.logger.info('\nStart learning curve (my method) ...')
     model, fit_params = init_model(model_name='lgb_reg', logger=lg.logger)
-    lrn_cruve_metrics = ['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'mean_squared_error']
     t0 = time.time()
     lrn_curve_scores = lrn_curve.my_learning_curve(
         estimator=model.model,
         X=xdata, Y=ydata,
         args=args,
         fit_params=fit_params,
-        lr_curve_ticks=5, data_sizes_frac=None,
-        metrics=lrn_cruve_metrics,
+        lr_curve_ticks=lr_curve_ticks,
+        data_sizes_frac=None,
+        metrics=metrics,
         cv_method=cv_method, cv_folds=cv_folds, groups=None,
         n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
@@ -490,8 +399,7 @@ def run(args):
     # -------------------------------------------------
     lg.logger.info("\nStart learning_curve (sklearn) ...")
     model, _ = init_model(model_name, lg.logger)
-    metric_name = 'r2' # 'neg_mean_absolute_error', 'neg_median_absolute_error', 'mean_squared_error'
-    lr_curve_ticks = 5
+    metric_name = 'r2'
     train_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
     t0 = time.time()
     lrn_curve_scores = learning_curve(
@@ -505,7 +413,7 @@ def run(args):
     # lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores_auto.csv'), index=False)
     
     lrn_curve.plt_learning_curve(rslt=lrn_curve_scores, metric_name=metric_name,
-        title='Learning curve (target: {}, data: {})'.format(target_name, '_'.join(train_sources)),
+        title='Learning curve (target: {}, data: {})'.format(target_name, train_sources_name),
         path=os.path.join(run_outdir, 'auto_learning_curve_' + target_name + '_' + metric_name + '.png'))
 
 
@@ -551,6 +459,10 @@ def run(args):
 
     csv_scores = []  # cross-study-validation scores
     for i, src in enumerate(test_sources):
+        if train_sources == [src]:
+            lg.logger.info("That's the taining set (so no predictions).")
+            continue
+
         lg.logger.info(f'\nTest source {i+1}:  _____ {src} _____')
         t0 = time.time()
 
@@ -575,7 +487,8 @@ def run(args):
         # Calc and save scores
         lg.logger.info('\nscores:')
         scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
-        csv_scores.append(scores)
+        #csv_scores.append(scores)
+        csv_scores.append( pd.DataFrame([scores], index=[src]).T )
         
         # Dump preds
         preds_fname = 'preds_' + src + '_' + model_name + '.csv'
@@ -584,16 +497,32 @@ def run(args):
 
         lg.logger.info('\nRuntime: {:.3f}'.format((time.time()-t0)/60))
 
+    # Combine test set preds
+    csv_scores = pd.concat(csv_scores, axis=1)
 
-    # Summarize cv scores
-    #df_csv_scores = utils.cv_scores_to_df(csv_scores, decimals=3, calc_stats=False)  # TODO: try this
-    csv_scores_all = pd.DataFrame(csv_scores).T
-    csv_scores_all.columns = test_sources
+    # (New) Adjust cv_scores in order to combine with test set preds
+    # (take the cv score for val set)
+    cv_scores = cv_scores[cv_scores['train_set']==False].drop(columns='train_set')
+    cv_scores[train_sources_name] = cv_scores.iloc[:, -cv_folds:].mean(axis=1)
+    cv_scores = cv_scores[['metric', train_sources_name]]
+    cv_scores = cv_scores.set_index('metric')
+
+    # Combine scores from val set cross-validation and test set
+    csv_scores_all = pd.concat([cv_scores, csv_scores], axis=1)
+
     csv_scores_all = csv_scores_all.round(decimals=3)
+    csv_scores_all.insert(loc=0, column='train_src', value=train_sources_name)
     csv_scores_all = csv_scores_all.reset_index().rename(columns={'index': 'metric'})
-    csv_scores_all.insert(loc=1, column='train_src', value='_'.join(train_sources))
     lg.logger.info('\ncsv_scores\n{}'.format(csv_scores_all))
-    csv_scores_all.to_csv(os.path.join(run_outdir, 'csv_scores_' + '_'.join(train_sources) + '.csv'), index=False)
+    csv_scores_all.to_csv(os.path.join(run_outdir, 'csv_scores_' + train_sources_name + '.csv'), index=False)
+
+    # csv_scores_all = pd.DataFrame(csv_scores).T
+    # csv_scores_all.columns = test_sources
+    # csv_scores_all = csv_scores_all.round(decimals=3)
+    # csv_scores_all = csv_scores_all.reset_index().rename(columns={'index': 'metric'})
+    # csv_scores_all.insert(loc=1, column='train_src', value=train_sources_name)
+    # lg.logger.info('\ncsv_scores\n{}'.format(csv_scores_all))
+    # csv_scores_all.to_csv(os.path.join(run_outdir, 'csv_scores_' + train_sources_name + '.csv'), index=False)
 
 
 
@@ -663,8 +592,11 @@ def main(args):
     config_fname = os.path.join(file_path, CONFIGFILENAME)
     args = argparser.get_args(args=args, config_fname=config_fname)
     pprint(vars(args))
+    args = vars(args)
     csv_scores_all = run(args)
-    return csv_scores_all, OUTDIR  # TODO: instead of OUTDIR, return all globals(??)
+    #params = vars(args)
+    params['outdir'] = OUTDIR
+    return csv_scores_all, params
     
 
 if __name__ == '__main__':

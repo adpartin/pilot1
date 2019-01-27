@@ -49,16 +49,21 @@ class BaseMLModel():
         return adj_r2
 
 
-    def calc_scores(self, xdata, ydata, to_print=False):
+    def calc_scores(self, xdata, ydata, metrics=None, to_print=False):
         """ Create dict of scores. """
+        # metrics = {'r2_score': sklearn.metrics.r2_score,
+        #            'mean_absolute_error': sklearn.metrics.mean_absolute_error,
+        #            'median_absolute_error': sklearn.metrics.median_absolute_error,
+        #            'explained_variance_score': sklearn.metrics.explained_variance_score}
         # TODO: replace `if` with `try`
         if hasattr(self, 'model'):
             preds = self.model.predict(xdata)
             scores = OrderedDict()
-            scores['r2_score'] = sklearn.metrics.r2_score(ydata, preds)
-            scores['adj_r2_score'] = self.__adj_r2_score(ydata, preds)
-            scores['mean_abs_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
-            scores['median_abs_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
+            scores['r2'] = sklearn.metrics.r2_score(ydata, preds)
+            #scores['adj_r2_score'] = self.__adj_r2_score(ydata, preds)
+            scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
+            scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
+            scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(ydata, preds)
             # scores['explained_variance_score'] = sklearn.metrics.explained_variance_score(ydata, preds)
 
             self.scores = scores
@@ -72,12 +77,9 @@ class BaseMLModel():
         """ Print performance scores. """
         # TODO: replace `if` with `try`
         if hasattr(self, 'scores'):
-            scores = self.scores
             if self.logger is not None:
-                self.logger.info('r2_score: {:.2f}'.format(scores['r2_score']))
-                self.logger.info('adj_r2_score: {:.2f}'.format(scores['adj_r2_score']))
-                self.logger.info('mean_abs_error: {:.2f}'.format(scores['mean_abs_error']))
-                self.logger.info('median_abs_error: {:.2f}'.format(scores['median_abs_error']))
+                for score_name, score_value in self.scores.items():
+                    self.logger.info('{}: {:.2f}'.format(score_name, score_value))
 
 
     def dump_preds(self, df_data, xdata, target_name, outpath=None):
@@ -220,6 +222,11 @@ class LGBM_REGRESSOR(BaseMLModel):
         self.model = lgb.LGBMModel(objective=LGBM_REGRESSOR.ml_objective,
                                    n_jobs=self.n_jobs,
                                    random_state=self.random_state)
+        # ----- lightgbm "sklearn API" - end
+
+        # ----- lightgbm "sklearn API" - start
+        self.model = lgb.LGBMRegressor()
+        # ----- lightgbm "sklearn API" - end
 
 
     def fit(self, X, y, eval_set=None):

@@ -2,9 +2,11 @@
 This script contains functions that work with the tidy dataframe.
 """
 import os
+import sys
 import logging
 import numpy as np
 import pandas as pd
+import re
 
 import matplotlib
 # matplotlib.use('TkAgg')
@@ -15,7 +17,120 @@ import seaborn as sns
 from scipy import stats
 from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error, explained_variance_score
 
+import utils
+import utils_tidy
+import classlogger
+
+
 DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
+
+
+def load_data(datapath, fea_prfx_dict, args, logger, random_state=None):
+    """ Load and pre-process the tidy data. """
+    logger.info(f'\nLoad tidy data ... {datapath}')
+    data = pd.read_parquet(datapath, engine='auto', columns=None)
+    logger.info(f'data.shape {data.shape}')
+    logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(data)/1e9))
+    # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
+
+
+    # Replace characters that are illegal for xgboost/lightgbm feature names
+    # xdata.columns = list(map(lambda s: s.replace('[','_').replace(']','_'), xdata.columns.tolist())) # required by xgboost
+    regex = re.compile(r'\[|\]|<', re.IGNORECASE)
+    data.columns = [regex.sub('_', c) if any(x in str(c) for x in set(('[', ']', '<'))) else c for c in data.columns.values]
+
+
+    if args['tissue_type'] is not None:
+        data = data[data[''].isin([args['tissue_type']])].reset_index(drop=True)
+
+
+    # Subsample
+    if args['row_sample']:
+        row_sample = eval(args['row_sample'])
+        data = utils.subsample(df=data, v=row_sample, axis=0)
+        print('data.shape', data.shape)
+
+    if args['col_sample']:
+        col_sample = eval(args['col_sample'])
+        fea_data, other_data = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+        fea_data = utils.subsample(df=fea_data, v=col_sample, axis=1)
+        data = pd.concat([fea_data, other_data], axis=1)
+        print('data.shape', data.shape)
+
+
+    # Extract test sources
+    logger.info('\nExtract test sources ... {}'.format(args['test_sources']))
+    te_data = data[data['SOURCE'].isin(args['test_sources'])].reset_index(drop=True)
+    logger.info(f'te_data.shape {te_data.shape}')
+    logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(te_data)/1e9))
+    logger.info(te_data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+
+
+    # Extract train sources
+    logger.info('\nExtract train sources ... {}'.format(args['train_sources']))
+    data = data[data['SOURCE'].isin(args['train_sources'])].reset_index(drop=True)
+    logger.info(f'data.shape {data.shape}')
+    logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(data)/1e9))
+    logger.info(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+
+
+    # Assign type to categoricals
+    # cat_cols = data.select_dtypes(include='object').columns.tolist()
+    # data[cat_cols] = data[cat_cols].astype('category', ordered=False)
+
+
+    # Shuffle data
+    data = data.sample(frac=1.0, axis=0, random_state=random_state).reset_index(drop=True)
+
+
+    # Filter out AUC>1
+    # print('\nFilter some AUC outliers (>1)')
+    # print('data.shape', data.shape)
+    # data = data[[False if x>1.0 else True for x in data[target_name]]].reset_index(drop=True)
+    # print('data.shape', data.shape)
+
+
+    # Transform the target
+    if args['target_trasform']:
+        y = data[args['target_name']].copy()
+        # y = np.log1p(ydata); plot_hist(x=y, var_name=target_name+'_log1p')
+        # # y = np.log(ydata+1); plot_hist(x=y, var_name=target_name+'_log+1')
+        # y = np.log10(ydata+1); plot_hist(x=y, var_name=target_name+'_log10')
+        # y = np.log2(ydata+1); plot_hist(x=y, var_name=target_name+'_log2')
+        # y = ydata**2; plot_hist(x=ydata, var_name=target_name+'_x^2')
+        y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
+        data[args['target_name']] = y
+        # ydata = pd.DataFrame(y)
+
+        y = te_data[args['target_name']].copy()
+        y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
+        te_data[args['target_name']] = y
+
+
+    if 'dlb' in args['other_features']:
+        logger.info('\nAdd drug labels to features ...')
+        # print(data['DRUG'].value_counts())
+
+        # http://queirozf.com/entries/one-hot-encoding-a-feature-on-a-pandas-dataframe-an-example
+        # One-hot encoder
+        dlb = pd.get_dummies(data=data[['DRUG']], prefix=fea_prfx_dict['dlb'],
+                            dummy_na=False).reset_index(drop=True)
+
+        # Label encoder
+        # dlb = data[['DRUG']].astype('category', ordered=False).reset_index(drop=True)
+        # print(dlb.dtype)
+
+        # Concat drug labels and other features
+        data = pd.concat([dlb, data], axis=1).reset_index(drop=True)
+        logger.info(f'dlb.shape {dlb.shape}')
+        logger.info(f'data.shape {data.shape}')
+
+
+    if 'rna_clusters' in args['other_features']:
+        # TODO
+        pass
+
+    return data, te_data
 
 
 def split_features_and_other_cols(data, fea_prfx_dict):

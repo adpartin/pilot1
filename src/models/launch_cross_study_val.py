@@ -43,16 +43,16 @@ def main(args):
     # Smaller set
     cross_study_sets = [
         {'tr_src': ['gcsi'],
-         'te_src': ['ccle', 'gcsi']},
+         'te_src': ['ccle', 'gcsi', 'gdsc']},
 
         {'tr_src': ['ccle'],
-         'te_src': ['ccle', 'gcsi']},
+         'te_src': ['ccle', 'gcsi', 'gdsc']},
     ]
 
 
     # Single run
     # idx = 2
-    # df_csv_scores, outdir = train_from_combined.main(
+    # df_csv_scores, params = train_from_combined.main(
     #     ['-tr', *cross_study_sets[idx]['tr_src'],
     #     '-te', *cross_study_sets[idx]['te_src'],
     #     *args])
@@ -62,17 +62,18 @@ def main(args):
     dfs = []
     for run_id in range(len(cross_study_sets)):
         print('{} Run {} {}'.format('-'*40, run_id+1, '-'*40))
-        csv_scores_all, outdir = train_from_combined.main(
+        csv_scores_all, params = train_from_combined.main(
             ['-tr', *cross_study_sets[run_id]['tr_src'],
              '-te', *cross_study_sets[run_id]['te_src'],
-             *args])   
+             *args])
         dfs.append(csv_scores_all)
 
     # Create folder to store results
     t = datetime.datetime.now()
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
-    csv_outdir = os.path.join(outdir, 'cross_val_rslts_'+t)
+    dirname = 'cross_study_val~' + params['cv_method'] + '.' + params['target_name'] + '~' + t
+    csv_outdir = os.path.join(params['outdir'], dirname)
     os.makedirs(csv_outdir, exist_ok=True)
 
     # Create csv table for each available metric 

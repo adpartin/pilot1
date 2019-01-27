@@ -21,7 +21,7 @@ import utils
 def my_learning_curve(estimator, X, Y,
                       args=None, fit_params=None,
                       lr_curve_ticks=5, data_sizes_frac=None,
-                      metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'mean_squared_error'],
+                      metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'neg_mean_squared_error'],
                       cv_method='simple', cv_folds=5, groups=None,
                       n_jobs=1, random_state=None, logger=None, outdir='./'):
     """
@@ -66,28 +66,30 @@ def my_learning_curve(estimator, X, Y,
         xdata = X.iloc[idx[:d_size], :]
         ydata = Y[idx[:d_size]]
 
-        scores = cross_validate(
+        cv_scores = cross_validate(
             estimator=sklearn.base.clone(estimator),
             X=xdata, y=ydata,
             scoring=metrics, cv=cv, groups=groups,
             n_jobs=n_jobs, fit_params=fit_params)
 
-        df = utils.cv_scores_to_df(scores, decimals=3, calc_stats=False)
-        df.insert(loc=0, column='data_size', value=d_size)
+        df = utils.update_cross_validate_scores(cv_scores)
 
-        v = list(map(lambda x: '_'.join(x.split('_')[1:]), df.index))
-        df.insert(loc=0, column='metric', value=v)
+        #df = utils.cv_scores_to_df(cv_scores, decimals=3, calc_stats=False)
+        df.insert(loc=df.shape[1]-cv_folds, column='data_size', value=d_size)
+
+        #v = list(map(lambda x: '_'.join(x.split('_')[1:]), df.index))
+        #df.insert(loc=0, column='metric', value=v)
 
         # Convert `neg` metric to positive and update metric names
         # scikit-learn.org/stable/modules/model_evaluation.html --> explains the `neg` in `neg_mean_absolute_error`
-        idx_bool = [True if 'neg_' in s else False for s in df['metric']]
-        for i, bl in enumerate(idx_bool):
-            if bl:
-                df.iloc[i, -cv_folds:] = abs(df.iloc[i, -cv_folds:])
-        df['metric'] = df['metric'].map(lambda s: s.split('neg_')[-1] if 'neg_' in s else s)
+        # idx_bool = [True if 'neg_' in s else False for s in df['metric']]
+        # for i, bl in enumerate(idx_bool):
+        #     if bl:
+        #         df.iloc[i, -cv_folds:] = abs(df.iloc[i, -cv_folds:])
+        # df['metric'] = df['metric'].map(lambda s: s.split('neg_')[-1] if 'neg_' in s else s)
 
-        v = list(map(lambda x: True if 'train' in x else False, df.index))
-        df.insert(loc=1, column='train_set', value=v)
+        #v = list(map(lambda x: True if 'train' in x else False, df.index))
+        #df.insert(loc=1, column='train_set', value=v)
                 
         # Append results to master df
         scores_all_list.append(df)
@@ -126,10 +128,10 @@ def plt_learning_curve_multi_metric(df, cv_folds, outdir, args=None):
         rslt.append(tr.values)
         rslt.append(vl.values)
 
-        fname = 'learning_curve_' + args.target_name + '_' + metric_name + '.png'
+        fname = 'learning_curve_' + args['target_name'] + '_' + metric_name + '.png'
         path = os.path.join(outdir, fname)
         plt_learning_curve(rslt=rslt, metric_name=metric_name,
-            title='Learning curve (target: {}, data: {})'.format(args.target_name, '_'.join(args.train_sources)),
+            title='Learning curve (target: {}, data: {})'.format(args['target_name'], '_'.join(args['train_sources'])),
             path=path)
 
 
