@@ -26,28 +26,28 @@ def main(args):
     t = ''.join([str(i) for i in t])
 
     # Full set
-    # cross_study_sets = [
-    #     {'tr_src': ['gcsi'],
-    #     'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
-
-    #     {'tr_src': ['ccle'],
-    #     'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
-
-    #     {'tr_src': ['gdsc'],
-    #     'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
-
-    #     {'tr_src': ['ctrp'],
-    #     'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
-    # ]
-
-    # Smaller set
     cross_study_sets = [
         {'tr_src': ['gcsi'],
-         'te_src': ['ccle', 'gcsi', 'gdsc']},
+         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
 
         {'tr_src': ['ccle'],
-         'te_src': ['ccle', 'gcsi', 'gdsc']},
+         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
+
+        {'tr_src': ['gdsc'],
+         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
+
+        {'tr_src': ['ctrp'],
+         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi']},
     ]
+
+    # Smaller set
+    # cross_study_sets = [
+    #     {'tr_src': ['gcsi'],
+    #      'te_src': ['ccle', 'gcsi', 'gdsc']},
+
+    #     {'tr_src': ['ccle'],
+    #      'te_src': ['ccle', 'gcsi', 'gdsc']},
+    # ]
 
 
     # Single run

@@ -595,8 +595,8 @@ def main(args):
     args = vars(args)
     csv_scores_all = run(args)
     #params = vars(args)
-    params['outdir'] = OUTDIR
-    return csv_scores_all, params
+    args['outdir'] = OUTDIR
+    return csv_scores_all, args
     
 
 if __name__ == '__main__':
