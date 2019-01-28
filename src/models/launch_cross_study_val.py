@@ -21,9 +21,6 @@ file_path = os.path.dirname(os.path.realpath(__file__))
 def main(args):
 
     t0 = time.time()
-    t = datetime.datetime.now()
-    t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
-    t = ''.join([str(i) for i in t])
 
     # Full set
     cross_study_sets = [

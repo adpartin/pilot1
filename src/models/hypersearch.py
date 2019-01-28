@@ -1,5 +1,11 @@
-# https://scikit-learn.org/stable/auto_examples/model_selection/plot_validation_curve.html
+"""
+hyperopt:
+https://towardsdatascience.com/automated-machine-learning-hyperparameter-tuning-in-python-dfda59b72f8a
 
+Comparison:
+https://medium.com/@ramrajchandradevan/comparison-among-hyper-parameter-optimizers-cd37483cd47
+
+"""
 from __future__ import print_function
 from __future__ import division
 
@@ -91,8 +97,9 @@ def run(args):
     feature_list = cell_features + drug_features + other_features
 
 
-    datasets = [ ['gcsi'], ['ccle'], ['ctrp'], ['gdsc'] ]
-    for dname in datasets:
+    # datasets = [ ['gcsi'], ['ccle'], ['ctrp'], ['gdsc'] ]
+    # for dname in datasets:
+    for dname in args['train_sources']:
         args['train_sources'] = dname
         args['test_sources'] = dname
 
@@ -103,8 +110,6 @@ def run(args):
         t = datetime.datetime.now()
         t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
         t = ''.join([str(i) for i in t])
-        #name_sufix = '~' + '.'.join(train_sources + [model_name] + [cv_method] + cell_features + drug_features + [target_name])
-        #run_outdir = os.path.join(OUTDIR, 'run_' + t + name_sufix)
         name_sufix = '.'.join(train_sources + [model_name] + [cv_method] + cell_features + drug_features + [target_name])
         run_outdir = os.path.join(OUTDIR, name_sufix + '~' + t)
         os.makedirs(run_outdir)
@@ -159,7 +164,7 @@ def run(args):
         lg.logger.info('Hyper-parameter search ... {}'.format('_'.join(args['train_sources'])))
         lg.logger.info('-'*50)
 
-        n_estimators = 150
+        n_estimators = 100
 
         from scipy.stats import randint, uniform
         lgb_reg_params = {'objective': 'regression',
@@ -182,27 +187,31 @@ def run(args):
         #               'reg_lambda': [0, 1e-1, 1, 5, 10, 20, 50, 100], # (0.0) alias: lambda_l1
         #               'learning_rate': [0.1]} # (0.1) alias: shrinkage_rate, eta
 
-        param_grid = {'num_leaves': [31, 15, 45],  # (31) alias: max_leaves
-                      'max_depth': [-1, 3, 7], # (-1 -> not limit)
-                      'learning_rate': [0.1, 0.01], # (0.1) alias: shrinkage_rate, eta
-                      'subsample': [1.0, 0.5], # (1.0) alias: bagging_fraction, 
-                      'colsample_bytree': [1.0, 0.5], # (1.0) alias: feature_fraction, 
-                      'min_child_weight': [0.001, 0.1], # (0.001)
-                      'min_child_samples': [20, 0, 40], # (20) alias: min_data_in_leaf  -->  very important (note from Kaggle course)!!
-                      #'reg_alpha': [0], # (0.0) alias: lambda_l2
-                      #'reg_lambda': [0], # (0.0) alias: lambda_l1
-                      }
+        # prm_grid_srch = {'num_leaves': [31, 45],  # (31) alias: max_leaves
+        #               'max_depth': [-1, 7], # (-1 -> not limit)
+        #               'learning_rate': [0.1, 0.01], # (0.1) alias: shrinkage_rate, eta
+        #               'subsample': [1.0, 0.5], # (1.0) alias: bagging_fraction, 
+        #               'colsample_bytree': [1.0, 0.5], # (1.0) alias: feature_fraction, 
+        #               #'min_child_weight': [0.001, 0.1], # (0.001)
+        #               'min_child_samples': [20, 0, 40], # (20) alias: min_data_in_leaf  -->  very important (note from Kaggle course)!!
+        #               #'reg_alpha': [0], # (0.0) alias: lambda_l2
+        #               #'reg_lambda': [0], # (0.0) alias: lambda_l1
+        # }
 
-        # param_grid = {'learning_rate': [0.1], # (0.1) alias: shrinkage_rate, eta
-        #             'min_child_samples': [20, 40], # (20) alias: min_data_in_leaf  -->  very important (note from Kaggle course)!!
-        #             }
+        # prm_rndm_srch = {
+
+        # }
+
+        prm_grid_srch = {'learning_rate': [0.1, 0.01], # (0.1) alias: shrinkage_rate, eta
+                         'min_child_samples': [20, 40], # (20) alias: min_data_in_leaf  -->  very important (note from Kaggle course)!!
+        }
 
         # model = LGBM_REGRESSOR(n_jobs=n_jobs, random_state=SEED, logger=lg.ogger)
         model = lgb.LGBMModel(**lgb_reg_params)
         print(model)
 
         gs = GridSearchCV(estimator=model,
-                        param_grid=param_grid,
+                        param_grid=prm_grid_srch,
                         scoring='r2',  # sorted(sklearn.metrics.SCORERS.keys())
                         n_jobs=n_jobs,
                         cv=cv,

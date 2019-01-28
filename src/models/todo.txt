@@ -1,0 +1,67 @@
+TODO:
+1. ML models
+- rank models based on performance
+- optimize models using hyperparam search
+  https://stats.stackexchange.com/questions/183984/how-to-use-xgboost-cv-with-hyperparameters-optimization
+  https://github.com/raymon-tian/trend_ml_toolkit_xgboost/blob/master/xg_train_slower.py
+  https://github.com/LevinJ/Supply-demand-forecasting/blob/master/utility/xgbbasemodel.py
+  https://blog.cambridgespark.com/hyperparameter-tuning-in-xgboost-4ff9100a3b2f
+- ensemble/stack models
+  http://blog.kaggle.com/2017/06/15/stacking-made-easy-an-introduction-to-stacknet-by-competitions-grandmaster-marios-michailidis-kazanova/
+  https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard
+- best practices
+  http://dnc1994.com/2016/05/rank-10-percent-in-first-kaggle-competition-en/
+
+Explore AutoML:
+- tpot
+- auto-sklearn
+- data robot
+
+ML models:
+- NN (consider various normalization methods) - https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.html
+- xgboost (gbtree or gblinear)
+- lightgbm
+- catboost
+- RandomForestRegressor, AdaBoostRegressor, ExtraTreesRegressor
+- naive bayes
+- svm
+- knn
+- elastic net
+- use features generated using t-SNE, PCA, etc.
+
+Hyperparam schemes:
+- CANDLE
+- https://medium.com/@mikkokotila/a-comprehensive-list-of-hyperparameter-optimization-tuning-solutions-88e067f19d9
+
+3. Outliers and transformations
+https://www.analyticsvidhya.com/blog/2015/11/8-ways-deal-continuous-variables-predictive-modeling/
+https://scikit-learn.org/stable/auto_examples/plot_anomaly_comparison.html
+https://scikit-learn.org/stable/auto_examples/neighbors/plot_lof_novelty_detection.html
+- unskew the data; drop outliers based on boxplot (stratified by drug and tissue type)
+- IsolationForest
+
+4. A cluster-based feature(s):
+http://blog.kaggle.com/2015/07/27/taxi-trajectory-winners-interview-1st-place-team-%F0%9F%9A%95/
+- Apply clustering to rna-seq. The clusters vector will become a categorical variable. In this case
+  we avoid using tissue type labels but rather use proximity in the actual feature space.
+
+5. Features; data pre-processing
+- create code preproc_tidy_data.py
+- rna-seq clusters
+- bin descriptors
+- embedding on mutation data
+- imputation --> create boolean indicator of NA values
+
+6. Feature importance
+- Explore X_SHAP_values in predict() method in lightgbm
+
+7. Stratify and group
+- https://github.com/scikit-learn/scikit-learn/pull/9413
+
+
+Run-time problems:
+When running on Mac, lightgbm gives an error:
+- https://github.com/dmlc/xgboost/issues/1715
+- https://lightgbm.readthedocs.io/en/latest/FAQ.html
+- This has been solved by installing "nomkl":  conda install nomkl
+- What is nomkl: https://docs.continuum.io/mkl-optimizations/

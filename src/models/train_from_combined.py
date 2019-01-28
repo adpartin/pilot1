@@ -1,72 +1,3 @@
-"""
-TODO:
-1. ML models
-- rank models based on performance
-- optimize models using hyperparam search
-  https://stats.stackexchange.com/questions/183984/how-to-use-xgboost-cv-with-hyperparameters-optimization
-  https://github.com/raymon-tian/trend_ml_toolkit_xgboost/blob/master/xg_train_slower.py
-  https://github.com/LevinJ/Supply-demand-forecasting/blob/master/utility/xgbbasemodel.py
-  https://blog.cambridgespark.com/hyperparameter-tuning-in-xgboost-4ff9100a3b2f
-- ensemble/stack models
-  http://blog.kaggle.com/2017/06/15/stacking-made-easy-an-introduction-to-stacknet-by-competitions-grandmaster-marios-michailidis-kazanova/
-  https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard
-- best practices
-  http://dnc1994.com/2016/05/rank-10-percent-in-first-kaggle-competition-en/
-
-Explore AutoML:
-- tpot
-- auto-sklearn
-- data robot
-
-ML models:
-- NN (consider various normalization methods) - https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.html
-- xgboost (gbtree or gblinear)
-- lightgbm
-- catboost
-- RandomForestRegressor, AdaBoostRegressor, ExtraTreesRegressor
-- naive bayes
-- svm
-- knn
-- elastic net
-- use features generated using t-SNE, PCA, etc.
-
-Hyperparam schemes:
-- CANDLE
-- https://medium.com/@mikkokotila/a-comprehensive-list-of-hyperparameter-optimization-tuning-solutions-88e067f19d9
-
-3. Outliers and transformations
-https://www.analyticsvidhya.com/blog/2015/11/8-ways-deal-continuous-variables-predictive-modeling/
-https://scikit-learn.org/stable/auto_examples/plot_anomaly_comparison.html
-https://scikit-learn.org/stable/auto_examples/neighbors/plot_lof_novelty_detection.html
-- unskew the data; drop outliers based on boxplot (stratified by drug and tissue type)
-- IsolationForest
-
-4. A cluster-based feature(s):
-http://blog.kaggle.com/2015/07/27/taxi-trajectory-winners-interview-1st-place-team-%F0%9F%9A%95/
-- Apply clustering to rna-seq. The clusters vector will become a categorical variable. In this case
-  we avoid using tissue type labels but rather use proximity in the actual feature space.
-
-5. Features; data pre-processing
-- create code preproc_tidy_data.py
-- rna-seq clusters
-- bin descriptors
-- embedding on mutation data
-- imputation --> create boolean indicator of NA values
-
-6. Feature importance
-- Explore X_SHAP_values in predict() method in lightgbm
-
-7. Stratify and group
-- https://github.com/scikit-learn/scikit-learn/pull/9413
-
-
-Run-time problems:
-When running on Mac, lightgbm gives an error:
-- https://github.com/dmlc/xgboost/issues/1715
-- https://lightgbm.readthedocs.io/en/latest/FAQ.html
-- This has been solved by installing "nomkl":  conda install nomkl
-- What is nomkl: https://docs.continuum.io/mkl-optimizations/
-"""
 from __future__ import print_function
 from __future__ import division
 
@@ -101,12 +32,15 @@ from sklearn.model_selection import learning_curve
 from sklearn.model_selection import cross_val_score, cross_validate, learning_curve
 from sklearn.model_selection import ShuffleSplit, GroupShuffleSplit, KFold, GroupKFold
 
-# Utils
+# Get file path
+# ... manutally run ...
 # file_path = os.getcwd()
 # file_path = os.path.join(file_path, 'src/models')
 # os.chdir(file_path)
-
+# ... uato ...
 file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
+
+# Utils
 # utils_path = os.path.abspath(os.path.join(file_path, 'utils'))
 # sys.path.append(utils_path)
 import utils
@@ -161,8 +95,9 @@ def run(args):
     train_sources_name = '_'.join(train_sources)
 
     # Define metrics
-    # TODO: find a way to pass to calc_scores in ml_models.py
-    metrics = ['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'neg_mean_squared_error']
+    # TODO: find way to pass to calc_scores in ml_models.py
+    metrics = ['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error',
+               'neg_mean_squared_error']
 
 
 
@@ -172,8 +107,6 @@ def run(args):
     t = datetime.datetime.now()
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
-    #name_sufix = '~' + '.'.join(train_sources + [model_name] + [cv_method] + cell_features + drug_features + [target_name])
-    #run_outdir = os.path.join(OUTDIR, 'run_' + t + name_sufix)
     name_sufix = '.'.join(train_sources + [model_name] + [cv_method] + cell_features + drug_features + [target_name])
     run_outdir = os.path.join(OUTDIR, name_sufix + '~' + t)
     os.makedirs(run_outdir)
@@ -212,7 +145,7 @@ def run(args):
 
 
     # ========================================================================
-    #       Keep a set of training features and impute missing values
+    #       Keep a set of training features
     # ========================================================================
     data = utils_tidy.extract_subset_features(data=data, feature_list=feature_list, fea_prfx_dict=fea_prfx_dict)
     # data = utils_tidy.impute_values(data=data, fea_prfx_dict=fea_prfx_dict, logger=lg.logger)
@@ -273,11 +206,14 @@ def run(args):
     else:
         raise ValueError(f'This cv_method ({cv_method}) is not supported')
 
-    # Get the data
+    # Get data
     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
 
+    # Define ML model
     model, fit_params = init_model(model_name, logger=lg.logger)
+
+    # Run CV
     t0 = time.time()
     cv_scores = cross_validate(
         estimator=sklearn.base.clone(model.model),
@@ -286,10 +222,10 @@ def run(args):
         cv=cv, groups=groups,
         n_jobs=n_jobs, fit_params=fit_params)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+
+    # Dump results
     cv_scores = utils.update_cross_validate_scores(cv_scores)
-    #cv_scores = utils.cv_scores_to_df(cv_scores, decimals=3, calc_stats=True)
     cv_scores = cv_scores.reset_index(drop=True)
-    #cv_scores = cv_scores.rename(columns={'index': 'metric'})
     cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
     lg.logger.info(f'cv_scores\n{cv_scores}')
 
@@ -313,7 +249,7 @@ def run(args):
     lg.logger.info('Learning curves ...')
     lg.logger.info('='*50)
 
-    # Prepare data
+    # Get the data
     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
     utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
@@ -375,9 +311,12 @@ def run(args):
     # Generate learning curve - semi automatic method
     # (*) uses cross_validate from sklearn.
     # -----------------------------------------------
-    # Generate learning curves
     lg.logger.info('\nStart learning curve (my method) ...')
+
+    # Define ML model
     model, fit_params = init_model(model_name='lgb_reg', logger=lg.logger)
+
+    # Run learning curve
     t0 = time.time()
     lrn_curve_scores = lrn_curve.my_learning_curve(
         estimator=model.model,
@@ -390,6 +329,8 @@ def run(args):
         cv_method=cv_method, cv_folds=cv_folds, groups=None,
         n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+
+    # Dump results
     lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores.csv'), index=False)
 
 
@@ -398,9 +339,15 @@ def run(args):
     # (*) can't generate multiple metrics.
     # -------------------------------------------------
     lg.logger.info("\nStart learning_curve (sklearn) ...")
+
+    # Define ML model
     model, _ = init_model(model_name, lg.logger)
+
+    # Define params
     metric_name = 'r2'
     train_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
+
+    # Run learning curve
     t0 = time.time()
     lrn_curve_scores = learning_curve(
         estimator=model.model, X=xdata, y=ydata,
@@ -409,9 +356,12 @@ def run(args):
         n_jobs=n_jobs, exploit_incremental_learning=False,
         random_state=SEED, verbose=1, shuffle=False)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+
+    # Dump results
     # lrn_curve_scores = utils.cv_scores_to_df(lrn_curve_scores, decimals=3, calc_stats=False) # this func won't work
     # lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores_auto.csv'), index=False)
     
+    # Plot learning curves
     lrn_curve.plt_learning_curve(rslt=lrn_curve_scores, metric_name=metric_name,
         title='Learning curve (target: {}, data: {})'.format(target_name, train_sources_name),
         path=os.path.join(run_outdir, 'auto_learning_curve_' + target_name + '_' + metric_name + '.png'))
@@ -425,11 +375,12 @@ def run(args):
     lg.logger.info(f'Train final model (use entire dataset) ... {train_sources}')
     lg.logger.info('='*50)
 
+    # Get the data
     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
     utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
 
-    # Train model
+    # Define and train ML model
     model_final, _ = init_model(model_name, lg.logger)
     t0 = time.time()
     if 'lgb_reg' in model_name:
@@ -516,70 +467,12 @@ def run(args):
     lg.logger.info('\ncsv_scores\n{}'.format(csv_scores_all))
     csv_scores_all.to_csv(os.path.join(run_outdir, 'csv_scores_' + train_sources_name + '.csv'), index=False)
 
-    # csv_scores_all = pd.DataFrame(csv_scores).T
-    # csv_scores_all.columns = test_sources
-    # csv_scores_all = csv_scores_all.round(decimals=3)
-    # csv_scores_all = csv_scores_all.reset_index().rename(columns={'index': 'metric'})
-    # csv_scores_all.insert(loc=1, column='train_src', value=train_sources_name)
-    # lg.logger.info('\ncsv_scores\n{}'.format(csv_scores_all))
-    # csv_scores_all.to_csv(os.path.join(run_outdir, 'csv_scores_' + train_sources_name + '.csv'), index=False)
-
-
-
-    # ========================================================================
-    #       Grid Search CV (TODO: didn't finish)
-    # ========================================================================
-    # # https://scikit-learn.org/stable/tutorial/statistical_inference/model_selection.html
-    # from sklearn.neighbors import KNeighborsRegressor
-    # from sklearn.svm import LinearSVR, SVR, NuSVR
-    # from sklearn.preprocessing import LabelEncoder, StandardScaler, RobustScaler, QuantileTransformer
-    # from sklearn.model_selection import GridSearchCV, cross_val_score
-    # from sklearn.model_selection import GroupKFold
-
-    # xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-    # ydata = utils_tidy.extract_target(data=data, target_name=target_name)
-    # xdata = StandardScaler().fit_transform(xdata)
-
-    # # SVR
-    # model_name = 'svr'
-    # params_search = {'C': [0.1, 1, 10],
-    #                  'epsilon': [0.01, 0.1, 1]}
-    # model = SVR(gamma='scale', kernel='rbf')
-
-    # # KNN
-    # model_name = 'knn_reg'
-    # params_search = {'n_neighbors': [5, 10, 15]}
-    # model = KNeighborsRegressor(n_jobs=n_jobs)
-
-    # # CV splitter
-    # groups = data['CELL'].values
-    # groups = LabelEncoder().fit_transform(groups)
-    # cv_splitter = GroupKFold(n_splits=n_splits)
-    # cv_splitter = cv_splitter.split(data, groups=groups)
-
-    # # Define grid search
-    # gs = GridSearchCV(estimator=model, param_grid=params_search,
-    #                   n_jobs=n_jobs, refit=True, cv=cv_splitter, verbose=True)
-
-    # # Train
-    # t0 = time.time()
-    # gs.fit(xdata, ydata)
-    # runtime_fit = time.time() - t0
-    # print('runtime_fit', runtime_fit)
-
-    # # Get the best model
-    # best_model = gs.best_estimator_
-    # results = pd.DataFrame(gs.cv_results_)
-    # print('results:\n{}'.format(results))
-    # print('{} best score (random search): {:.3f}'.format(model_name, gs.best_score_))
-    # print('{} best params (random search): \n{}'.format(model_name, gs.best_params_))
-
-
 
     # ========================================================================
     #       Ensemble models
     # ========================================================================
     # pass                         
+
 
     # Kill logger
     lg.kill_logger()
@@ -594,7 +487,6 @@ def main(args):
     pprint(vars(args))
     args = vars(args)
     csv_scores_all = run(args)
-    #params = vars(args)
     args['outdir'] = OUTDIR
     return csv_scores_all, args
     

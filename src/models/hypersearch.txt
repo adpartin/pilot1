@@ -1,0 +1,8 @@
+[lgb_reg]
+'num_leaves' = [31, 45]
+'max_depth' = [-1, 7]
+'learning_rate' = [0.1, 0.01]
+'subsample' = [1.0, 0.5]
+'colsample_bytree' = [1.0, 0.5]
+#'min_child_weight' = [0.001, 0.1]
+'min_child_samples' = [20, 0, 40]

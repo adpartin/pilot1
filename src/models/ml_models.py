@@ -76,10 +76,9 @@ class BaseMLModel():
     def print_scores(self):
         """ Print performance scores. """
         # TODO: replace `if` with `try`
-        if hasattr(self, 'scores'):
-            if self.logger is not None:
-                for score_name, score_value in self.scores.items():
-                    self.logger.info('{}: {:.2f}'.format(score_name, score_value))
+        if hasattr(self, 'scores') and self.logger is not None:
+            for score_name, score_value in self.scores.items():
+                self.logger.info(f'{score_name}: {score_value:.2f}')
 
 
     def dump_preds(self, df_data, xdata, target_name, outpath=None):
@@ -115,7 +114,7 @@ class BaseMLModel():
             df_preds = pd.concat([df1, df2], axis=1).reset_index(drop=True)
 
             if outpath is not None:
-                df_preds.to_csv(outpath)
+                df_preds.to_csv(outpath, index=False)
             else:
                 df_preds.to_csv('preds.csv', index=False)
 
