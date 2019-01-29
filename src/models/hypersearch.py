@@ -314,13 +314,13 @@ def run(args):
         # }
         space = {
             'class_weight': hp.choice('class_weight', [None, 'balanced']),
-            'num_leaves': hp.quniform('num_leaves', 30, 150, 1),
-            'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(0.2)),
-            'subsample_for_bin': hp.quniform('subsample_for_bin', 20000, 300000, 20000),
-            'min_child_samples': hp.quniform('min_child_samples', 20, 500, 5),
-            'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
-            'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
-            'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0)
+            'num_leaves': hp.quniform(label='num_leaves', low=30, high=150, q=1),
+            'learning_rate': hp.loguniform(label='learning_rate', low=np.log(0.01), high=np.log(0.2)),
+            'subsample_for_bin': hp.quniform(label='subsample_for_bin', low=20000, high=300000, q=20000),
+            'min_child_samples': hp.quniform(label='min_child_samples', low=20, high=500, q=5),
+            'reg_alpha': hp.uniform(label='reg_alpha', low=0.0, high=1.0),
+            'reg_lambda': hp.uniform(label='reg_lambda', low=0.0, high=1.0),
+            'colsample_bytree': hp.uniform(     'colsample_by_tree', 0.6, 1.0)
         }
         
 

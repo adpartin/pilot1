@@ -59,17 +59,24 @@ class BaseMLModel():
         if hasattr(self, 'model'):
             preds = self.model.predict(xdata)
             scores = OrderedDict()
+
+            # for metric_name, metric in metrics.items():
+            #     if isinstance(metric, str):
+            #         scorer = sklearn.metrics.get_scorer(metric_name) # get a scorer from string
+            #         scores[metric_name] = scorer(ydata, preds)
+            #     else:
+            #         scores[metric_name] = scorer(ydata, preds)
+
             scores['r2'] = sklearn.metrics.r2_score(ydata, preds)
             #scores['adj_r2_score'] = self.__adj_r2_score(ydata, preds)
             scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
             scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
             scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(ydata, preds)
-            # scores['explained_variance_score'] = sklearn.metrics.explained_variance_score(ydata, preds)
 
             # TODO:
             y_true = np.where(ydata < 0.5, 1, 0)
             y_score = np.where(preds < 0.5, 1, 0)
-            scores['roc_auc_score'] = sklearn.metrics.roc_auc_score(y_true, y_score)
+            scores['reg_auroc_score'] = sklearn.metrics.roc_auc_score(y_true, y_score)
 
             self.scores = scores
             if to_print:
@@ -233,7 +240,7 @@ class LGBM_REGRESSOR(BaseMLModel):
         # ----- lightgbm "sklearn API" - end
 
 
-    def fit(self, X, y, eval_set=None):
+    def fit(self, X, y, eval_set=None, **fit_params):
         #self.eval_set = eval_set
         #self.X = X
         #self.y = y
@@ -244,7 +251,7 @@ class LGBM_REGRESSOR(BaseMLModel):
         self.model.fit(X, y,
                        eval_metric=self.eval_metric,
                        eval_set=eval_set,
-                       early_stopping_rounds=10, verbose=False, callbacks=None)
+                       **fit_params)
         self.train_runtime = time.time() - t0
 
         if self.logger is not None:

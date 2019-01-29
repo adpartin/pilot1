@@ -398,13 +398,15 @@ def run(args):
     # From lightgbm docs: n_samples / (n_classes * np.bincount(y))
     a = np.where(ydata.values < 0.5, 0, 1)
     wgt = len(a) / (2 * np.bincount(a))
-    sample_wgt = np.array([wgt[0] if v < 0.5 else wgt[1] for v in a])
+    sample_weight = np.array([wgt[0] if v < 0.5 else wgt[1] for v in a])
 
     # Define and train ML model
     model_final, _ = init_model(model_name, lg.logger)
     t0 = time.time()
     if 'lgb_reg' in model_name:
-        model_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])  # use my class fit method
+        # model_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])  # use my class fit method
+        params = {'verbose': False, 'sample_weight': sample_weight}
+        model_final.fit(xdata, ydata, **params)  # use my class fit method
         # model_final.model.fit(xdata, ydata, eval_set=[(xdata, ydata)]) # use lightgbm fit method
     else:
         model_final.fit(xdata, ydata)
@@ -431,12 +433,12 @@ def run(args):
 
     csv_scores = []  # cross-study-validation scores
     for i, src in enumerate(test_sources):
+        lg.logger.info(f'\nTest source {i+1}:  _____ {src} _____')
+        t0 = time.time()
+
         if train_sources == [src]:
             lg.logger.info("That's the taining set (so no predictions).")
             continue
-
-        lg.logger.info(f'\nTest source {i+1}:  _____ {src} _____')
-        t0 = time.time()
 
         te_src_data = te_data[te_data['SOURCE'].isin([src])].reset_index(drop=True)
         lg.logger.info(f'src_data.shape {te_src_data.shape}')
