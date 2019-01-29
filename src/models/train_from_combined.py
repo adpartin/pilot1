@@ -206,62 +206,62 @@ def run(args):
 
 
 
-    # # ========================================================================
-    # #       Run CV validation
-    # # ========================================================================
-    # lg.logger.info('\n\n{}'.format('='*50))
-    # lg.logger.info('CV training ...')
-    # lg.logger.info('='*50)
+    # ========================================================================
+    #       Run CV validation
+    # ========================================================================
+    lg.logger.info('\n\n{}'.format('='*50))
+    lg.logger.info('CV training ...')
+    lg.logger.info('='*50)
 
-    # # -----------------
-    # # sklearn CV method
-    # # -----------------
-    # # Get data
-    # xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-    # ydata = utils_tidy.extract_target(data=data, target_name=target_name)
+    # -----------------
+    # sklearn CV method
+    # -----------------
+    # Get data
+    xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+    ydata = utils_tidy.extract_target(data=data, target_name=target_name)
 
-    # # Define ML model
-    # model, fit_params = init_model(model_name, logger=lg.logger)
+    # Define ML model
+    model, fit_params = init_model(model_name, logger=lg.logger)
 
-    # # Run CV
-    # t0 = time.time()
-    # cv_scores = cross_validate(
-    #     estimator=sklearn.base.clone(model.model),
-    #     X=xdata, y=ydata,
-    #     scoring=metrics,
-    #     cv=cv, groups=groups,
-    #     n_jobs=n_jobs, fit_params=fit_params)
-    # lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+    # Run CV
+    t0 = time.time()
+    cv_scores = cross_validate(
+        estimator=sklearn.base.clone(model.model),
+        X=xdata, y=ydata,
+        scoring=metrics,
+        cv=cv, groups=groups,
+        n_jobs=n_jobs, fit_params=fit_params)
+    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
-    # # Dump results
-    # cv_scores = utils.update_cross_validate_scores(cv_scores)
-    # cv_scores = cv_scores.reset_index(drop=True)
-    # cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='mean', value=cv_scores.iloc[:, -cv_folds:].values.mean(axis=1) )
-    # cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='std',  value=cv_scores.iloc[:, -cv_folds:].values.std(axis=1) )
-    # cv_scores = cv_scores.round(3)
-    # cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
-    # lg.logger.info(f'cv_scores\n{cv_scores}')
-
-
-    # # ---------------
-    # # lightgbm method
-    # # ---------------
-    # # TODO: lightgbm.cv()
+    # Dump results
+    cv_scores = utils.update_cross_validate_scores(cv_scores)
+    cv_scores = cv_scores.reset_index(drop=True)
+    cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='mean', value=cv_scores.iloc[:, -cv_folds:].values.mean(axis=1) )
+    cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='std',  value=cv_scores.iloc[:, -cv_folds:].values.std(axis=1) )
+    cv_scores = cv_scores.round(3)
+    cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
+    lg.logger.info(f'cv_scores\n{cv_scores}')
 
 
-    # # ------------
-    # # My CV method
-    # # ------------
-    # # from cvrun import my_cv_run
-    # # model, _ = init_model(model_name, logger=lg.logger)
-    # # tr_cv_scores, vl_cv_scores = my_cv_run(
-    # #     data=data,
-    # #     target_name=target_name,
-    # #     model=model.model,
-    # #     #metrics=metrics,  # TODO: implement this option
-    # #     fea_prfx_dict=fea_prfx_dict,
-    # #     cv_method=cv_method, cv_folds=cv_folds,
-    # #     logger=lg.logger, verbose=True, random_state=SEED, outdir=run_outdir)
+    # ---------------
+    # lightgbm method
+    # ---------------
+    # TODO: lightgbm.cv()
+
+
+    # ------------
+    # My CV method
+    # ------------
+    # from cvrun import my_cv_run
+    # model, _ = init_model(model_name, logger=lg.logger)
+    # tr_cv_scores, vl_cv_scores = my_cv_run(
+    #     data=data,
+    #     target_name=target_name,
+    #     model=model.model,
+    #     #metrics=metrics,  # TODO: implement this option
+    #     fea_prfx_dict=fea_prfx_dict,
+    #     cv_method=cv_method, cv_folds=cv_folds,
+    #     logger=lg.logger, verbose=True, random_state=SEED, outdir=run_outdir)
 
 
 
