@@ -203,28 +203,34 @@ def cv_scores_to_df(scores, decimals=3, calc_stats=False):
     return scores
 
 
-def adj_r2_score(ydata, preds, x_size):
-    """ Calc adjusted r^2.
-    https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2
-    https://dziganto.github.io/data%20science/linear%20regression/machine%20learning/python/Linear-Regression-101-Metrics/
-    https://stats.stackexchange.com/questions/334004/can-r2-be-greater-than-1
-    """
-    r2 = r2_score(ydata, preds)
-    adj_r2 = 1 - (1 - r2) * (x_size[0] - 1)/(x_size[0] - x_size[1] - 1)
-    return adj_r2
+# def adj_r2_score(ydata, preds, x_size):
+#     """ Calc adjusted r^2.
+#     https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2
+#     https://dziganto.github.io/data%20science/linear%20regression/machine%20learning/python/Linear-Regression-101-Metrics/
+#     https://stats.stackexchange.com/questions/334004/can-r2-be-greater-than-1
+#     """
+#     r2 = r2_score(ydata, preds)
+#     adj_r2 = 1 - (1 - r2) * (x_size[0] - 1)/(x_size[0] - x_size[1] - 1)
+#     return adj_r2
 
 
-def calc_scores(model, xdata, ydata):
-    """ Create dict of scores. """
-    # TODO: replace `if` with `try`
-    preds = model.predict(xdata)
-    scores = OrderedDict()
-    scores['r2_score'] = sklearn.metrics.r2_score(ydata, preds)
-    scores['adj_r2_score'] = adj_r2_score(ydata, preds, x_size=xdata.shape)
-    scores['mean_abs_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
-    scores['median_abs_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
-    # scores['explained_variance_score'] = sklearn.metrics.explained_variance_score(ydata, preds)
-    return scores
+# def calc_scores(model, xdata, ydata):
+#     """ Create dict of scores. """
+#     # TODO: replace `if` with `try`
+#     preds = model.predict(xdata)
+#     scores = OrderedDict()
+#     scores['r2_score'] = sklearn.metrics.r2_score(ydata, preds)
+#     scores['adj_r2_score'] = adj_r2_score(ydata, preds, x_size=xdata.shape)
+#     scores['mean_abs_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
+#     scores['median_abs_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
+#     # scores['explained_variance_score'] = sklearn.metrics.explained_variance_score(ydata, preds)
+    
+#     scores['r2'] = sklearn.metrics.r2_score(ydata, preds)
+#     #scores['adj_r2_score'] = self.__adj_r2_score(ydata, preds)
+#     scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
+#     scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
+#     scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(ydata, preds)
+#     return scores
 
     
 def print_scores(model, xdata, ydata, logger=None):

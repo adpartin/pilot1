@@ -66,6 +66,11 @@ class BaseMLModel():
             scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(ydata, preds)
             # scores['explained_variance_score'] = sklearn.metrics.explained_variance_score(ydata, preds)
 
+            # TODO:
+            y_true = np.where(ydata < 0.5, 1, 0)
+            y_score = np.where(preds < 0.5, 1, 0)
+            scores['roc_auc_score'] = sklearn.metrics.roc_auc_score(y_true, y_score)
+
             self.scores = scores
             if to_print:
                 self.print_scores()
@@ -178,7 +183,7 @@ class LGBM_REGRESSOR(BaseMLModel):
     ml_objective = 'regression'
     model_name = 'lgb_reg'
 
-    def __init__(self, eval_metric=['l1', 'l2'], n_jobs=1, random_state=None,
+    def __init__(self, eval_metric=['l2', 'l1'], n_jobs=1, random_state=None,
                  logger=None):
         # https://lightgbm.readthedocs.io/en/latest/Python-API.html
         # try:
@@ -224,21 +229,21 @@ class LGBM_REGRESSOR(BaseMLModel):
         # ----- lightgbm "sklearn API" - end
 
         # ----- lightgbm "sklearn API" - start
-        self.model = lgb.LGBMRegressor()
+        # self.model = lgb.LGBMRegressor()
         # ----- lightgbm "sklearn API" - end
 
 
     def fit(self, X, y, eval_set=None):
-        self.eval_set = eval_set
-        self.X = X
-        self.y = y
+        #self.eval_set = eval_set
+        #self.X = X
+        #self.y = y
 
-        self.x_size = X.shape  # this is used to calc adjusteed r^2
+        #self.x_size = X.shape  # this is used to calc adjusteed r^2
         
         t0 = time.time()
-        self.model.fit(self.X, self.y,
+        self.model.fit(X, y,
                        eval_metric=self.eval_metric,
-                       eval_set=self.eval_set,
+                       eval_set=eval_set,
                        early_stopping_rounds=10, verbose=False, callbacks=None)
         self.train_runtime = time.time() - t0
 

@@ -19,10 +19,13 @@ import utils
 
 
 def my_learning_curve(estimator, X, Y,
+                      cv,  # new
                       args=None, fit_params=None,
                       lr_curve_ticks=5, data_sizes_frac=None,
                       metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'neg_mean_squared_error'],
-                      cv_method='simple', cv_folds=5, groups=None,
+                      #cv_method='simple',
+                      #cv_folds=5,
+                      groups=None,
                       n_jobs=1, random_state=None, logger=None, outdir='./'):
     """
     Train estimator using multiple train set sizes and multiple metrics.
@@ -43,11 +46,13 @@ def my_learning_curve(estimator, X, Y,
     X.copy().reset_index(drop=True, inplace=True)
     Y.copy().reset_index(drop=True, inplace=True)
 
+    cv_folds = cv.get_n_splits()
+
     # Define CV method
-    if groups is not None:
-        cv = GroupKFold(n_splits=cv_folds)
-    else:
-        cv = KFold(n_splits=cv_folds, shuffle=False, random_state=random_state)
+    # if groups is not None:
+    #     cv = GroupKFold(n_splits=cv_folds)
+    # else:
+    #     cv = KFold(n_splits=cv_folds, shuffle=False, random_state=random_state)
 
     # Define training set sizes
     if data_sizes_frac is None:
@@ -65,31 +70,16 @@ def my_learning_curve(estimator, X, Y,
 
         xdata = X.iloc[idx[:d_size], :]
         ydata = Y[idx[:d_size]]
+        sub_groups = groups[idx[:d_size]]
 
         cv_scores = cross_validate(
             estimator=sklearn.base.clone(estimator),
             X=xdata, y=ydata,
-            scoring=metrics, cv=cv, groups=groups,
+            scoring=metrics, cv=cv, groups=sub_groups,
             n_jobs=n_jobs, fit_params=fit_params)
 
         df = utils.update_cross_validate_scores(cv_scores)
-
-        #df = utils.cv_scores_to_df(cv_scores, decimals=3, calc_stats=False)
         df.insert(loc=df.shape[1]-cv_folds, column='data_size', value=d_size)
-
-        #v = list(map(lambda x: '_'.join(x.split('_')[1:]), df.index))
-        #df.insert(loc=0, column='metric', value=v)
-
-        # Convert `neg` metric to positive and update metric names
-        # scikit-learn.org/stable/modules/model_evaluation.html --> explains the `neg` in `neg_mean_absolute_error`
-        # idx_bool = [True if 'neg_' in s else False for s in df['metric']]
-        # for i, bl in enumerate(idx_bool):
-        #     if bl:
-        #         df.iloc[i, -cv_folds:] = abs(df.iloc[i, -cv_folds:])
-        # df['metric'] = df['metric'].map(lambda s: s.split('neg_')[-1] if 'neg_' in s else s)
-
-        #v = list(map(lambda x: True if 'train' in x else False, df.index))
-        #df.insert(loc=1, column='train_set', value=v)
                 
         # Append results to master df
         scores_all_list.append(df)

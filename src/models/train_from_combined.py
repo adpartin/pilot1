@@ -93,12 +93,28 @@ def run(args):
 
     # Define names
     train_sources_name = '_'.join(train_sources)
+    
+    # Build custom metric to calc auroc from regression
+    # https://scikit-learn.org/stable/modules/model_evaluation.html#scoring
+    from sklearn.metrics import make_scorer
+    from sklearn.metrics import roc_auc_score
+    def reg_auroc(y_true, y_pred):
+            y_true = np.where(y_true < 0.5, 1, 0)
+            y_score = np.where(y_pred < 0.5, 1, 0)
+            auroc = roc_auc_score(y_true, y_score)
+            return auroc
+    reg_auroc_score = make_scorer(score_func=reg_auroc, greater_is_better=True)
 
     # Define metrics
-    # TODO: find way to pass to calc_scores in ml_models.py
-    metrics = ['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error',
-               'neg_mean_squared_error']
-
+    # TODO: find way to pass metrics to calc_scores in ml_models.py
+    # metrics = ['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error',
+    #            'neg_mean_squared_error']
+    metrics = {'r2': 'r2', #sklearn.metrics.r2_score,
+               'neg_mean_absolute_error': 'neg_mean_absolute_error', #sklearn.metrics.neg_mean_absolute_error,
+               'neg_median_absolute_error': 'neg_median_absolute_error', #sklearn.metrics.neg_median_absolute_error,
+               'neg_mean_squared_error': 'neg_mean_squared_error', #sklearn.metrics.neg_mean_squared_error,
+               'reg_auroc_score': reg_auroc_score,
+    }
 
 
     # ========================================================================
@@ -161,7 +177,9 @@ def run(args):
             if verbose:
                 logger.info('ML Model: lgb regressor')
             model = LGBM_REGRESSOR(n_jobs=n_jobs, random_state=SEED, logger=logger)
-            fit_params = {'verbose': False}
+            fit_params = {'verbose': False,
+                          #'early_stopping_rounds': 10,
+            }
         elif 'rf_reg' in model_name:
             if verbose:
                 logger.info('ML Model: rf regressor')
@@ -170,75 +188,80 @@ def run(args):
         return model, fit_params
 
 
+
     # ========================================================================
-    #       Run CV validation
+    #       Define CV split
     # ========================================================================
-    lg.logger.info('\n\n{}'.format('='*50))
-    lg.logger.info('CV training ...')
-    lg.logger.info('='*50)
-
-    # ------------
-    # My CV method
-    # ------------
-    # from cvrun import my_cv_run
-    # model, _ = init_model(model_name, logger=lg.logger)
-    # tr_cv_scores, vl_cv_scores = my_cv_run(
-    #     data=data,
-    #     target_name=target_name,
-    #     model=model.model,
-    #     fea_prfx_dict=fea_prfx_dict,
-    #     cv_method=cv_method, cv_folds=cv_folds,
-    #     logger=lg.logger, verbose=True, random_state=SEED, outdir=run_outdir)
-
-
-    # ----------------------------
-    # sklearn CV method - method 1
-    # ----------------------------
     # Split tr/vl data
     if cv_method=='simple':
         cv = KFold(n_splits=cv_folds, shuffle=False, random_state=SEED)
         groups = None
     elif cv_method=='group':
         cv = GroupKFold(n_splits=cv_folds)
-        groups = data['CELL']
+        groups = data['CELL'].copy()
     elif cv_method=='stratify':
         pass
     else:
         raise ValueError(f'This cv_method ({cv_method}) is not supported')
 
-    # Get data
-    xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-    ydata = utils_tidy.extract_target(data=data, target_name=target_name)
-
-    # Define ML model
-    model, fit_params = init_model(model_name, logger=lg.logger)
-
-    # Run CV
-    t0 = time.time()
-    cv_scores = cross_validate(
-        estimator=sklearn.base.clone(model.model),
-        X=xdata, y=ydata,
-        scoring=metrics,
-        cv=cv, groups=groups,
-        n_jobs=n_jobs, fit_params=fit_params)
-    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-
-    # Dump results
-    cv_scores = utils.update_cross_validate_scores(cv_scores)
-    cv_scores = cv_scores.reset_index(drop=True)
-    cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
-    lg.logger.info(f'cv_scores\n{cv_scores}')
 
 
-    # ----------------------------
-    # sklearn CV method - method 2
-    # ----------------------------
-    # # https://scikit-learn.org/stable/modules/model_evaluation.html#scoring-parameter
-    # lgb_reg = LGBM_REGRESSOR(random_state=SEED, logger=lg.logger)
-    # cv_scores = cross_val_score(estimator=lgb_reg.model, X=xdata, y=ydata,
-    #                             scoring='r2', cv=cv, n_jobs=n_jobs,
-    #                             fit_params={'verbose': False, 'early_stopping_rounds': 10})    
-    # lg.logger.info(cv_scores)
+    # # ========================================================================
+    # #       Run CV validation
+    # # ========================================================================
+    # lg.logger.info('\n\n{}'.format('='*50))
+    # lg.logger.info('CV training ...')
+    # lg.logger.info('='*50)
+
+    # # -----------------
+    # # sklearn CV method
+    # # -----------------
+    # # Get data
+    # xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+    # ydata = utils_tidy.extract_target(data=data, target_name=target_name)
+
+    # # Define ML model
+    # model, fit_params = init_model(model_name, logger=lg.logger)
+
+    # # Run CV
+    # t0 = time.time()
+    # cv_scores = cross_validate(
+    #     estimator=sklearn.base.clone(model.model),
+    #     X=xdata, y=ydata,
+    #     scoring=metrics,
+    #     cv=cv, groups=groups,
+    #     n_jobs=n_jobs, fit_params=fit_params)
+    # lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+
+    # # Dump results
+    # cv_scores = utils.update_cross_validate_scores(cv_scores)
+    # cv_scores = cv_scores.reset_index(drop=True)
+    # cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='mean', value=cv_scores.iloc[:, -cv_folds:].values.mean(axis=1) )
+    # cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='std',  value=cv_scores.iloc[:, -cv_folds:].values.std(axis=1) )
+    # cv_scores = cv_scores.round(3)
+    # cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
+    # lg.logger.info(f'cv_scores\n{cv_scores}')
+
+
+    # # ---------------
+    # # lightgbm method
+    # # ---------------
+    # # TODO: lightgbm.cv()
+
+
+    # # ------------
+    # # My CV method
+    # # ------------
+    # # from cvrun import my_cv_run
+    # # model, _ = init_model(model_name, logger=lg.logger)
+    # # tr_cv_scores, vl_cv_scores = my_cv_run(
+    # #     data=data,
+    # #     target_name=target_name,
+    # #     model=model.model,
+    # #     #metrics=metrics,  # TODO: implement this option
+    # #     fea_prfx_dict=fea_prfx_dict,
+    # #     cv_method=cv_method, cv_folds=cv_folds,
+    # #     logger=lg.logger, verbose=True, random_state=SEED, outdir=run_outdir)
 
 
 
@@ -253,18 +276,6 @@ def run(args):
     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
     utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
-
-    # Split tr/vl data
-    if cv_method=='simple':
-        cv = KFold(n_splits=cv_folds, shuffle=False, random_state=SEED)
-        groups = None
-    elif cv_method=='group':
-        cv = GroupKFold(n_splits=cv_folds)
-        groups = data['CELL']
-    elif cv_method=='stratify':
-        pass
-    else:
-        raise ValueError('This cv_method ({}) is not supported'.format(cv_method))
 
 
     # -----------------------------------------------
@@ -326,7 +337,10 @@ def run(args):
         lr_curve_ticks=lr_curve_ticks,
         data_sizes_frac=None,
         metrics=metrics,
-        cv_method=cv_method, cv_folds=cv_folds, groups=None,
+        cv=cv,
+        #cv_method=cv_method,
+        #cv_folds=cv_folds,
+        groups=groups,
         n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
@@ -380,11 +394,18 @@ def run(args):
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
     utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
 
+    # Define sample weight
+    # From lightgbm docs: n_samples / (n_classes * np.bincount(y))
+    a = np.where(ydata.values < 0.5, 0, 1)
+    wgt = len(a) / (2 * np.bincount(a))
+    sample_wgt = np.array([wgt[0] if v < 0.5 else wgt[1] for v in a])
+
     # Define and train ML model
     model_final, _ = init_model(model_name, lg.logger)
     t0 = time.time()
     if 'lgb_reg' in model_name:
-        model_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])
+        model_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])  # use my class fit method
+        # model_final.model.fit(xdata, ydata, eval_set=[(xdata, ydata)]) # use lightgbm fit method
     else:
         model_final.fit(xdata, ydata)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
@@ -466,12 +487,6 @@ def run(args):
     csv_scores_all = csv_scores_all.reset_index().rename(columns={'index': 'metric'})
     lg.logger.info('\ncsv_scores\n{}'.format(csv_scores_all))
     csv_scores_all.to_csv(os.path.join(run_outdir, 'csv_scores_' + train_sources_name + '.csv'), index=False)
-
-
-    # ========================================================================
-    #       Ensemble models
-    # ========================================================================
-    # pass                         
 
 
     # Kill logger

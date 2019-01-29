@@ -4,7 +4,6 @@ https://towardsdatascience.com/automated-machine-learning-hyperparameter-tuning-
 
 Comparison:
 https://medium.com/@ramrajchandradevan/comparison-among-hyper-parameter-optimizers-cd37483cd47
-
 """
 from __future__ import print_function
 from __future__ import division
@@ -59,7 +58,7 @@ DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
 OUTDIR = os.path.join(file_path, '../../models/from_combined/hyperprms')
 DATAFILENAME = 'tidy_data_no_fibro.parquet'
 # DATAFILENAME = 'tidy_data.parquet'
-CONFIGFILENAME = 'config_hyperprms.txt'
+CONFIGFILENAME = 'hypersearch.txt'
 os.makedirs(OUTDIR, exist_ok=True)
 
 SEED = 0
@@ -97,11 +96,18 @@ def run(args):
     feature_list = cell_features + drug_features + other_features
 
 
+    # # Save best model
+    # best_score = 0
+    # best_params = None
+    # best_model = None
+    # os.makedirs(OUTDIR, 'best_model')
+
+
     # datasets = [ ['gcsi'], ['ccle'], ['ctrp'], ['gdsc'] ]
     # for dname in datasets:
     for dname in args['train_sources']:
-        args['train_sources'] = dname
-        args['test_sources'] = dname
+        args['train_sources'] = [dname]
+        args['test_sources'] = [dname]
 
 
         # ========================================================================
@@ -119,7 +125,6 @@ def run(args):
         lg.logger.info(f'File path: {file_path}')
         lg.logger.info(f'System CPUs: {psutil.cpu_count()}')
         lg.logger.info(f'n_jobs: {n_jobs}')
-
 
 
         # ========================================================================
@@ -150,7 +155,7 @@ def run(args):
         else:
             raise ValueError('This cv_method ({}) is not supported'.format(cv_method))
 
-
+        """
         # ========================================================================
         #       Hyper-param search
         # ========================================================================
@@ -212,7 +217,7 @@ def run(args):
 
         gs = GridSearchCV(estimator=model,
                         param_grid=prm_grid_srch,
-                        scoring='r2',  # sorted(sklearn.metrics.SCORERS.keys())
+                        scoring='neg_mean_absolute_error',  # r2 # sorted(sklearn.metrics.SCORERS.keys())
                         n_jobs=n_jobs,
                         cv=cv,
                         refit=True,
@@ -244,6 +249,101 @@ def run(args):
 
         lg.kill_logger()
         del data, xdata, ydata, model
+
+        # # Update best score
+        # if gs.best_score_ > best_score:
+        #     best_score = gs.best_score_
+        #     best_params = gs.gs.best_params_
+        #     best_model = gs.best_mo
+        
+        """
+
+        # ====================================================================================
+        import lightgbm as lgb
+        from hyperopt import hp
+        from hyperopt import tpe
+        from hyperopt import fmin
+        from hyperopt import Trials
+        from hyperopt import STATUS_OK
+
+        MAX_EVALS = 10
+        N_FOLDS = 10
+
+        # Convert response to binary
+        ydata = np.where(ydata < 0.5, 1, 0)
+
+        # Create the dataset
+        train_features = xdata
+        train_labels = ydata
+        train_set = lgb.Dataset(data=train_features, label=train_labels)
+
+        def objective(params, n_folds = N_FOLDS):
+            """ Objective function for Gradient Boosting Machine Hyperparameter Tuning. """
+            
+            # Perform n_fold cross validation with hyperparameters
+            # Use early stopping and evalute based on ROC AUC
+            cv_results = lgb.cv(params, train_set, nfold=n_folds, num_boost_round=10000, 
+                                early_stopping_rounds=100, metrics='auc', seed=SEED)
+        
+            # Extract the best score
+            best_score = max(cv_results['auc-mean'])
+            
+            # Loss must be minimized
+            loss = 1 - best_score
+            
+            # Dictionary with information for evaluation
+            ret = {'loss': loss, 'params': params, 'status': STATUS_OK}
+            return ret
+
+        # Define the search space
+        # space = {
+        #     'class_weight': hp.choice('class_weight', [None, 'balanced']),
+        #     'boosting_type': hp.choice('boosting_type', 
+        #                             [{'boosting_type': 'gbdt', 
+        #                                'subsample': hp.uniform('gdbt_subsample', 0.5, 1)}, 
+        #                               {'boosting_type': 'dart', 
+        #                                'subsample': hp.uniform('dart_subsample', 0.5, 1)},
+        #                               {'boosting_type': 'goss', 'subsample': 1.0}]),
+        #     'num_leaves': hp.quniform('num_leaves', 30, 150, 1),
+        #     'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(0.2)),
+        #     'subsample_for_bin': hp.quniform('subsample_for_bin', 20000, 300000, 20000),
+        #     'min_child_samples': hp.quniform('min_child_samples', 20, 500, 5),
+        #     'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
+        #     'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
+        #     'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0)
+        # }
+        space = {
+            'class_weight': hp.choice('class_weight', [None, 'balanced']),
+            'num_leaves': hp.quniform('num_leaves', 30, 150, 1),
+            'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(0.2)),
+            'subsample_for_bin': hp.quniform('subsample_for_bin', 20000, 300000, 20000),
+            'min_child_samples': hp.quniform('min_child_samples', 20, 500, 5),
+            'reg_alpha': hp.uniform('reg_alpha', 0.0, 1.0),
+            'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
+            'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0)
+        }
+        
+
+        # Algorithm
+        tpe_algorithm = tpe.suggest
+
+        # Trials object to track progress
+        bayes_trials = Trials()
+
+        # File to save first results
+        import csv
+        out_file = 'gbm_trials.csv'
+        of_connection = open(out_file, 'w')
+        writer = csv.writer(of_connection)
+
+        # Write the headers to the file
+        writer.writerow(['loss', 'params', 'iteration', 'estimators', 'train_time'])
+        of_connection.close()
+
+        # Optimize
+        best = fmin(fn = objective, space = space, algo = tpe.suggest, 
+                    max_evals = MAX_EVALS, trials = bayes_trials)
+        # ====================================================================================
 
     print('Done')
 

@@ -4,6 +4,7 @@ Implementation of cv run.
 import os
 import numpy as np
 import pandas as pd
+from collections import OrderedDict
 
 import sklearn
 
@@ -85,8 +86,10 @@ def my_cv_run(data, target_name,
         # Combine scores from all cv folds
         ##tr_scores.append(model.calc_scores(xdata=xtr, ydata=ytr, to_print=False))
         ##vl_scores.append(model.calc_scores(xdata=xvl, ydata=yvl, to_print=False))
-        tr_scores.append(utils.calc_scores(model=estimator, xdata=xtr, ydata=ytr))
-        vl_scores.append(utils.calc_scores(model=estimator, xdata=xvl, ydata=yvl))
+        # tr_scores.append(utils.calc_scores(model=estimator, xdata=xtr, ydata=ytr))
+        # vl_scores.append(utils.calc_scores(model=estimator, xdata=xvl, ydata=yvl))
+        tr_scores.append(calc_scores(model=estimator, xdata=xtr, ydata=ytr))
+        vl_scores.append(calc_scores(model=estimator, xdata=xvl, ydata=yvl))
 
     # Summarize cv scores
     tr_cv_scores = utils.cv_scores_to_df(tr_scores, calc_stats=True)
@@ -102,3 +105,28 @@ def my_cv_run(data, target_name,
 
 
 
+def adj_r2_score(ydata, preds, x_size):
+    """ Calc adjusted r^2.
+    https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2
+    https://dziganto.github.io/data%20science/linear%20regression/machine%20learning/python/Linear-Regression-101-Metrics/
+    https://stats.stackexchange.com/questions/334004/can-r2-be-greater-than-1
+    """
+    r2 = sklearn.metrics.r2_score(ydata, preds)
+    adj_r2 = 1 - (1 - r2) * (x_size[0] - 1)/(x_size[0] - x_size[1] - 1)
+    return adj_r2
+
+
+
+def calc_scores(model, xdata, ydata):
+    """ Create dict of scores. """
+    # TODO: replace `if` with `try`
+    preds = model.predict(xdata)
+    scores = OrderedDict()
+
+    scores['r2'] = sklearn.metrics.r2_score(ydata, preds)
+    #scores['adj_r2_score'] = self.__adj_r2_score(ydata, preds)
+    scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
+    scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
+    scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(ydata, preds)
+
+    return scores
