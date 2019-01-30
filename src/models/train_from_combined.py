@@ -88,13 +88,15 @@ def run(args):
     verbose = args['verbose']
     n_jobs = args['n_jobs']
 
+    outdir = args['outdir']
+
     # Feature list
     feature_list = cell_features + drug_features + other_features
 
     # Define names
     train_sources_name = '_'.join(train_sources)
     
-    # Build custom metric to calc auroc from regression
+    # Define custom metric to calc auroc from regression
     # https://scikit-learn.org/stable/modules/model_evaluation.html#scoring
     from sklearn.metrics import make_scorer
     from sklearn.metrics import roc_auc_score
@@ -124,7 +126,8 @@ def run(args):
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
     name_sufix = '.'.join(train_sources + [model_name] + [cv_method] + cell_features + drug_features + [target_name])
-    run_outdir = os.path.join(OUTDIR, name_sufix + '~' + t)
+    #run_outdir = os.path.join(OUTDIR, name_sufix + '~' + t)
+    run_outdir = os.path.join(outdir, name_sufix + '~' + t)
     os.makedirs(run_outdir)
     logfilename = os.path.join(run_outdir, 'logfile.log')
     lg = classlogger.Logger(logfilename=logfilename)
@@ -243,25 +246,25 @@ def run(args):
     lg.logger.info(f'cv_scores\n{cv_scores}')
 
 
-    # ---------------
-    # lightgbm method
-    # ---------------
-    # TODO: lightgbm.cv()
+    # # ---------------
+    # # lightgbm method
+    # # ---------------
+    # # TODO: lightgbm.cv()
 
 
-    # ------------
-    # My CV method
-    # ------------
-    # from cvrun import my_cv_run
-    # model, _ = init_model(model_name, logger=lg.logger)
-    # tr_cv_scores, vl_cv_scores = my_cv_run(
-    #     data=data,
-    #     target_name=target_name,
-    #     model=model.model,
-    #     #metrics=metrics,  # TODO: implement this option
-    #     fea_prfx_dict=fea_prfx_dict,
-    #     cv_method=cv_method, cv_folds=cv_folds,
-    #     logger=lg.logger, verbose=True, random_state=SEED, outdir=run_outdir)
+    # # ------------
+    # # My CV method
+    # # ------------
+    # # from cvrun import my_cv_run
+    # # model, _ = init_model(model_name, logger=lg.logger)
+    # # tr_cv_scores, vl_cv_scores = my_cv_run(
+    # #     data=data,
+    # #     target_name=target_name,
+    # #     model=model.model,
+    # #     #metrics=metrics,  # TODO: implement this option
+    # #     fea_prfx_dict=fea_prfx_dict,
+    # #     cv_method=cv_method, cv_folds=cv_folds,
+    # #     logger=lg.logger, verbose=True, random_state=SEED, outdir=run_outdir)
 
 
 
@@ -318,36 +321,6 @@ def run(args):
     #                                           outdir=run_outdir)
 
 
-    # -----------------------------------------------
-    # Generate learning curve - semi automatic method
-    # (*) uses cross_validate from sklearn.
-    # -----------------------------------------------
-    lg.logger.info('\nStart learning curve (my method) ...')
-
-    # Define ML model
-    model, fit_params = init_model(model_name='lgb_reg', logger=lg.logger)
-
-    # Run learning curve
-    t0 = time.time()
-    lrn_curve_scores = lrn_curve.my_learning_curve(
-        estimator=model.model,
-        X=xdata, Y=ydata,
-        args=args,
-        fit_params=fit_params,
-        lr_curve_ticks=lr_curve_ticks,
-        data_sizes_frac=None,
-        metrics=metrics,
-        cv=cv,
-        #cv_method=cv_method,
-        #cv_folds=cv_folds,
-        groups=groups,
-        n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
-    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-
-    # Dump results
-    lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores.csv'), index=False)
-
-
     # -------------------------------------------------
     # Generate learning curve - complete sklearn method
     # (*) can't generate multiple metrics.
@@ -358,7 +331,7 @@ def run(args):
     model, _ = init_model(model_name, lg.logger)
 
     # Define params
-    metric_name = 'r2'
+    metric_name = 'neg_mean_absolute_error'
     train_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
 
     # Run learning curve
@@ -379,6 +352,34 @@ def run(args):
     lrn_curve.plt_learning_curve(rslt=lrn_curve_scores, metric_name=metric_name,
         title='Learning curve (target: {}, data: {})'.format(target_name, train_sources_name),
         path=os.path.join(run_outdir, 'auto_learning_curve_' + target_name + '_' + metric_name + '.png'))
+
+
+    # -----------------------------------------------
+    # Generate learning curve - semi automatic method
+    # (*) uses cross_validate from sklearn.
+    # -----------------------------------------------
+    lg.logger.info('\nStart learning curve (my method) ...')
+
+    # Define ML model
+    model, fit_params = init_model(model_name='lgb_reg', logger=lg.logger)
+
+    # Run learning curve
+    t0 = time.time()
+    lrn_curve_scores = lrn_curve.my_learning_curve(
+        estimator=model.model,
+        X=xdata, Y=ydata,
+        args=args,
+        fit_params=fit_params,
+        lr_curve_ticks=lr_curve_ticks,
+        data_sizes_frac=None,
+        metrics=metrics,
+        cv=cv,
+        groups=groups,
+        n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
+    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+
+    # Dump results
+    lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores.csv'), index=False)
 
 
 
@@ -407,6 +408,7 @@ def run(args):
         # model_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])  # use my class fit method
         params = {'verbose': False, 'sample_weight': sample_weight}
         model_final.fit(xdata, ydata, **params)  # use my class fit method
+        # model_final.model.fit(xdata, ydata, **params)
         # model_final.model.fit(xdata, ydata, eval_set=[(xdata, ydata)]) # use lightgbm fit method
     else:
         model_final.fit(xdata, ydata)
@@ -437,7 +439,7 @@ def run(args):
         t0 = time.time()
 
         if train_sources == [src]:
-            lg.logger.info("That's the taining set (so no predictions).")
+            lg.logger.info("That's the taining set (so no preds).")
             continue
 
         te_src_data = te_data[te_data['SOURCE'].isin([src])].reset_index(drop=True)
@@ -472,7 +474,8 @@ def run(args):
         lg.logger.info('\nRuntime: {:.3f}'.format((time.time()-t0)/60))
 
     # Combine test set preds
-    csv_scores = pd.concat(csv_scores, axis=1)
+    if len(csv_scores) > 0:
+        csv_scores = pd.concat(csv_scores, axis=1)
 
     # (New) Adjust cv_scores in order to combine with test set preds
     # (take the cv score for val set)
@@ -503,8 +506,10 @@ def main(args):
     args = argparser.get_args(args=args, config_fname=config_fname)
     pprint(vars(args))
     args = vars(args)
+    #if 'outdir' not in args:
+    if args['outdir'] is None:
+        args['outdir'] = OUTDIR
     csv_scores_all = run(args)
-    args['outdir'] = OUTDIR
     return csv_scores_all, args
     
 

@@ -21,7 +21,8 @@ dflt_args = {
     'cv_folds': 5,
     'lc_ticks': 5,
     'verbose': 't',
-    'n_jobs': 4
+    'n_jobs': 4,
+    'outdir': None,
 }
 
 
@@ -65,7 +66,7 @@ def get_cli_args(args=None):
     # Select train and test (inference) sources
     parser.add_argument('-tr', '--train_sources', nargs='+',
         # default=["ccle"],
-        choices=['ccle', 'gcsi', 'gdsc', 'ctrp'],
+        # choices=['ccle', 'gcsi', 'gdsc', 'ctrp'],
         help='Data sources to use for training.')
     parser.add_argument('-te', '--test_sources', nargs='+',
         # default=["ccle"],
@@ -133,6 +134,12 @@ def get_cli_args(args=None):
     parser.add_argument('--n_jobs',
         # default=4,
         type=int)
+
+    # Select ML models
+    parser.add_argument('--outdir',
+        # default=["lgb_reg"],
+        type=str,
+        help='Output dir.')        
 
     return parser
 

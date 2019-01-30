@@ -180,7 +180,7 @@ def update_cross_validate_scores(cv_scores):
 
     # Add `train_set` col
     v = list(map(lambda x: True if 'train' in x else False, df.index))
-    df.insert(loc=1, column='train_set', value=v)
+    df.insert(loc=1, column='tr_set', value=v)
     return df
 
 

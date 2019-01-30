@@ -320,7 +320,7 @@ def run(args):
             'min_child_samples': hp.quniform(label='min_child_samples', low=20, high=500, q=5),
             'reg_alpha': hp.uniform(label='reg_alpha', low=0.0, high=1.0),
             'reg_lambda': hp.uniform(label='reg_lambda', low=0.0, high=1.0),
-            'colsample_bytree': hp.uniform(     'colsample_by_tree', 0.6, 1.0)
+            'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0)
         }
         
 
