@@ -84,7 +84,7 @@ def load_data(datapath, fea_prfx_dict, args, logger, random_state=None):
 
 
     # Drop data points where target is NaN 
-    data = data[~data[target_name].isna()]
+    data = data[~data[args['target_name']].isna()]
 
 
     # Filter out AUC>1
