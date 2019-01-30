@@ -83,6 +83,10 @@ def load_data(datapath, fea_prfx_dict, args, logger, random_state=None):
     data = data.sample(frac=1.0, axis=0, random_state=random_state).reset_index(drop=True)
 
 
+    # Drop data points where target is NaN 
+    data = data[~data[target_name].isna()]
+
+
     # Filter out AUC>1
     # print('\nFilter some AUC outliers (>1)')
     # print('data.shape', data.shape)
