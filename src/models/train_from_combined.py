@@ -479,7 +479,7 @@ def run(args):
 
     # (New) Adjust cv_scores in order to combine with test set preds
     # (take the cv score for val set)
-    cv_scores = cv_scores[cv_scores['train_set']==False].drop(columns='train_set')
+    cv_scores = cv_scores[cv_scores['tr_set']==False].drop(columns='tr_set')
     cv_scores[train_sources_name] = cv_scores.iloc[:, -cv_folds:].mean(axis=1)
     cv_scores = cv_scores[['metric', train_sources_name]]
     cv_scores = cv_scores.set_index('metric')

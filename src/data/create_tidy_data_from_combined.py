@@ -53,7 +53,8 @@ t0 = time.time()
 # ========================================================================
 #       Args TODO: add to argparse
 # ========================================================================
-sources = ['ccle', 'gcsi', 'gdsc', 'ctrp']
+# sources = ['ccle', 'gcsi', 'gdsc', 'ctrp']
+sources = ['ccle', 'gcsi', 'gdsc', 'ctrp', 'nci60']
 drug_features = ['dsc']  # ['dsc', 'fng']
 cell_features = ['rna']  # ['rna', 'cnv']
 dropna_thres = 0.4
