@@ -1,7 +1,7 @@
 [Global_Params]
 target_name = 'AUC'
 target_trasform = 'f'
-train_sources = ['gcsi', 'ccle']
+train_sources = ['gcsi']
 test_sources = ['gcsi']
 row_sample = None
 col_sample = None

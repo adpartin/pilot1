@@ -334,6 +334,7 @@ logger.info('\nEnd of data per-processing: {:.2f} mins'.format((time.time()-t0)/
 logger.info('\nSave tidy dataframe ...')
 t0 = time.time()
 data.drop(columns='STUDY', inplace=True) # gives error when save in 'parquet' format
+
 if tidy_data_format == 'parquet':
     tidy_filepath = os.path.join(OUTDIR, tidy_data_name+'.parquet')
     data.to_parquet(tidy_filepath, engine='auto', compression='snappy')

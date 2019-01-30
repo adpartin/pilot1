@@ -70,7 +70,7 @@ def get_cli_args(args=None):
         help='Data sources to use for training.')
     parser.add_argument('-te', '--test_sources', nargs='+',
         # default=["ccle"],
-        choices=['ccle', 'gcsi', 'gdsc', 'ctrp'],
+        choices=['ccle', 'gcsi', 'gdsc', 'ctrp', 'nci60'],
         help='Data sources to use for testing.')
 
     # Keep a subset of row/cols
