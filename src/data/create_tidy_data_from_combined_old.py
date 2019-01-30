@@ -47,6 +47,11 @@ else:
 OUTDIR = os.path.join(file_path, '../../data/processed/from_combined')
 os.makedirs(OUTDIR, exist_ok=True)
 
+RSP_FILENAME = 'combined_single_response_agg'  # reposne data filename
+# RSP_FILENAME = 'ChemPartner_single_response_agg'  # reposne data filename
+DSC_FILENAME = 'Combined_PubChem_dragon7_descriptors.tsv'  # drug descriptors data filename
+DRUG_META_FILENAME = 'drug_info'
+
 t0 = time.time()
 
 
@@ -97,12 +102,12 @@ logger.info(f'Num of system CPUs: {psutil.cpu_count()}')
 #       Load response data
 # ========================================================================
 # filename = 'ChemPartner_single_response_agg'
-filename = 'combined_single_response_agg'
-logger.info(f'\n\nLoading combined response ... {filename}')
+# filename = 'combined_single_response_agg'
+logger.info(f'\n\nLoading combined response ... {RSP_FILENAME}')
 rsp_cols = ['AUC', 'AUC1', 'EC50', 'EC50se',
             'R2fit', 'Einf', 'IC50',
             'HS', 'AAC1', 'DSS1']
-rsp = pd.read_table(os.path.join(DATADIR, filename), sep='\t',
+rsp = pd.read_table(os.path.join(DATADIR, RSP_FILENAME), sep='\t',
                     na_values=na_values,
                     dtype={'SOURCE': str, 'CELL': str, 'DRUG': str,
                            'AUC': np.float32, 'IC50': np.float32, 'EC50': np.float32,
@@ -156,9 +161,9 @@ if verbose:
 # ========================================================================
 #   Load drug descriptors
 # ========================================================================
-filename = 'Combined_PubChem_dragon7_descriptors.tsv'
-logger.info('\n\nLoading drug descriptors ... {}'.format('Combined_PubChem_dragon7_descriptors.tsv'))
-path = os.path.join(DATADIR, filename)
+# filename = 'Combined_PubChem_dragon7_descriptors.tsv'
+logger.info(f'\n\nLoading drug descriptors ... {DSC_FILENAME}')
+path = os.path.join(DATADIR, DSC_FILENAME)
 cols = pd.read_table(path, engine='c', nrows=0)
 dtype_dict = {c: prfx_dtypes['dsc'] for c in cols.columns[1:]}
 dsc = pd.read_table(path, dtype=dtype_dict, na_values=na_values, warn_bad_lines=True)
@@ -206,9 +211,9 @@ if verbose:
 # ========================================================================
 #   Load drug meta
 # ========================================================================
-filename = 'drug_info'
-logger.info(f'\n\nLoading drug metadata ... {filename}')
-dmeta = pd.read_table(os.path.join(DATADIR, filename), dtype=object)
+# filename = 'drug_info'
+logger.info(f'\n\nLoading drug metadata ... {DRUG_META_FILENAME}')
+dmeta = pd.read_table(os.path.join(DATADIR, DRUG_META_FILENAME), dtype=object)
 dmeta['PUBCHEM'] = 'PubChem.CID.' + dmeta['PUBCHEM']
 dmeta.insert(loc=0, column='SOURCE', value=dmeta['ID'].map(lambda x: x.split('.')[0].lower()))
 dmeta.rename(columns={'ID': 'DRUG'}, inplace=True)

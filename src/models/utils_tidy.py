@@ -194,12 +194,14 @@ def impute_values(data, fea_prfx_dict, logger=None):
     """
     from sklearn.impute import SimpleImputer, MissingIndicator
     data = data.copy()
-    logger.info('\nImpute missing features ... ({})'.format(list(fea_prfx_dict.keys())))
+    if logger is not None:
+        logger.info('\nImpute missing features ... ({})'.format(list(fea_prfx_dict.keys())))
 
     # Extract df that contains only features (no meta or response)
     fea_data, other_data = split_features_and_other_cols(data=data, fea_prfx_dict=fea_prfx_dict)
     tot_miss_feas = sum(fea_data.isna().sum(axis=0) > 0)
-    logger.info('Total features with missing values (before imputation): {}'.format(tot_miss_feas))
+    if logger is not None:
+        logger.info('Total features with missing values (before imputation): {}'.format(tot_miss_feas))
 
     if tot_miss_feas > 0:
         colnames = fea_data.columns
@@ -210,8 +212,9 @@ def impute_values(data, fea_prfx_dict, logger=None):
         fea_data_imputed = imputer.fit_transform(fea_data)
         fea_data_imputed = pd.DataFrame(fea_data_imputed, columns=colnames)
         fea_data_imputed = fea_data_imputed.astype(dtypes_dict) # cast back to the original data type
-
-        logger.info('Total features with missing values (after impute): {}'.format(sum(fea_data_imputed.isna().sum(axis=0) > 0)))
+        
+        if logger is not None:
+            logger.info('Total features with missing values (after impute): {}'.format(sum(fea_data_imputed.isna().sum(axis=0) > 0)))
 
         # Concat features (xdata_imputed) and other cols (other_data)
         data = pd.concat([other_data, fea_data_imputed], axis=1)
