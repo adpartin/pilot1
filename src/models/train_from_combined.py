@@ -60,12 +60,9 @@ os.makedirs(OUTDIR, exist_ok=True)
 SEED = 0
 
 # Feature prefix (some already present in the tidy dataframe)
-fea_prfx_dict = {'rna': 'cell_rna.',
-                 'cnv': 'cell_cnv.',
-                 'dsc': 'drug_dsc.',
-                 'fng': 'drug_fng.',
-                 'clb': 'cell_lbl.',
-                 'dlb': 'drug_lbl.'}
+fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.',
+                 'dsc': 'drug_dsc.', 'fng': 'drug_fng.',
+                 'clb': 'cell_lbl.', 'dlb': 'drug_lbl.'}
 
 np.set_printoptions(precision=3)
 

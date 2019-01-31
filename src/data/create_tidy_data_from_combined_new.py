@@ -79,10 +79,8 @@ fibro_names = ['CCLE.HS229T', 'CCLE.HS739T', 'CCLE.HS840T', 'CCLE.HS895T', 'CCLE
                'CTRP.Hs-895-T', 'CTRP.RKN', 'GDSC.RKN', 'gCSI.RKN']
 
 # Prefix to add to feature names based on feature types
-fea_prfx_dict = {'rna': 'cell_rna.',
-                 'cnv': 'cell_cnv.',
-                 'dsc': 'drug_dsc.',
-                 'fng': 'drug_fng.'}
+fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.',
+                 'dsc': 'drug_dsc.', 'fng': 'drug_fng.'}
 
 prfx_dtypes = {'rna': np.float32,
                'cnv': np.int8,

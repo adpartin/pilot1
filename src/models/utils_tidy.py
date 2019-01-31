@@ -25,12 +25,14 @@ import classlogger
 DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
 
 
-def load_data(datapath, fea_prfx_dict, args, logger, random_state=None):
+def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
     """ Load and pre-process the tidy data. """
-    logger.info(f'\nLoad tidy data ... {datapath}')
+    if logger:
+        logger.info(f'\nLoad tidy data ... {datapath}')
     data = pd.read_parquet(datapath, engine='auto', columns=None)
-    logger.info(f'data.shape {data.shape}')
-    logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(data)/1e9))
+    if logger:
+        logger.info(f'data.shape {data.shape}')
+        logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(data)/1e9))
     # print(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
 
 
@@ -40,7 +42,7 @@ def load_data(datapath, fea_prfx_dict, args, logger, random_state=None):
     data.columns = [regex.sub('_', c) if any(x in str(c) for x in set(('[', ']', '<'))) else c for c in data.columns.values]
 
 
-    if args['tissue_type'] is not None:
+    if args['tissue_type']:
         data = data[data[''].isin([args['tissue_type']])].reset_index(drop=True)
 
 
@@ -63,19 +65,23 @@ def load_data(datapath, fea_prfx_dict, args, logger, random_state=None):
 
 
     # Extract test sources
-    logger.info('\nExtract test sources ... {}'.format(args['test_sources']))
+    if logger:
+        logger.info('\nExtract test sources ... {}'.format(args['test_sources']))
     te_data = data[data['SOURCE'].isin(args['test_sources'])].reset_index(drop=True)
-    logger.info(f'te_data.shape {te_data.shape}')
-    logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(te_data)/1e9))
-    logger.info(te_data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+    if logger:
+        logger.info(f'te_data.shape {te_data.shape}')
+        logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(te_data)/1e9))
+        logger.info(te_data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
 
 
     # Extract train sources
-    logger.info('\nExtract train sources ... {}'.format(args['train_sources']))
+    if logger:
+        logger.info('\nExtract train sources ... {}'.format(args['train_sources']))
     data = data[data['SOURCE'].isin(args['train_sources'])].reset_index(drop=True)
-    logger.info(f'data.shape {data.shape}')
-    logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(data)/1e9))
-    logger.info(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+    if logger:
+        logger.info(f'data.shape {data.shape}')
+        logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(data)/1e9))
+        logger.info(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
 
 
     # Assign type to categoricals
@@ -112,7 +118,8 @@ def load_data(datapath, fea_prfx_dict, args, logger, random_state=None):
 
 
     if 'dlb' in args['other_features']:
-        logger.info('\nAdd drug labels to features ...')
+        if logger:
+            logger.info('\nAdd drug labels to features ...')
         # print(data['DRUG'].value_counts())
 
         # http://queirozf.com/entries/one-hot-encoding-a-feature-on-a-pandas-dataframe-an-example
@@ -126,8 +133,9 @@ def load_data(datapath, fea_prfx_dict, args, logger, random_state=None):
 
         # Concat drug labels and other features
         data = pd.concat([dlb, data], axis=1).reset_index(drop=True)
-        logger.info(f'dlb.shape {dlb.shape}')
-        logger.info(f'data.shape {data.shape}')
+        if logger:
+            logger.info(f'dlb.shape {dlb.shape}')
+            logger.info(f'data.shape {data.shape}')
 
 
     if 'rna_clusters' in args['other_features']:
