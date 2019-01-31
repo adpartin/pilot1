@@ -58,6 +58,10 @@ def load_data(datapath, fea_prfx_dict, args, logger, random_state=None):
         print('data.shape', data.shape)
 
 
+    # Drop data points where target is NaN 
+    data = data[~data[args['target_name']].isna()]
+
+
     # Extract test sources
     logger.info('\nExtract test sources ... {}'.format(args['test_sources']))
     te_data = data[data['SOURCE'].isin(args['test_sources'])].reset_index(drop=True)
@@ -81,10 +85,6 @@ def load_data(datapath, fea_prfx_dict, args, logger, random_state=None):
 
     # Shuffle data
     data = data.sample(frac=1.0, axis=0, random_state=random_state).reset_index(drop=True)
-
-
-    # Drop data points where target is NaN 
-    data = data[~data[args['target_name']].isna()]
 
 
     # Filter out AUC>1
