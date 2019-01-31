@@ -67,11 +67,17 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
     # Extract test sources
     if logger:
         logger.info('\nExtract test sources ... {}'.format(args['test_sources']))
-    te_data = data[data['SOURCE'].isin(args['test_sources'])].reset_index(drop=True)
-    if logger:
-        logger.info(f'te_data.shape {te_data.shape}')
-        logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(te_data)/1e9))
-        logger.info(te_data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+    
+    if args['test_sources']:    
+        te_data = data[data['SOURCE'].isin(args['test_sources'])].reset_index(drop=True)
+        if logger:
+            logger.info(f'te_data.shape {te_data.shape}')
+            logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(te_data)/1e9))
+            logger.info(te_data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+    else:
+        te_data = None
+        if logger:
+            logger.infp('No test data.')
 
 
     # Extract train sources
