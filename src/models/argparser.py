@@ -25,10 +25,11 @@ dflt_args = {
     'n_jobs': 4,
     'outdir': None,
 
-    'epochs': 150,
-    'batch_size': 64,
+    'epochs': 300,
+    'batch_size': 32,
     'dr_rate': 0.2,
     'attn': 0,
+    'scaler': None,
 }
 
 
@@ -170,7 +171,12 @@ def get_cli_args(args=None):
     parser.add_argument('--attn',
         # default=0.2,
         type=int,
-        help='Whether to use attention layer to the neural network.')                               
+        help='Whether to use attention layer to the neural network.')
+    parser.add_argument('--scaler',
+        # default=0.2,
+        type=str,
+        choices=['stnd', 'minmax', 'rbst'],
+        help='Feature scaler (primarily for neural network).')                                       
 
     return parser
 

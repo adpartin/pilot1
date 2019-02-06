@@ -30,7 +30,6 @@ from keras.models import Sequential, Model, model_from_json, model_from_yaml
 from keras.utils import np_utils, multi_gpu_model
 from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
 
-
 try:
     import lightgbm as lgb
 except ImportError:  # install??
@@ -185,7 +184,6 @@ class KERAS_REGRESSOR(BaseMLModel):
         metrics = ['mean_absolute_error', 'acc']
 
         inputs = Input(shape=(input_dim,))
-
         x = Dense(1000, activation='relu')(inputs)
 
         # Attention
