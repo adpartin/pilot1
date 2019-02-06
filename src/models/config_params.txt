@@ -2,7 +2,7 @@
 target_name = 'AUC'
 target_trasform = 'f'
 train_sources = ['gcsi']
-test_sources = ['gcsi']
+test_sources = ['gcsi', 'ccle']
 row_sample = None
 col_sample = None
 tissue_type = None

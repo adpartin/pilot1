@@ -16,13 +16,19 @@ dflt_args = {
     'cell_features': ['rna'], 
     'drug_features': ['dsc'],
     'other_features': [] ,
-    'ml_models': 'lgb_reg',
+    'mltype': 'reg',
+    'mlmodel': 'lgb_reg',
     'cv_method': 'simple',
     'cv_folds': 5,
     'lc_ticks': 5,
     'verbose': 't',
     'n_jobs': 4,
     'outdir': None,
+
+    'epochs': 150,
+    'batch_size': 64,
+    'dr_rate': 0.2,
+    'attn': 0,
 }
 
 
@@ -45,6 +51,7 @@ def get_args(args, config_fname=None):
 
     #parser.set_defaults(**dflt_args_new)
     args = parser.parse_args(args)
+    #args = parser.parse_known_args(args)
     return args
 
 
@@ -100,10 +107,16 @@ def get_cli_args(args=None):
         help='Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).') # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
 
     # Select ML models
-    parser.add_argument('-ml', '--ml_models',
+    parser.add_argument('--mltype',
         # default=["lgb_reg"],
-        choices=['lgb_reg', 'rf_reg'],
-        help='ML models to use for training.')
+        choices=['reg', 'cls'],
+        help='Type to ML problem: `reg` or `cls`.')
+
+    # Select ML models
+    parser.add_argument('-ml', '--mlmodel',
+        # default=["lgb_reg"],
+        choices=['lgb_reg', 'rf_reg', 'nn_reg'],
+        help='ML model to use for training.')
 
     # Select CV scheme
     parser.add_argument('-cvs', '--cv_method',
@@ -139,7 +152,25 @@ def get_cli_args(args=None):
     parser.add_argument('--outdir',
         # default=["lgb_reg"],
         type=str,
-        help='Output dir.')        
+        help='Output dir.')    
+
+    # Select NN hyperparams
+    parser.add_argument('-e', '--epochs',
+        # default=100,
+        type=int,
+        help='Number of epochs for the neural network.')
+    parser.add_argument('-b', '--batch_size',
+        # default=64,
+        type=int,
+        help='Batch size for the neural network.')
+    parser.add_argument('--dr_rate',
+        # default=0.2,
+        type=float,
+        help='Dropout ratefor the neural network.')
+    parser.add_argument('--attn',
+        # default=0.2,
+        type=int,
+        help='Whether to use attention layer to the neural network.')                               
 
     return parser
 

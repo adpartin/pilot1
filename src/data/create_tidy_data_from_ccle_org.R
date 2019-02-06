@@ -1,5 +1,8 @@
 # TODO: rnaseq files (cnts, rpkm) contain two column for gene names: 1. "Name" (ENSG), 2. "Description" (gene name)
 # we may need to use the gene names when mapping rna-seq data to combined!
+
+# TODO: apply the following processing to the gene expression data
+# https://dockflow.org/workflow/simple-single-cell/
 # -----------------------------------------------------------------------------------------------------------------
 
 # L1000 genes: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GPL20573
@@ -258,7 +261,14 @@ dev.off()
 # ==============================================================
 #   Create tidy data
 # ==============================================================
-# Extract rna for 
+# Keep cell lines that were actually screened and sequenced
+cells_screened <- unique(as.vector(rspdata$CCLEName))
+cells_screened[1:3]
+usecells <- intersect(cells_screened, colnames(rna))
+message("Cells sequenced: ", ncol(rna))
+message("Cells screened: ", length(cells_screened))
+message("Cells screened and sequenced: ", length(usecells))
+rna <- dplyr::select(rna, usecells)
 
 
 # Transpose rna and add col to merging with rspdata

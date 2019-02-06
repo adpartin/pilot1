@@ -1,1 +1,0 @@
-# https://discuss.pytorch.org/t/concatenate-layer-output-with-additional-input-data/20462
