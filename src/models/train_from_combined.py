@@ -304,7 +304,7 @@ def run(args):
         init_params = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
         fit_params = {'verbose': False}  # 'early_stopping_rounds': 10,
     elif mlmodel == 'nn_reg':
-        init_params = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'logger': lg.logger}
+        init_params = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
         # Callbacks
         # checkpointer = ModelCheckpoint(filepath=os.path.join(outdir_,'Agg_attn_bin.autosave.model.h5'), verbose=1, save_weights_only=False, save_best_only=True)
         # csv_logger = CSVLogger(os.path.join(outdir_,'Agg_attn_bin.training.log'))
@@ -312,7 +312,7 @@ def run(args):
         # early_stop = EarlyStopping(monitor='val_loss', patience=40, verbose=1, mode='auto')
         # tensorboard = TensorBoard(log_dir="./logs_attn/{}".format(time.time())) # (AP)
         #callback_list = [reduce_lr, early_stop]
-        fit_params = {'batch_size': batch_size, 'epochs': epochs, 'attn': attn,
+        fit_params = {'batch_size': batch_size, 'epochs': epochs,
             'verbose': 2, 'validation_split': 0.2,} # 'callbacks': callback_list}
 
     # Define ML model
