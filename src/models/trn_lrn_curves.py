@@ -162,13 +162,13 @@ def run(args):
     if mltype == 'cls':
         if cv_method == 'simple':
             if cv_folds == 1:
-                cv = ShuffleSplit(test_size=0.2, random_state=SEED)
+                cv = ShuffleSplit(n_splits=cv_folds, test_size=0.2, random_state=SEED)
             else:
                 cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
             groups = None
         elif cv_method == 'stratify':
             if cv_folds == 1:
-                cv = StratifiedShuffleSplit(test_size=0.2, random_state=SEED)
+                cv = StratifiedShuffleSplit(n_splits=cv_folds, test_size=0.2, random_state=SEED)
             else:
                 cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
             groups = None
@@ -181,7 +181,7 @@ def run(args):
             groups = data['CELL'].copy()
         elif cv_method == 'simple':
             if cv_folds == 1:
-                cv = ShuffleSplit(test_size=0.2, random_state=SEED)
+                cv = ShuffleSplit(n_splits=cv_folds, test_size=0.2, random_state=SEED)
             else:
                 cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
             groups = None
