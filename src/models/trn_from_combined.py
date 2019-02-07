@@ -73,7 +73,7 @@ np.set_printoptions(precision=3)
 
 def run(args):
     target_name = args['target_name']
-    target_trasform = args['target_trasform']    
+    target_transform = args['target_transform']    
     train_sources = args['train_sources']
     test_sources = args['test_sources']
     row_sample = args['row_sample']
