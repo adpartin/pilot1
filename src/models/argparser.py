@@ -7,7 +7,7 @@ from collections import OrderedDict
 # Default (arg, value) pairs for argparse object
 dflt_args = {
     'target_name': 'AUC',
-    'target_trasform': 'f',
+    'target_transform': 'f',
     'train_sources': ['ccle'],
     'test_sources': ['ccle'],
     'row_sample': None,
@@ -66,7 +66,7 @@ def get_cli_args(args=None):
         # default="AUC",
         choices=['AUC', 'AUC1', 'IC50'],
         help='Column name of the target variable.') # target_name = 'AUC1'
-    parser.add_argument('-tt', '--target_trasform',
+    parser.add_argument('-tt', '--target_transform',
         # default='f',
         choices=['t', 'f'], type=str_to_bool,
         help="'t': transform target, 'f': do not transform target.")
