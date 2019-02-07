@@ -227,14 +227,14 @@ def run(args):
 
     # ML model params
     if mlmodel == 'lgb_reg':
-        init_params = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-        fit_params = {'verbose': False}  # 'early_stopping_rounds': 10,
+        init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
+        fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
     elif mlmodel == 'nn_reg':
-        init_params = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-        fit_params = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 2, 'validation_split': 0.2}
+        init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
+        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 2, 'validation_split': 0.2}
 
     # Define ML model
-    model = ml_models.get_model(mlmodel=mlmodel, init_params=init_params)  
+    model = ml_models.get_model(mlmodel=mlmodel, init_params=init_prms)   
 
     # Run CV
     t0 = time.time()
@@ -306,14 +306,14 @@ def run(args):
 
     # ML model params
     if mlmodel == 'lgb_reg':
-        init_params = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-        fit_params = {'verbose': False}  # 'early_stopping_rounds': 10,
+        init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
+        fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
     elif mlmodel == 'nn_reg':
-        init_params = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-        fit_params = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 2, 'validation_split': 0.2}
+        init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
+        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 2, 'validation_split': 0.2}
 
     # Define ML model
-    model_final = ml_models.get_model(mlmodel=mlmodel, init_params=init_params)  
+    model = ml_models.get_model(mlmodel=mlmodel, init_params=init_prms)   
 
     t0 = time.time()
     #fit_params = {'verbose': False, 'sample_weight': sample_weight}  # 'early_stopping_rounds': 10,

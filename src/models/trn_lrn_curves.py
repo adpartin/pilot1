@@ -33,7 +33,10 @@ import sklearn
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import learning_curve
 from sklearn.model_selection import cross_val_score, cross_validate, learning_curve
-from sklearn.model_selection import ShuffleSplit, GroupShuffleSplit, KFold, GroupKFold, StratifiedKFold
+
+from sklearn.model_selection import ShuffleSplit, KFold
+from sklearn.model_selection import GroupShuffleSplit, GroupKFold
+from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 
 # Get file path
 # ... manutally run ...
@@ -156,17 +159,32 @@ def run(args):
     #       Define CV split
     # ========================================================================
     # Split tr/vl data
-    if cv_method=='simple':
-        cv = KFold(n_splits=cv_folds, shuffle=False, random_state=SEED)
-        groups = None
-    elif cv_method=='group':
-        cv = GroupKFold(n_splits=cv_folds)
-        groups = data['CELL'].copy()
-    elif cv_method=='stratify':
-        cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-        groups = None
-    else:
-        raise ValueError(f'This cv_method ({cv_method}) is not supported')
+    if mltype == 'cls':
+        if cv_method == 'simple':
+            if cv_folds == 1:
+                cv = ShuffleSplit(test_size=0.2, random_state=SEED)
+            else:
+                cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
+            groups = None
+        elif cv_method == 'stratify':
+            if cv_folds == 1:
+                cv = StratifiedShuffleSplit(test_size=0.2, random_state=SEED)
+            else:
+                cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
+            groups = None
+    elif mltype == 'reg':
+        if cv_method == 'group':
+            if cv_folds == 1:
+                cv = GroupShuffleSplit(random_state=SEED)
+            else:
+                cv = GroupKFold(n_splits=cv_folds)
+            groups = data['CELL'].copy()
+        elif cv_method == 'simple':
+            if cv_folds == 1:
+                cv = ShuffleSplit(test_size=0.2, random_state=SEED)
+            else:
+                cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
+            groups = None
 
 
     # ========================================================================
@@ -183,14 +201,14 @@ def run(args):
 
     # ML model params
     if mlmodel == 'lgb_reg':
-        init_params = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-        fit_params = {'verbose': False}  # 'early_stopping_rounds': 10,
+        init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
+        fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
     elif mlmodel == 'nn_reg':
-        init_params = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-        fit_params = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 2, 'validation_split': 0.2}
+        init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
+        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 2, 'validation_split': 0.2}
 
     # Define ML model
-    model = ml_models.get_model(mlmodel=mlmodel, init_params=init_params)  
+    model = ml_models.get_model(mlmodel=mlmodel, init_params=init_prms)  
 
 
     # -----------------------------------------------
@@ -205,8 +223,8 @@ def run(args):
         X=xdata, Y=ydata,
         mltype=mltype,
         mlmodel=mlmodel,
-        fit_params=fit_params,
-        init_params=init_params,
+        fit_params=fit_prms,
+        init_params=init_prms,
         args=args,
         lr_curve_ticks=lr_curve_ticks,
         data_sizes_frac=None,
@@ -289,6 +307,8 @@ def run(args):
     # lrn_curve.plt_learning_curve(rslt=lrn_curve_scores, metric_name=metric_name,
     #     title='Learning curve (target: {}, data: {})'.format(target_name, train_sources_name),
     #     path=os.path.join(run_outdir, 'auto_learning_curve_' + target_name + '_' + metric_name + '.png'))
+
+    return lrn_curve_scores
    
 
 def main(args):
@@ -299,8 +319,8 @@ def main(args):
     #if 'outdir' not in args:
     if args['outdir'] is None:
         args['outdir'] = OUTDIR
-    csv_scores_all = run(args)
-    return csv_scores_all, args
+    lrn_curve_scores = run(args)
+    return lrn_curve_scores, args
     
 
 if __name__ == '__main__':

@@ -14,9 +14,9 @@ from pandas.api.types import is_string_dtype
 from collections import OrderedDict
 from sklearn.preprocessing import LabelEncoder
 
-from sklearn.model_selection import ShuffleSplit, KFold # (AP)
-from sklearn.model_selection import GroupShuffleSplit, GroupKFold # (AP)
-from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold # (AP)
+from sklearn.model_selection import ShuffleSplit, KFold
+from sklearn.model_selection import GroupShuffleSplit, GroupKFold
+from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 
 
 class SimpleSplit():

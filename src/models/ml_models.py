@@ -45,6 +45,12 @@ except ImportError:  # install??
 #     # https://www.kaggle.com/spektrum/randomsearchcv-to-hyper-tune-1st-level
 
 
+def r2(y_true, y_pred):
+    SS_res =  K.sum(K.square(y_true - y_pred))
+    SS_tot = K.sum(K.square(y_true - K.mean(y_true)))
+    return (1 - SS_res/(SS_tot + K.epsilon()))
+
+
 def get_model(mlmodel, init_params=None):
     if mlmodel == 'lgb_reg':
         model = LGBM_REGRESSOR(**init_params)
@@ -181,7 +187,7 @@ class KERAS_REGRESSOR(BaseMLModel):
                  logger=None):
         self.logger = logger
 
-        metrics = ['mean_absolute_error', 'acc']
+        metrics = ['mean_absolute_error', r2] # 'acc'
 
         inputs = Input(shape=(input_dim,))
         x = Dense(1000, activation='relu')(inputs)
@@ -205,7 +211,6 @@ class KERAS_REGRESSOR(BaseMLModel):
 
         x = Dense(60, activation='relu')(x)
         x = Dropout(dr_rate)(x)
-        x = BatchNormalization()(x)
 
         x = Dense(30, activation='relu')(x)
         x = Dropout(dr_rate)(x)
