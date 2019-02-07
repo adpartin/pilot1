@@ -3,9 +3,14 @@ import logging
 
 
 class Logger():
-
+    """
+    Examples:
+        import classlogger.py
+        logfilename = os.path.join(outdir, 'logfile.log')
+        lg = classlogger.Logger(logfilename=logfilename)
+        lg.logger.info(f'File path: {file_path}')
+    """
     def __init__(self, logfilename='logfile.log'):
-    #def setup_logger(self, logfilename='logfile.log'):
         """ Create logger. Output to file and console.
         TODO: example for class logging --> https://airbrake.io/blog/python-exception-handling/attributeerror
         """

@@ -1,6 +1,6 @@
 """ 
 This script generates the cross-study validation (csv) table.
-It launches a script (e.g. train_from_combined.py) that train ML model(s) using a single source
+It launches a script (e.g. trn_from_combined.py) that train ML model(s) using a single source
 and runs predictions (inference) on a specified set of other sources.
 """
 # python -m pdb src/models/launch_cross_study_val.py
@@ -13,7 +13,7 @@ from collections import OrderedDict
 import numpy as np
 import pandas as pd
 
-import train_from_combined
+import trn_from_combined
 
 file_path = os.path.dirname(os.path.realpath(__file__))
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
@@ -62,7 +62,7 @@ def main(args):
 
     # Single run
     # idx = 2
-    # df_csv_scores, params = train_from_combined.main(
+    # df_csv_scores, params = trn_from_combined.main(
     #     ['-tr', *cross_study_sets[idx]['tr_src'],
     #     '-te', *cross_study_sets[idx]['te_src'],
     #     *args])
@@ -72,7 +72,7 @@ def main(args):
     dfs = []
     for run_id in range(len(cross_study_sets)):
         print('{} Run {} {}'.format('-'*40, run_id+1, '-'*40))
-        csv_scores_all, params = train_from_combined.main(
+        csv_scores_all, params = trn_from_combined.main(
             ['-tr', *cross_study_sets[run_id]['tr_src'],
              '-te', *cross_study_sets[run_id]['te_src'],
              '--outdir', csv_outdir,

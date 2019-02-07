@@ -129,13 +129,7 @@ def run(args):
     # ========================================================================
     #       Logger
     # ========================================================================
-    t = datetime.datetime.now()
-    t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
-    t = ''.join([str(i) for i in t])
-    name_sufix = '.'.join(train_sources + [mlmodel] + [cv_method] + cell_features + drug_features + [target_name])
-    #run_outdir = os.path.join(OUTDIR, name_sufix + '~' + t)
-    run_outdir = os.path.join(outdir, name_sufix + '~' + t)
-    os.makedirs(run_outdir)
+    run_outdir = utils.create_outdir(outdir=outdir, args=args)
     logfilename = os.path.join(run_outdir, 'logfile.log')
     lg = classlogger.Logger(logfilename=logfilename)
 
@@ -171,7 +165,7 @@ def run(args):
 
 
     # ========================================================================
-    #       Keep a set of training features
+    #       Keep a subset of training features
     # ========================================================================
     data = utils_tidy.extract_subset_features(data=data, feature_list=feature_list, fea_prfx_dict=fea_prfx_dict)
     # data = utils_tidy.impute_values(data=data, fea_prfx_dict=fea_prfx_dict, logger=lg.logger)
@@ -220,56 +214,46 @@ def run(args):
     # ========================================================================
     #       CV training
     # ========================================================================
-    # lg.logger.info('\n\n{}'.format('='*50))
-    # lg.logger.info('CV training ...')
-    # lg.logger.info('='*50)
+    lg.logger.info('\n\n{}'.format('='*50))
+    lg.logger.info('CV training ...')
+    lg.logger.info('='*50)
 
-    # # -----------------
-    # # sklearn CV method
-    # # -----------------
-    # # Get data
-    # xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-    # ydata = utils_tidy.extract_target(data=data, target_name=target_name)
+    # -----------------
+    # sklearn CV method
+    # -----------------
+    # Get data
+    xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+    ydata = utils_tidy.extract_target(data=data, target_name=target_name)
 
-    # # ML model params
-    # from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
-    # if mlmodel == 'lgb_reg':
-    #     init_params = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-    #     fit_params = {'verbose': False}  # 'early_stopping_rounds': 10,
-    # elif mlmodel == 'nn_reg':
-    #     init_params = {'input_dim': xdata.shape[1], 'logger': lg.logger}
-    #     # Callbacks
-    #     # checkpointer = ModelCheckpoint(filepath=os.path.join(outdir_,'Agg_attn_bin.autosave.model.h5'), verbose=1, save_weights_only=False, save_best_only=True)
-    #     # csv_logger = CSVLogger(os.path.join(outdir_,'Agg_attn_bin.training.log'))
-    #     # reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=20, verbose=1, mode='auto', min_delta=0.0001, cooldown=3, min_lr=0.000000001)
-    #     # early_stop = EarlyStopping(monitor='val_loss', patience=40, verbose=1, mode='auto')
-    #     # tensorboard = TensorBoard(log_dir="./logs_attn/{}".format(time.time())) # (AP)
-    #     #callback_list = [reduce_lr, early_stop]
-    #     fit_params = {'batch_size': 64, 'epochs': 150, 'verbose': 1,
-    #         'validation_split': 0.2,} # 'callbacks': callback_list}
+    # ML model params
+    if mlmodel == 'lgb_reg':
+        init_params = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
+        fit_params = {'verbose': False}  # 'early_stopping_rounds': 10,
+    elif mlmodel == 'nn_reg':
+        init_params = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
+        fit_params = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 2, 'validation_split': 0.2}
 
-    # # Define ML model
-    # #model, fit_params = init_model(mlmodel, logger=lg.logger)
-    # model = ml_models.get_model(mlmodel=mlmodel, init_params=init_params)    
+    # Define ML model
+    model = ml_models.get_model(mlmodel=mlmodel, init_params=init_params)  
 
-    # # Run CV
-    # t0 = time.time()
-    # cv_scores = cross_validate(
-    #     estimator=model.model, # sklearn.base.clone(model.model),
-    #     X=xdata, y=ydata,
-    #     scoring=metrics,
-    #     cv=cv, groups=groups,
-    #     n_jobs=n_jobs, fit_params=fit_params)
-    # lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+    # Run CV
+    t0 = time.time()
+    cv_scores = cross_validate(
+        estimator=model.model, # sklearn.base.clone(model.model),
+        X=xdata, y=ydata,
+        scoring=metrics,
+        cv=cv, groups=groups,
+        n_jobs=n_jobs, fit_params=fit_params)
+    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
-    # # Dump results
-    # cv_scores = utils.update_cross_validate_scores(cv_scores)
-    # cv_scores = cv_scores.reset_index(drop=True)
-    # cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='mean', value=cv_scores.iloc[:, -cv_folds:].values.mean(axis=1) )
-    # cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='std',  value=cv_scores.iloc[:, -cv_folds:].values.std(axis=1) )
-    # cv_scores = cv_scores.round(3)
-    # cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
-    # lg.logger.info(f'cv_scores\n{cv_scores}')
+    # Dump results
+    cv_scores = utils.update_cross_validate_scores(cv_scores)
+    cv_scores = cv_scores.reset_index(drop=True)
+    cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='mean', value=cv_scores.iloc[:, -cv_folds:].values.mean(axis=1) )
+    cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='std',  value=cv_scores.iloc[:, -cv_folds:].values.std(axis=1) )
+    cv_scores = cv_scores.round(3)
+    cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
+    lg.logger.info(f'cv_scores\n{cv_scores}')
 
 
     # # ------------
@@ -285,166 +269,6 @@ def run(args):
     # #     fea_prfx_dict=fea_prfx_dict,
     # #     cv_method=cv_method, cv_folds=cv_folds,
     # #     logger=lg.logger, verbose=True, random_state=SEED, outdir=run_outdir)
-
-
-
-    # ========================================================================
-    #       Learning curves
-    # ========================================================================
-    lg.logger.info('\n\n{}'.format('='*50))
-    lg.logger.info('Learning curves ...')
-    lg.logger.info('='*50)
-
-    # Get the data
-    xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-    ydata = utils_tidy.extract_target(data=data, target_name=target_name)
-    utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
-
-    # ML model params
-    from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
-    if mlmodel == 'lgb_reg':
-        init_params = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-        fit_params = {'verbose': False}  # 'early_stopping_rounds': 10,
-    elif mlmodel == 'nn_reg':
-        init_params = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-        # Callbacks
-        # checkpointer = ModelCheckpoint(filepath=os.path.join(outdir_,'Agg_attn_bin.autosave.model.h5'), verbose=1, save_weights_only=False, save_best_only=True)
-        # csv_logger = CSVLogger(os.path.join(outdir_,'Agg_attn_bin.training.log'))
-        # reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=20, verbose=1, mode='auto', min_delta=0.0001, cooldown=3, min_lr=0.000000001)
-        # early_stop = EarlyStopping(monitor='val_loss', patience=40, verbose=1, mode='auto')
-        # tensorboard = TensorBoard(log_dir="./logs_attn/{}".format(time.time())) # (AP)
-        #callback_list = [reduce_lr, early_stop]
-        fit_params = {'batch_size': batch_size, 'epochs': epochs,
-            'verbose': 2, 'validation_split': 0.2,} # 'callbacks': callback_list}
-
-    # Define ML model
-    #model, fit_params = init_model(mlmodel, logger=lg.logger)
-    model = ml_models.get_model(mlmodel=mlmodel, init_params=init_params)  
-
-    # -----------------------------------------------
-    # Generate learning curve - my method
-    # (*) ...
-    # -----------------------------------------------
-    # from cvrun import my_cv_run
-    # df_tr = []
-    # df_vl = []
-    # data_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
-    # data_sizes = [int(n) for n in data.shape[0]*data_sizes_frac]
-    
-    # model, _ = init_model(mlmodel, logger=lg.logger)
-    # for d_size in data_sizes:
-    #     lg.logger.info(f'Data size: {d_size}')
-    #     data_sample = data.sample(n=d_size)
-
-    #     tr_cv_scores, vl_cv_scores = my_cv_run(
-    #         data=data_sample,
-    #         target_name=target_name,
-    #         fea_prfx_dict=fea_prfx_dict,
-    #         model=model.model, #mlmodel=mlmodel,
-    #         cv_method=cv_method, cv_folds=cv_folds,
-    #         logger=lg.logger, random_state=SEED, outdir=run_outdir)
-
-    #     # Add col that indicates d_size
-    #     tr_cv_scores.insert(loc=1, column='data_size', value=data_sample.shape[0])
-    #     vl_cv_scores.insert(loc=1, column='data_size', value=data_sample.shape[0])
-        
-    #     # Append results to master dfs
-    #     df_tr.append(tr_cv_scores)
-    #     df_vl.append(vl_cv_scores)
-
-    # # Concat the results for all the data_sizes
-    # df_tr = pd.concat(df_tr, axis=0)
-    # df_vl = pd.concat(df_vl, axis=0)
-
-    # lrn_curve.plt_learning_curve_multi_metric(df_tr=df_tr, df_vl=df_vl,
-    #                                           cv_folds=cv_folds, target_name=target_name,
-    #                                           outdir=run_outdir)
-
-
-    # -------------------------------------------------
-    # Generate learning curve - complete sklearn method
-    # (*) can't generate multiple metrics.
-    # -------------------------------------------------
-    # lg.logger.info("\nStart learning_curve (sklearn) ...")
-
-    # # Define ML model
-    # model, _ = init_model(mlmodel, lg.logger)
-
-    # # Define params
-    # metric_name = 'neg_mean_absolute_error'
-    # # train_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
-    # base = 10
-    # train_sizes_frac = np.logspace(0.0, 1.0, lr_curve_ticks, endpoint=True, base=base)/base
-
-    # # Run learning curve
-    # t0 = time.time()
-    # lrn_curve_scores = learning_curve(
-    #     estimator=model.model, X=xdata, y=ydata,
-    #     train_sizes=train_sizes_frac, cv=cv, groups=groups,
-    #     scoring=metric_name,
-    #     n_jobs=n_jobs, exploit_incremental_learning=False,
-    #     random_state=SEED, verbose=1, shuffle=False)
-    # lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-
-    # # Dump results
-    # # lrn_curve_scores = utils.cv_scores_to_df(lrn_curve_scores, decimals=3, calc_stats=False) # this func won't work
-    # # lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores_auto.csv'), index=False)
-    
-    # # Plot learning curves
-    # lrn_curve.plt_learning_curve(rslt=lrn_curve_scores, metric_name=metric_name,
-    #     title='Learning curve (target: {}, data: {})'.format(target_name, train_sources_name),
-    #     path=os.path.join(run_outdir, 'auto_learning_curve_' + target_name + '_' + metric_name + '.png'))
-
-
-    # -----------------------------------------------
-    # Generate learning curve - semi automatic method
-    # (*) uses cross_validate from sklearn.
-    # -----------------------------------------------
-    lg.logger.info('\nStart learning curve (my method) ...')
-
-    # # Define ML model
-    # model, fit_params = init_model(mlmodel='lgb_reg', logger=lg.logger)
-
-    # # Run learning curve
-    # t0 = time.time()
-    # lrn_curve_scores = lrn_curve.my_learning_curve(
-    #     estimator=model.model,
-    #     mltype=mltype,
-    #     X=xdata, Y=ydata,
-    #     args=args,
-    #     fit_params=fit_params,
-    #     lr_curve_ticks=lr_curve_ticks,
-    #     data_sizes_frac=None,
-    #     metrics=metrics,
-    #     cv=cv,
-    #     groups=groups,
-    #     n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
-    # lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-
-    # # Dump results
-    # lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores.csv'), index=False)
-
-    # --------------------------------------------------------
-    # Run learning curve
-    t0 = time.time()
-    lrn_curve_scores = lrn_curve.my_learning_curve(
-        X=xdata, Y=ydata,
-        mltype=mltype,
-        mlmodel=mlmodel,
-        fit_params=fit_params,
-        init_params=init_params,
-        args=args,
-        lr_curve_ticks=lr_curve_ticks,
-        data_sizes_frac=None,
-        metrics=metrics,
-        cv=cv,
-        groups=groups,
-        n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
-    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-
-    # Dump results
-    lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores.csv'), index=False)    
-    # --------------------------------------------------------
 
 
 
@@ -480,9 +304,19 @@ def run(args):
     #     model_final.fit(xdata, ydata)
     # lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
+    # ML model params
+    if mlmodel == 'lgb_reg':
+        init_params = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
+        fit_params = {'verbose': False}  # 'early_stopping_rounds': 10,
+    elif mlmodel == 'nn_reg':
+        init_params = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
+        fit_params = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 2, 'validation_split': 0.2}
+
+    # Define ML model
+    model_final = ml_models.get_model(mlmodel=mlmodel, init_params=init_params)  
+
     t0 = time.time()
     #fit_params = {'verbose': False, 'sample_weight': sample_weight}  # 'early_stopping_rounds': 10,
-    model_final = ml_models.get_model(mlmodel=mlmodel, init_params=init_params)
     model_final.model.fit(xdata, ydata, **fit_params)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 

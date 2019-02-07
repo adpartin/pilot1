@@ -1,5 +1,6 @@
 import os
 import logging
+import datetime
 import numpy as np
 import pandas as pd
 from collections import OrderedDict
@@ -15,9 +16,152 @@ from scipy import stats
 import sklearn
 from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error, explained_variance_score
 
+import classlogger
+
 DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
 
+
+def create_outdir(outdir='./', args=None):
+    """ Create output dir. """
+    t = datetime.datetime.now()
+    t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
+    t = ''.join([str(i) for i in t])
+    if args is not None:
+        name_sffx = '.'.join(args['train_sources'] + [args['mlmodel']] + [args['cv_method']] + args['cell_features'] + args['drug_features'] + [args['target_name']])
+    else:
+        name_sffx = 'out'
+    run_outdir = os.path.join(outdir, name_sffx + '~' + t)
+    os.makedirs(run_outdir)
+    return run_outdir
+
+
+def subsample(df, v, axis=0):
+    """ Extract a random subset of rows or cols from df. """
+    assert v > 0, f'sample must be >0; got {v}'
+    if v <= 1.0:
+        df = df.sample(frac=v, axis=axis).reset_index(drop=True)
+    else:
+        df = df.sample(n=v, axis=axis).reset_index(drop=True)
+    return df
+
+
+def update_cross_validate_scores(cv_scores):
+    """ Takes dict of scores from cross_validate and convert it to df
+    with certain updates. """
+    # TODO: move this func to cvrun.py (rename cvrun.py utils_cv.py)
+    cv_folds = len(list(cv_scores.values())[0])
+
+    df = cv_scores_to_df(cv_scores, decimals=3, calc_stats=False)
+
+    # Add `metric` col
+    v = list(map(lambda x: '_'.join(x.split('_')[1:]), df.index))
+    df.insert(loc=0, column='metric', value=v)
+
+    # Convert `neg` metric to positive and update metric names (drop `neg_`)
+    # scikit-learn.org/stable/modules/model_evaluation.html --> explains the `neg` in `neg_mean_absolute_error`
+    idx_bool = [True if 'neg_' in s else False for s in df['metric']]
+    for i, bl in enumerate(idx_bool):
+        if bl:
+            df.iloc[i, -cv_folds:] = abs(df.iloc[i, -cv_folds:])
+    df['metric'] = df['metric'].map(lambda s: s.split('neg_')[-1] if 'neg_' in s else s)
+
+    # Add `train_set` col
+    v = list(map(lambda x: True if 'train' in x else False, df.index))
+    df.insert(loc=1, column='tr_set', value=v)
+    return df
+
+
+def cv_scores_to_df(scores, decimals=3, calc_stats=False):
+    """ Convert a dict of cv scores to df.
+    Args:
+        scores : that's the output from sklearn.model_selection.cross_validate()
+    """
+    # Drop keys that come from cross_validate()
+    for k in ['fit_time', 'train_time', 'score_time']:
+        if k in scores.keys():
+            del scores[k]  # scores.pop(k, None)
+
+    scores = pd.DataFrame(scores).T
+    scores.columns = ['f'+str(c) for c in scores.columns]
+    if calc_stats:
+        scores.insert(loc=0, column='mean', value=scores.mean(axis=1))
+        scores.insert(loc=1, column='std', value=scores.std(axis=1))
+    scores = scores.round(decimals=decimals)
+    return scores
+
+
+# def adj_r2_score(ydata, preds, x_size):
+#     """ Calc adjusted r^2.
+#     https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2
+#     https://dziganto.github.io/data%20science/linear%20regression/machine%20learning/python/Linear-Regression-101-Metrics/
+#     https://stats.stackexchange.com/questions/334004/can-r2-be-greater-than-1
+#     """
+#     r2 = r2_score(ydata, preds)
+#     adj_r2 = 1 - (1 - r2) * (x_size[0] - 1)/(x_size[0] - x_size[1] - 1)
+#     return adj_r2
+
+
+# def calc_scores(model, xdata, ydata):
+#     """ Create dict of scores. """
+#     # TODO: replace `if` with `try`
+#     preds = model.predict(xdata)
+#     scores = OrderedDict()
+#     scores['r2_score'] = sklearn.metrics.r2_score(ydata, preds)
+#     scores['adj_r2_score'] = adj_r2_score(ydata, preds, x_size=xdata.shape)
+#     scores['mean_abs_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
+#     scores['median_abs_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
+#     # scores['explained_variance_score'] = sklearn.metrics.explained_variance_score(ydata, preds)
     
+#     scores['r2'] = sklearn.metrics.r2_score(ydata, preds)
+#     #scores['adj_r2_score'] = self.__adj_r2_score(ydata, preds)
+#     scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
+#     scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
+#     scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(ydata, preds)
+#     return scores
+
+    
+def print_scores(model, xdata, ydata, logger=None):
+    preds = model.predict(xdata)
+    model_r2_score = r2_score(ydata, preds)
+    model_mean_abs_error = mean_absolute_error(ydata, preds)
+    model_median_abs_error = median_absolute_error(ydata, preds)
+    if logger is not None:
+        logger.info(f'r2_score: {model_r2_score:.2f}')
+        logger.info(f'mean_abs_error: {model_mean_abs_error:.2f}')
+        logger.info(f'median_abs_error: {model_median_abs_error:.2f}')
+
+
+def dump_preds(model, df_data, xdata, target_name, path, model_name=None):
+    """
+    Args:
+        model : ml model (must have predict() method)
+        df : df that contains the cell and drug names, and target value
+        xdata : features to make predictions
+        target_name : name of the target as it appears in the df (e.g. 'AUC')
+    """
+    combined_cols = ['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]
+    ccle_org_cols = ['CELL', 'DRUG', 'tissuetype', target_name]
+
+    ##df1 = df_data[['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]].copy()
+    if set(combined_cols).issubset(set(df_data.columns.tolist())):
+        df1 = df_data[combined_cols].copy()
+    elif set(ccle_org_cols).issubset(set(df_data.columns.tolist())):
+        df1 = df_data[ccle_org_cols].copy()
+    else:
+        df1 = df_data['CELL', 'DRUG'].copy()
+
+    preds = model.predict(xdata)
+    abs_error = abs(df_data[target_name] - preds)
+    squared_error = (df_data[target_name] - preds)**2
+    df2 = pd.DataFrame({target_name+'_pred': model.predict(xdata),
+                        target_name+'_error': abs_error,
+                        target_name+'_sq_error': squared_error})
+
+    df_preds = pd.concat([df1, df2], axis=1).reset_index(drop=True)
+    df_preds.to_csv(path)
+
+
+
 # ==============================================================================
 # Plot funcs
 # ==============================================================================
@@ -147,131 +291,6 @@ def plot_rf_fi(rf_model, figsize=(8, 5), plot_direction='h', columns=None, max_c
     return indices, fig
 # ==============================================================================
 
-
-def subsample(df, v, axis=0):
-    """ Extract a random subset of rows or cols from df. """
-    assert v > 0, f'sample must be >0; got {v}'
-    if v <= 1.0:
-        df = df.sample(frac=v, axis=axis).reset_index(drop=True)
-    else:
-        df = df.sample(n=v, axis=axis).reset_index(drop=True)
-    return df
-
-
-def update_cross_validate_scores(cv_scores):
-    """ Takes dict of scores from cross_validate and convert it to df
-    with certain updates. """
-    # TODO: move this func to cvrun.py (rename cvrun.py utils_cv.py)
-    cv_folds = len(list(cv_scores.values())[0])
-
-    df = cv_scores_to_df(cv_scores, decimals=3, calc_stats=False)
-
-    # Add `metric` col
-    v = list(map(lambda x: '_'.join(x.split('_')[1:]), df.index))
-    df.insert(loc=0, column='metric', value=v)
-
-    # Convert `neg` metric to positive and update metric names (drop `neg_`)
-    # scikit-learn.org/stable/modules/model_evaluation.html --> explains the `neg` in `neg_mean_absolute_error`
-    idx_bool = [True if 'neg_' in s else False for s in df['metric']]
-    for i, bl in enumerate(idx_bool):
-        if bl:
-            df.iloc[i, -cv_folds:] = abs(df.iloc[i, -cv_folds:])
-    df['metric'] = df['metric'].map(lambda s: s.split('neg_')[-1] if 'neg_' in s else s)
-
-    # Add `train_set` col
-    v = list(map(lambda x: True if 'train' in x else False, df.index))
-    df.insert(loc=1, column='tr_set', value=v)
-    return df
-
-
-def cv_scores_to_df(scores, decimals=3, calc_stats=False):
-    """ Convert a dict of cv scores to df.
-    Args:
-        scores : that's the output from sklearn.model_selection.cross_validate()
-    """
-    # Drop keys that come from cross_validate()
-    for k in ['fit_time', 'train_time', 'score_time']:
-        if k in scores.keys():
-            del scores[k]  # scores.pop(k, None)
-
-    scores = pd.DataFrame(scores).T
-    scores.columns = ['f'+str(c) for c in scores.columns]
-    if calc_stats:
-        scores.insert(loc=0, column='mean', value=scores.mean(axis=1))
-        scores.insert(loc=1, column='std', value=scores.std(axis=1))
-    scores = scores.round(decimals=decimals)
-    return scores
-
-
-# def adj_r2_score(ydata, preds, x_size):
-#     """ Calc adjusted r^2.
-#     https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2
-#     https://dziganto.github.io/data%20science/linear%20regression/machine%20learning/python/Linear-Regression-101-Metrics/
-#     https://stats.stackexchange.com/questions/334004/can-r2-be-greater-than-1
-#     """
-#     r2 = r2_score(ydata, preds)
-#     adj_r2 = 1 - (1 - r2) * (x_size[0] - 1)/(x_size[0] - x_size[1] - 1)
-#     return adj_r2
-
-
-# def calc_scores(model, xdata, ydata):
-#     """ Create dict of scores. """
-#     # TODO: replace `if` with `try`
-#     preds = model.predict(xdata)
-#     scores = OrderedDict()
-#     scores['r2_score'] = sklearn.metrics.r2_score(ydata, preds)
-#     scores['adj_r2_score'] = adj_r2_score(ydata, preds, x_size=xdata.shape)
-#     scores['mean_abs_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
-#     scores['median_abs_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
-#     # scores['explained_variance_score'] = sklearn.metrics.explained_variance_score(ydata, preds)
-    
-#     scores['r2'] = sklearn.metrics.r2_score(ydata, preds)
-#     #scores['adj_r2_score'] = self.__adj_r2_score(ydata, preds)
-#     scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
-#     scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
-#     scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(ydata, preds)
-#     return scores
-
-    
-def print_scores(model, xdata, ydata, logger=None):
-    preds = model.predict(xdata)
-    model_r2_score = r2_score(ydata, preds)
-    model_mean_abs_error = mean_absolute_error(ydata, preds)
-    model_median_abs_error = median_absolute_error(ydata, preds)
-    if logger is not None:
-        logger.info(f'r2_score: {model_r2_score:.2f}')
-        logger.info(f'mean_abs_error: {model_mean_abs_error:.2f}')
-        logger.info(f'median_abs_error: {model_median_abs_error:.2f}')
-
-
-def dump_preds(model, df_data, xdata, target_name, path, model_name=None):
-    """
-    Args:
-        model : ml model (must have predict() method)
-        df : df that contains the cell and drug names, and target value
-        xdata : features to make predictions
-        target_name : name of the target as it appears in the df (e.g. 'AUC')
-    """
-    combined_cols = ['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]
-    ccle_org_cols = ['CELL', 'DRUG', 'tissuetype', target_name]
-
-    ##df1 = df_data[['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]].copy()
-    if set(combined_cols).issubset(set(df_data.columns.tolist())):
-        df1 = df_data[combined_cols].copy()
-    elif set(ccle_org_cols).issubset(set(df_data.columns.tolist())):
-        df1 = df_data[ccle_org_cols].copy()
-    else:
-        df1 = df_data['CELL', 'DRUG'].copy()
-
-    preds = model.predict(xdata)
-    abs_error = abs(df_data[target_name] - preds)
-    squared_error = (df_data[target_name] - preds)**2
-    df2 = pd.DataFrame({target_name+'_pred': model.predict(xdata),
-                        target_name+'_error': abs_error,
-                        target_name+'_sq_error': squared_error})
-
-    df_preds = pd.concat([df1, df2], axis=1).reset_index(drop=True)
-    df_preds.to_csv(path)
 
 
 # ---------------------------------------------------------------------------------

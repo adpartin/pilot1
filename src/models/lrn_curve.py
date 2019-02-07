@@ -304,7 +304,7 @@ def my_learning_curve(X, Y,
                     plt.title(f'train size: {tr_sz}')
                     plt.xlabel('epoch')
                     plt.ylabel(metric_name)
-                    plt.xlim([-0.5, len(epochs) + 0.5])
+                    plt.xlim([0.5, len(epochs) + 0.5])
                     plt.ylim([ymin-0.1, ymax+0.1])
                     plt.grid(True)
                     plt.legend([metric_name, metric_name_val], loc='best')
@@ -325,7 +325,7 @@ def my_learning_curve(X, Y,
             vl_scores_all.append(vl_scores)
 
             # Delete the estimator/model
-            del estimator
+            del estimator, history
 
     tr_df = scores_to_df(tr_scores_all)
     vl_df = scores_to_df(vl_scores_all)

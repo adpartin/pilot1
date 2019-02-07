@@ -116,6 +116,7 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
             scaler = MinMaxScaler()
         elif args['scaler'] == 'rbst':
             scaler = RobustScaler()
+            
         colnames = fea_data.columns
         fea_data = scaler.fit_transform(fea_data)
         fea_data = pd.DataFrame(fea_data, columns=colnames)
