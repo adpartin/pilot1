@@ -32,15 +32,13 @@ from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, Early
 
 try:
     import lightgbm as lgb
-except ImportError:  # install??
+except ImportError:
     print('Module not found (lightgbm).')
 
 
-# TODO: create a super class GBM models (xgboost and lightgbm)
-# class SuperGBM():  # ModelTunedCVSearch
-#     """ This is a super class for training and fine-tuning *Super* GBM models, i.e.,
-#     xgboost and lightgbm.
-#     This models share similar API so various methods are re-used.
+# class GBM():
+#     """ This is a super class for training and fine-tuning GBM models, i.e.,
+#     xgboost and lightgbm. These models share similar API where various methods are the same.
 #     """
 #     # https://www.kaggle.com/spektrum/randomsearchcv-to-hyper-tune-1st-level
 
@@ -51,18 +49,20 @@ def r2(y_true, y_pred):
     return (1 - SS_res/(SS_tot + K.epsilon()))
 
 
-def get_model(mlmodel, init_params=None):
-    if mlmodel == 'lgb_reg':
+def get_model(model_name, init_params=None):
+    """ Return a model.
+    Args:
+        init_params : init parameters to the model
+        model_name : model name
+    """
+    if model_name == 'lgb_reg':
         model = LGBM_REGRESSOR(**init_params)
-        #estimator = model.model
         estimator = model
-    elif mlmodel == 'rf_reg':
+    elif model_name == 'rf_reg':
         model = RF_REGRESSOR(**init_params)
-        #estimator = model.model
         estimator = model
-    elif mlmodel == 'nn_reg':
+    elif model_name == 'nn_reg':
         model = KERAS_REGRESSOR(**init_params)
-        #estimator = model.model
         estimator = model
     else:
         pass
@@ -99,7 +99,7 @@ class BaseMLModel():
 
 
     def calc_scores(self, xdata, ydata, metrics=None, to_print=False):
-        """ Create dict of scores. """
+        """ Create dict of scores for regression. """
         # metrics = {'r2_score': sklearn.metrics.r2_score,
         #            'mean_absolute_error': sklearn.metrics.mean_absolute_error,
         #            'median_absolute_error': sklearn.metrics.median_absolute_error,
@@ -183,20 +183,18 @@ class BaseMLModel():
 
 class KERAS_REGRESSOR(BaseMLModel):
 
-    def __init__(self, input_dim, attn=0, dr_rate=0.2,
+    def __init__(self, input_dim, attn=False, dr_rate=0.2,
                  logger=None):
-        self.logger = logger
-
         metrics = ['mean_absolute_error', r2] # 'acc'
 
         inputs = Input(shape=(input_dim,))
         x = Dense(1000, activation='relu')(inputs)
 
         # Attention
-        if attn==1:
+        if attn:
             a = Dense(1000, activation='relu')(x)
             b = Dense(1000, activation='softmax')(x)
-            x = keras.layers.multiply([a,b])
+            x = keras.layers.multiply( [a, b] )
         else:
             x = Dense(1000, activation='relu')(x)
 
@@ -214,15 +212,6 @@ class KERAS_REGRESSOR(BaseMLModel):
 
         x = Dense(30, activation='relu')(x)
         x = Dropout(dr_rate)(x)
-
-        # x = Dense(500, activation='relu')(x)
-        # x = Dropout(dr_rate)(x)
-
-        # x = Dense(500, activation='relu')(x)
-        # x = Dropout(dr_rate)(x)
-
-        # x = Dense(500, activation='relu')(x)
-        # x = Dropout(dr_rate)(x)
 
         outputs = Dense(1, activation='linear')(x)
         model = Model(inputs=inputs, outputs=outputs)
@@ -244,6 +233,7 @@ class RF_REGRESSOR(BaseMLModel):
 
     def __init__(self, n_estimators=100, criterion='mse',
                  max_depth=None, min_samples_split=2,
+                 max_features='sqrt',
                  bootstrap=True, oob_score=True, verbose=0, 
                  n_jobs=1, random_state=None,
                  logger=None):
@@ -260,36 +250,34 @@ class RF_REGRESSOR(BaseMLModel):
             criterion=self.criterion,
             max_depth=self.max_depth,
             min_samples_split=self.min_samples_split,
-            max_features='sqrt', bootstrap=bootstrap, oob_score=oob_score,
+            max_features=max_features, bootstrap=bootstrap, oob_score=oob_score,
             verbose=verbose, random_state=self.random_state, n_jobs=self.n_jobs)
+
+
+    # def fit(self, X, y, eval_set=None):
+    #     """ 
+    #     Args:
+    #         eval_set : Always ignored, exists for compatibility.
+    #     """
+    #     self.X = X
+    #     self.y = y
         
-        return self.model
+    #     t0 = time.time()
+    #     self.model.fit(self.X, self.y)
+    #     self.train_runtime = time.time() - t0
 
-
-    def fit(self, X, y, eval_set=None):
-        """ 
-        Args:
-            eval_set : Always ignored, exists for compatibility.
-        """
-        self.X = X
-        self.y = y
-        
-        t0 = time.time()
-        self.model.fit(self.X, self.y)
-        self.train_runtime = time.time() - t0
-
-        if self.logger is not None:
-            self.logger.info('Train time: {:.2f} mins'.format(self.train_runtime/60))
+    #     if self.logger is not None:
+    #         self.logger.info('Train time: {:.2f} mins'.format(self.train_runtime/60))
 
 
     def plot_fi(self):
-        # TODO
-        pass
+        pass # TODO
 
 
     def save_model(self, outdir='./'):
         joblib.dump(self.model, filename=os.path.join(outdir, RF_REGRESSOR.model_name+'_model.pkl'))
         # model_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
+
 
 
 class LGBM_REGRESSOR(BaseMLModel):
@@ -299,20 +287,11 @@ class LGBM_REGRESSOR(BaseMLModel):
 
     def __init__(self, eval_metric=['l2', 'l1'], n_jobs=1, random_state=None,
                  logger=None):
-        # https://lightgbm.readthedocs.io/en/latest/Python-API.html
-        # try:
-        #     import lightgbm as lgb
-        # except ImportError:  # install??
-        #     logger.error('Module not found (lightgbm).')
-
         # TODO: use config file to set default parameters (like in candle)
         self.eval_metric = eval_metric
         self.n_jobs = n_jobs
         self.random_state = random_state
         self.logger = logger
-
-        # if logger is not None:
-        #     self.logger.info('\nTrain LGBMRegressor ...')
         
         # ----- lightgbm "Training API" - start
         # lgb_tr = lgb.Dataset(data=xtr, label=ytr, categorical_feature='auto')
@@ -342,27 +321,22 @@ class LGBM_REGRESSOR(BaseMLModel):
                                    random_state=self.random_state)
         # ----- lightgbm "sklearn API" - end
 
-        # ----- lightgbm "sklearn API" - start
-        # self.model = lgb.LGBMRegressor()
-        # ----- lightgbm "sklearn API" - end
 
-
-    def fit(self, X, y, eval_set=None, **fit_params):
-        #self.eval_set = eval_set
-        #self.X = X
-        #self.y = y
-
-        #self.x_size = X.shape  # this is used to calc adjusteed r^2
+    # def fit(self, X, y, eval_set=None, **fit_params):
+    #     #self.eval_set = eval_set
+    #     #self.X = X
+    #     #self.y = y
+    #     #self.x_size = X.shape  # this is used to calc adjusteed r^2
         
-        t0 = time.time()
-        self.model.fit(X, y,
-                       eval_metric=self.eval_metric,
-                       eval_set=eval_set,
-                       **fit_params)
-        self.train_runtime = time.time() - t0
+    #     t0 = time.time()
+    #     self.model.fit(X, y,
+    #                    eval_metric=self.eval_metric,
+    #                    eval_set=eval_set,
+    #                    **fit_params)
+    #     self.train_runtime = time.time() - t0
 
-        if self.logger is not None:
-            self.logger.info('Train time: {:.2f} mins'.format(self.train_runtime/60))
+    #     if self.logger is not None:
+    #         self.logger.info('Train time: {:.2f} mins'.format(self.train_runtime/60))
 
 
     def plot_fi(self, max_num_features=20, title='LGBMRegressor', outdir=None):
@@ -390,15 +364,15 @@ class LGBM_REGRESSOR(BaseMLModel):
     #     plt.savefig(os.path.join(run_outdir, model_name+'_learning_curve_'+m+'.png'))
 
 
+
 class LGBM_CLASSIFIER(BaseMLModel):
-    # TODO: finish this!
+    # TODO: finish
     """ Lightgbm classifier. """
     ml_objective = 'binary'
     model_name = 'lgb_cls'
 
     def __init__(self, eval_metric=['l2', 'l1'], n_jobs=1, random_state=None,
                  logger=None):
-        # TODO: use config file to set default parameters (like in candle)
         self.eval_metric = eval_metric
         self.n_jobs = n_jobs
         self.random_state = random_state
@@ -416,48 +390,6 @@ class LGBM_CLASSIFIER(BaseMLModel):
             random_state=self.random_state)
         # ----- lightgbm "sklearn API" - end
 
-
-    def fit(self, X, y, eval_set=None, **fit_params):
-        #self.eval_set = eval_set
-        #self.X = X
-        #self.y = y
-
-        #self.x_size = X.shape  # this is used to calc adjusteed r^2
-        
-        t0 = time.time()
-        self.model.fit(X, y,
-                       eval_metric=self.eval_metric,
-                       eval_set=eval_set,
-                       **fit_params)
-        self.train_runtime = time.time() - t0
-
-        if self.logger is not None:
-            self.logger.info('Train time: {:.2f} mins'.format(self.train_runtime/60))
-
-
-    # def plot_fi(self, max_num_features=20, title='LGBMRegressor', outdir=None):
-    #     lgb.plot_importance(booster=self.model, max_num_features=max_num_features, grid=True, title=title)
-    #     plt.tight_layout()
-
-    #     filename = LGBM_REGRESSOR.model_name+'_fi.png'
-    #     if outdir is None:
-    #         plt.savefig(filename, bbox_inches='tight')
-    #     else:
-    #         plt.savefig(os.path.join(outdir, filename), bbox_inches='tight')
-
-
-    # def save_model(self, outdir='./'):
-    #     # lgb_reg.save_model(os.path.join(run_outdir, 'lgb_'+ml_type+'_model.txt'))
-    #     joblib.dump(self.model, filename=os.path.join(outdir, LGBM_REGRESSOR.model_name+'_model.pkl'))
-    #     # lgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
-
-
-    # # Plot learning curves
-    # # TODO: note, plot_metric didn't accept 'mae' although it's alias for 'l1' 
-    # # TODO: plot_metric requires dict from train(), but train returns 'lightgbm.basic.Booster'??
-    # for m in eval_metric:
-    #     ax = lgb.plot_metric(booster=lgb_reg, metric=m, grid=True)
-    #     plt.savefig(os.path.join(run_outdir, model_name+'_learning_curve_'+m+'.png'))
 
 
 class XGBM_REGRESSOR(BaseMLModel):

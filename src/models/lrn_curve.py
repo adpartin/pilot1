@@ -1,5 +1,6 @@
 """
-Functions to generate learning curves (analysis of how score changes with training set size).
+Functions to generate learning curves.
+Performance (error or score) vs training set size.
 """
 import os
 import numpy as np
@@ -22,38 +23,6 @@ from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, Early
 
 import utils
 import ml_models
-# from cvsplitter import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
-
-
-# def calc_scores(model, xdata, ydata, mltype='reg', metrics=None):
-#     """ Create dict of scores.
-#     Args:
-#         metrics : TODO allow to pass a string of metrics
-#     """
-#     preds = model.predict(xdata)
-#     scores = OrderedDict()
-
-#     if ydata.ndim > 1 and ydata.shape[1] > 1:
-#         # Classification
-#         pass
-#     else:
-#         # Regression
-#         scores['r2'] = sklearn.metrics.r2_score(y_true=ydata, y_pred=preds)
-#         scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(y_true=ydata, y_pred=preds)
-#         scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(y_true=ydata, y_pred=preds)
-#         scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(y_true=ydata, y_pred=preds)
-
-#     # score_names = ['r2', 'mean_absolute_error', 'median_absolute_error', 'mean_squared_error']
-
-#     # # https://scikit-learn.org/stable/modules/model_evaluation.html
-#     # for metric_name, metric in metrics.items():
-#     #     if isinstance(metric, str):
-#     #         scorer = sklearn.metrics.get_scorer(metric_name) # get a scorer from string
-#     #         scores[metric_name] = scorer(ydata, preds)
-#     #     else:
-#     #         scores[metric_name] = scorer(ydata, preds)
-
-#     return scores
 
 
 def reg_auroc(y_true, y_pred):
@@ -64,6 +33,7 @@ def reg_auroc(y_true, y_pred):
 
 
 def calc_preds(estimator, xdata, ydata, mltype):
+    """ Calc predictions. """
     if mltype == 'cls':    
         if ydata.ndim > 1 and ydata.shape[1] > 1:
             y_preds = estimator.predict_proba(xdata)
@@ -80,7 +50,6 @@ def calc_preds(estimator, xdata, ydata, mltype):
 
 
 def calc_scores(y_true, y_preds, mltype, metrics=None):
-#def calc_scores(model, xdata, ydata, mltype, metrics=None):
     """ Create dict of scores.
     Args:
         metrics : TODO allow to pass a string of metrics
@@ -98,31 +67,6 @@ def calc_scores(y_true, y_preds, mltype, metrics=None):
         scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(y_true=y_true, y_pred=y_preds)
         scores['auroc_reg'] = reg_auroc(y_true=y_true, y_pred=y_preds)
 
-    # if mltype == 'cls':    
-    #     if ydata.ndim > 1 and ydata.shape[1] > 1:
-    #         # Classification
-    #         preds = model.predict_proba(xdata)
-    #         preds = np.argmax(preds, axis=1)
-    #         ydata = np.argmax(ydata, axis=1)
-    #         scores['auroc'] = sklearn.metrics.roc_auc_score(ydata, preds)
-    #         scores['f1_score'] = sklearn.metrics.f1_score(ydata, preds, average='micro')
-    #         scores['acc_blnc'] = sklearn.metrics.balanced_accuracy_score(ydata, preds)
-    #     else:
-    #         # Classification
-    #         preds = model.predict_proba(xdata)
-    #         preds = np.argmax(preds, axis=1)
-    #         scores['auroc'] = sklearn.metrics.roc_auc_score(ydata, preds)
-    #         scores['f1_score'] = sklearn.metrics.f1_score(ydata, preds, average='micro')
-    #         scores['acc_blnc'] = sklearn.metrics.balanced_accuracy_score(ydata, preds)
-    # elif mltype == 'reg':
-    #     # Regression
-    #     preds = model.predict(xdata)
-    #     scores['r2'] = sklearn.metrics.r2_score(y_true=ydata, y_pred=preds)
-    #     scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(y_true=ydata, y_pred=preds)
-    #     scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(y_true=ydata, y_pred=preds)
-    #     scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(y_true=ydata, y_pred=preds)
-    #     scores['auroc_reg'] = reg_auroc(y_true=ydata, y_pred=preds)
-
     # score_names = ['r2', 'mean_absolute_error', 'median_absolute_error', 'mean_squared_error']
 
     # # https://scikit-learn.org/stable/modules/model_evaluation.html
@@ -136,16 +80,9 @@ def calc_scores(y_true, y_preds, mltype, metrics=None):
     return scores
 
 
-# def my_learning_curve(estimator, X, Y,
-#                       mltype,
-#                       cv=5, groups=None,
-#                       lr_curve_ticks=5, data_sizes_frac=None,
-#                       args=None, fit_params=None,
-#                       metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'neg_mean_squared_error'],
-#                       n_jobs=1, random_state=None, logger=None, outdir='./'):
 def my_learning_curve(X, Y,
                       mltype,
-                      mlmodel='lgb_reg',
+                      model_name='lgb_reg',
                       cv=5, groups=None,
                       lr_curve_ticks=5, data_sizes_frac=None,
                       args=None, fit_params=None, init_params=None,
@@ -155,28 +92,26 @@ def my_learning_curve(X, Y,
     Train estimator using various train set sizes and generate learning curves for different metrics.
     The CV splitter splits the input dataset into cv_folds data subsets.
     Args:
-        estimator : estimator that is consistent with sklearn api (has "fit" and "predict" methods)
         X : features matrix
         Y : target
         mltype : type to ML problem (`reg` or `cls`)
-        cv : sklearn's cv splitter --> scikit-learn.org/stable/glossary.html#term-cv-splitter
-        groups : groups for the cv splits (used for strict cross-validation partitions --> non-overlapping cell lines)
+        cv : number cv folds or sklearn's cv splitter --> scikit-learn.org/stable/glossary.html#term-cv-splitter
+        groups : groups for the cv splits (used for strict cv partitions --> non-overlapping cell lines)
         lr_curve_ticks : number of ticks in the learning curve (used if data_sizes_frac is None)
         data_sizes_frac : relative numbers of training samples that will be used to generate learning curves
         fit_params : dict of parameters to the estimator's "fit" method
 
-        metrics : TODO allow to pass a string of metrics
-        args : command line args (ignore this arg!)
+        metrics : allow to pass a string of metrics  TODO!
+        args : command line args
 
     Examples:
         cv = sklearn.model_selection.KFold(n_splits=5, shuffle=False, random_state=0)
-        estimator = sklearn.ensemble.RandomForestRegressor()
-        my_learning_curve(estimator=estimator, cv=cv, lr_curve_ticks=5)
+        my_learning_curve(X=xdata, Y=ydata, mltype='reg', cv=cv, lr_curve_ticks=5)
     """
     X = pd.DataFrame(X).values
     Y = pd.DataFrame(Y).values
 
-    # TODO: try this! make this work!
+    # TODO: didn't test!
     if isinstance(cv, int) and groups is None:
         cv_folds = cv
         cv = KFold(n_splits=cv_folds, shuffle=False, random_state=random_state)
@@ -203,17 +138,13 @@ def my_learning_curve(X, Y,
     # ---------------------------------------------------------------
     # Method 1
     # ---------------------------------------------------------------
-    if is_string_dtype(groups):  # groups=='object'
+    if is_string_dtype(groups):
         group_encoder = LabelEncoder()
         groups = group_encoder.fit_transform(groups)
     
     # ... Now start a nested loop of train size and cv folds ...
     tr_scores_all = [] # list dicts
     vl_scores_all = [] # list dicts
-
-    # Start CV splits of the full dataset 
-    #tr_cv_idx = OrderedDict()
-    #vl_cv_idx = OrderedDict()
 
     if mltype == 'cls':
         if Y.ndim > 1 and Y.shape[1] > 1:
@@ -226,24 +157,18 @@ def my_learning_curve(X, Y,
     for fold_id, (tr_idx, vl_idx) in enumerate(splitter):
         if logger is not None:
             logger.info(f'Fold {fold_id+1}/{cv_folds}')
-        #tr_cv_idx[fold_id] = tr_idx
-        #vl_cv_idx[fold_id] = vl_idx
 
         # Samples from this dataset are sampled for training
         xtr = X[tr_idx, :]
         ytr = Y[tr_idx, :]
 
-        # A fixed set validation samples for the current CV split
+        # A fixed set of validation samples for the current CV split
         xvl = X[vl_idx, :]
         yvl = np.squeeze(Y[vl_idx, :])        
 
-        # # Get the groups
-        # tr_grps = groups[tr_idx]
-        # vl_grps = groups[vl_idx]
-
         # # Confirm that group splits are correct ...
-        # tr_grps_unq = set(tr_grps)
-        # vl_grps_unq = set(vl_grps)
+        # tr_grps_unq = set(groups[tr_idx])
+        # vl_grps_unq = set(groups[vl_idx])
         # print('Total group (e.g., cell) intersections btw tr and vl: ', len(tr_grps_unq.intersection(vl_grps_unq)))
         # print('A few intersections : ', list(tr_grps_unq.intersection(vl_grps_unq))[:3])
 
@@ -259,10 +184,13 @@ def my_learning_curve(X, Y,
             #sub_grps = groups[idx[:tr_sz]]
 
             # Get the estimator
-            estimator = ml_models.get_model(mlmodel=mlmodel, init_params=init_params)
+            estimator = ml_models.get_model(model_name=model_name, init_params=init_params)
 
-            if 'nn' in mlmodel:
+            if 'nn' in model_name:
+                # Create output dir
                 out_nn_model = os.path.join(outdir, 'cv'+str(fold_id+1) + '_sz'+str(tr_sz))
+                
+                # Keras callbacks
                 os.makedirs(out_nn_model, exist_ok=False)
                 checkpointer = ModelCheckpoint(filepath=os.path.join(out_nn_model, 'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
                 csv_logger = CSVLogger(filename=os.path.join(out_nn_model, 'training.log'))
@@ -273,7 +201,6 @@ def my_learning_curve(X, Y,
                 fit_params['callbacks'] = callback_list
 
             # Train model
-            #estimator.fit(xtr_sub, ytr_sub, **fit_params)
             history = estimator.model.fit(xtr_sub, ytr_sub, **fit_params)
 
             # Calc preds and scores TODO: dump preds
@@ -284,8 +211,8 @@ def my_learning_curve(X, Y,
             y_preds, y_true = calc_preds(estimator=estimator.model, xdata=xvl, ydata=yvl, mltype=mltype)
             vl_scores = calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
 
-            if 'nn' in mlmodel:
-                # summarize history for loss     
+            if 'nn' in model_name:
+                # Summarize history for loss     
                 pr_metrics = ml_models.get_keras_performance_metrics(history)
                 epochs = np.asarray(history.epoch) + 1
                 hh = history.history
@@ -297,8 +224,6 @@ def my_learning_curve(X, Y,
                     ymax = max(set(hh[metric_name]).union(hh[metric_name_val]))
 
                     plt.figure()
-                    # plt.plot(epochs, hh[metric_name], 'bo', alpha=0.6, label=metric_name)
-                    # plt.plot(epochs, hh[metric_name_val], 'ro', alpha=0.6, label=metric_name_val)
                     plt.plot(epochs, hh[metric_name], 'b.-', alpha=0.6, label=metric_name)
                     plt.plot(epochs, hh[metric_name_val], 'r.-', alpha=0.6, label=metric_name_val)
                     plt.title(f'train size: {tr_sz}')
@@ -391,9 +316,10 @@ def plt_learning_curve_multi_metric(df, cv_folds, outdir, args=None):
               r2   |  False |   600   | 0.41 | 0.47 | 0.42 | 0.45 | 0.44
               mae  |  True  |   600   | 0.21 | 0.22 | 0.25 | 0.20 | 0.28
               mae  |  False |   600   | 0.34 | 0.37 | 0.35 | 0.33 | 0.30
+              ...  |  ..... |   ...   | .... | .... | .... | .... | ....
         cv_folds : (int) number of cv folds
-        outdir : dir to store the plots
-        args : 
+        outdir : dir to save the plots
+        args : command line args
     """
     df = df.copy()
     data_sizes = sorted(df['tr_size'].unique())

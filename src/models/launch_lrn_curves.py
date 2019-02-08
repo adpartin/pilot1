@@ -1,9 +1,8 @@
 """ 
-This script generates the cross-study validation (csv) table.
-It launches a script (e.g. trn_from_combined.py) that train ML model(s) using a single source
-and runs predictions (inference) on a specified set of other sources.
+This script generates multiple learning curves for different training sets.
+It launches a script (e.g. trn_lrn_curves.py) that train ML model(s) on various training set sizes.
 """
-# python -m pdb src/models/launch_cross_study_val.py
+# python -m pdb src/models/launch_lrn_curves.py
 import os
 import sys
 import time
@@ -28,7 +27,6 @@ def main(args):
     t = datetime.datetime.now()
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
-    # dirname = 'cross_study_val~' + params['cv_method'] + '.' + params['target_name'] + '~' + t
     dirname = 'lrn_curves~' + t
     csv_outdir = os.path.join(OUTDIR, dirname)
     os.makedirs(csv_outdir, exist_ok=True)
@@ -36,29 +34,16 @@ def main(args):
     # Full set
     cross_study_sets = [
         {'tr_src': ['gcsi']},
-
         {'tr_src': ['ccle']},
-
         {'tr_src': ['gdsc']},
-
         {'tr_src': ['ctrp']},
-
         {'tr_src': ['nci60']}
     ]
-
-    # # Smaller set
-    # cross_study_sets = [
-    #     {'tr_src': ['gcsi'],
-    #      'te_src': ['ccle', 'gcsi', 'gdsc']},
-
-    #     {'tr_src': ['ccle'],
-    #      'te_src': ['ccle', 'gcsi', 'gdsc']},
-    # ]
 
 
     # Single run
     # idx = 2
-    # df_csv_scores, params = trn_from_combined.main(
+    # df_csv_scores, prms = trn_from_combined.main(
     #     ['-tr', *cross_study_sets[idx]['tr_src'],
     #     '-te', *cross_study_sets[idx]['te_src'],
     #     *args])
@@ -68,11 +53,16 @@ def main(args):
     dfs = []
     for run_id in range(len(cross_study_sets)):
         print('{} Run {} {}'.format('-'*40, run_id+1, '-'*40))
-        lrn_curve_scores, params = trn_lrn_curves.main(
+        lrn_curve_scores, prms = trn_lrn_curves.main(
             ['-tr', *cross_study_sets[run_id]['tr_src'],
              '--outdir', csv_outdir,
              *args])
+        src_name = '_'.join( cross_study_sets[run_id]['tr_src'] )
+        lrn_curve_scores.insert(loc=0, column='src', value=src_name)
         dfs.append(lrn_curve_scores)
+
+    df = pd.concat(dfs, axis=0, sort=False)
+    df.to_csv('lrn_curves_all.csv', index=False)
 
     # # Create csv table for each available metric 
     # df = pd.concat(dfs, axis=0, sort=False)

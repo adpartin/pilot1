@@ -17,7 +17,7 @@ dflt_args = {
     'drug_features': ['dsc'],
     'other_features': [] ,
     'mltype': 'reg',
-    'mlmodel': 'lgb_reg',
+    'model_name': 'lgb_reg',
     'cv_method': 'simple',
     'cv_folds': 5,
     'lc_ticks': 5,
@@ -114,7 +114,7 @@ def get_cli_args(args=None):
         help='Type to ML problem: `reg` or `cls`.')
 
     # Select ML models
-    parser.add_argument('-ml', '--mlmodel',
+    parser.add_argument('-ml', '--model_name',
         # default=["lgb_reg"],
         choices=['lgb_reg', 'rf_reg', 'nn_reg'],
         help='ML model to use for training.')
@@ -170,7 +170,7 @@ def get_cli_args(args=None):
         help='Dropout ratefor the neural network.')
     parser.add_argument('--attn',
         # default=0.2,
-        type=int,
+        choices=['t', 'f'], type=str_to_bool,
         help='Whether to use attention layer to the neural network.')
     parser.add_argument('--scaler',
         # default=0.2,

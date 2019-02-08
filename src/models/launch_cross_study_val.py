@@ -27,7 +27,6 @@ def main(args):
     t = datetime.datetime.now()
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
-    # dirname = 'cross_study_val~' + params['cv_method'] + '.' + params['target_name'] + '~' + t
     dirname = 'cross_study_val~' + t
     csv_outdir = os.path.join(OUTDIR, dirname)
     os.makedirs(csv_outdir, exist_ok=True)
@@ -62,7 +61,7 @@ def main(args):
 
     # Single run
     # idx = 2
-    # df_csv_scores, params = trn_from_combined.main(
+    # df_csv_scores, prms = trn_from_combined.main(
     #     ['-tr', *cross_study_sets[idx]['tr_src'],
     #     '-te', *cross_study_sets[idx]['te_src'],
     #     *args])
@@ -72,7 +71,7 @@ def main(args):
     dfs = []
     for run_id in range(len(cross_study_sets)):
         print('{} Run {} {}'.format('-'*40, run_id+1, '-'*40))
-        csv_scores_all, params = trn_from_combined.main(
+        csv_scores_all, prms = trn_from_combined.main(
             ['-tr', *cross_study_sets[run_id]['tr_src'],
              '-te', *cross_study_sets[run_id]['te_src'],
              '--outdir', csv_outdir,

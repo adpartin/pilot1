@@ -43,7 +43,7 @@ from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 # file_path = os.getcwd()
 # file_path = os.path.join(file_path, 'src/models')
 # os.chdir(file_path)
-# ... uato ...
+# ... auto ...
 file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
 
 # Utils
@@ -75,6 +75,7 @@ np.set_printoptions(precision=3)
 
 
 def run(args):
+    outdir = args['outdir']
     target_name = args['target_name']
     target_transform = args['target_transform']    
     train_sources = args['train_sources']
@@ -86,7 +87,7 @@ def run(args):
     drug_features = args['drug_features']
     other_features = args['other_features']
     mltype = args['mltype']
-    mlmodel = args['mlmodel']
+    model_name = args['model_name']
     cv_method = args['cv_method']
     cv_folds = args['cv_folds']
     lr_curve_ticks = args['lc_ticks']
@@ -98,8 +99,6 @@ def run(args):
     dr_rate = args['dr_rate']
     attn = args['attn']
 
-    outdir = args['outdir']
-
     # Feature list
     feature_list = cell_features + drug_features + other_features
 
@@ -108,20 +107,15 @@ def run(args):
     
     # Define custom metric to calc auroc from regression
     # https://scikit-learn.org/stable/modules/model_evaluation.html#scoring
-    from sklearn.metrics import make_scorer
-    from sklearn.metrics import roc_auc_score
     def reg_auroc(y_true, y_pred):
             y_true = np.where(y_true < 0.5, 1, 0)
             y_score = np.where(y_pred < 0.5, 1, 0)
-            auroc = roc_auc_score(y_true, y_score)
+            auroc = sklearn.metrics.roc_auc_score(y_true, y_score)
             return auroc
-    reg_auroc_score = make_scorer(score_func=reg_auroc, greater_is_better=True)
+    reg_auroc_score = sklearn.metrics.make_scorer(score_func=reg_auroc, greater_is_better=True)
 
     # Define metrics
-    # TODO: find way to pass metrics to calc_scores in ml_models.py
-    # metrics = ['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error',
-    #            'neg_mean_squared_error']
-    metrics = {'r2': 'r2', #sklearn.metrics.r2_score,
+    metrics = {'r2': 'r2',
                'neg_mean_absolute_error': 'neg_mean_absolute_error', #sklearn.metrics.neg_mean_absolute_error,
                'neg_median_absolute_error': 'neg_median_absolute_error', #sklearn.metrics.neg_median_absolute_error,
                'neg_mean_squared_error': 'neg_mean_squared_error', #sklearn.metrics.neg_mean_squared_error,
@@ -139,6 +133,9 @@ def run(args):
     lg.logger.info(f'File path: {file_path}')
     lg.logger.info(f'System CPUs: {psutil.cpu_count()}')
     lg.logger.info(f'n_jobs: {n_jobs}')
+
+    # Dump args to file
+    utils.dump_args(args, outdir=run_outdir)
 
 
     # ========================================================================
@@ -158,21 +155,24 @@ def run(args):
     # ========================================================================
     #       Define CV split
     # ========================================================================
-    # Split tr/vl data
+    test_size = 0.2
     if mltype == 'cls':
+        # Classification
         if cv_method == 'simple':
             if cv_folds == 1:
-                cv = ShuffleSplit(n_splits=cv_folds, test_size=0.2, random_state=SEED)
+                cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
             else:
                 cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
             groups = None
         elif cv_method == 'stratify':
             if cv_folds == 1:
-                cv = StratifiedShuffleSplit(n_splits=cv_folds, test_size=0.2, random_state=SEED)
+                cv = StratifiedShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
             else:
                 cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
             groups = None
+
     elif mltype == 'reg':
+        # Regression
         if cv_method == 'group':
             if cv_folds == 1:
                 cv = GroupShuffleSplit(random_state=SEED)
@@ -200,15 +200,12 @@ def run(args):
     utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
 
     # ML model params
-    if mlmodel == 'lgb_reg':
+    if model_name == 'lgb_reg':
         init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
         fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
-    elif mlmodel == 'nn_reg':
+    elif model_name == 'nn_reg':
         init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 2, 'validation_split': 0.2}
-
-    # Define ML model
-    model = ml_models.get_model(mlmodel=mlmodel, init_params=init_prms)  
+        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 2, 'validation_split': 0.2} 
 
 
     # -----------------------------------------------
@@ -222,7 +219,7 @@ def run(args):
     lrn_curve_scores = lrn_curve.my_learning_curve(
         X=xdata, Y=ydata,
         mltype=mltype,
-        mlmodel=mlmodel,
+        model_name=model_name,
         fit_params=fit_prms,
         init_params=init_prms,
         args=args,

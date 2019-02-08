@@ -40,7 +40,7 @@ from sklearn.model_selection import ShuffleSplit, GroupShuffleSplit, KFold, Grou
 # file_path = os.getcwd()
 # file_path = os.path.join(file_path, 'src/models')
 # os.chdir(file_path)
-# ... uato ...
+# ... auto ...
 file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
 
 # Utils
@@ -72,6 +72,7 @@ np.set_printoptions(precision=3)
 
 
 def run(args):
+    outdir = args['outdir']
     target_name = args['target_name']
     target_transform = args['target_transform']    
     train_sources = args['train_sources']
@@ -83,7 +84,7 @@ def run(args):
     drug_features = args['drug_features']
     other_features = args['other_features']
     mltype = args['mltype']
-    mlmodel = args['mlmodel']
+    model_name = args['model_name']
     cv_method = args['cv_method']
     cv_folds = args['cv_folds']
     lr_curve_ticks = args['lc_ticks']
@@ -95,8 +96,6 @@ def run(args):
     dr_rate = args['dr_rate']
     attn = args['attn']
 
-    outdir = args['outdir']
-
     # Feature list
     feature_list = cell_features + drug_features + other_features
 
@@ -105,14 +104,12 @@ def run(args):
     
     # Define custom metric to calc auroc from regression
     # https://scikit-learn.org/stable/modules/model_evaluation.html#scoring
-    from sklearn.metrics import make_scorer
-    from sklearn.metrics import roc_auc_score
     def reg_auroc(y_true, y_pred):
             y_true = np.where(y_true < 0.5, 1, 0)
             y_score = np.where(y_pred < 0.5, 1, 0)
-            auroc = roc_auc_score(y_true, y_score)
+            auroc = sklearn.metrics.roc_auc_score(y_true, y_score)
             return auroc
-    reg_auroc_score = make_scorer(score_func=reg_auroc, greater_is_better=True)
+    reg_auroc_score = sklearn.metrics.make_scorer(score_func=reg_auroc, greater_is_better=True)
 
     # Define metrics
     # TODO: find way to pass metrics to calc_scores in ml_models.py
@@ -126,6 +123,7 @@ def run(args):
     }
 
 
+
     # ========================================================================
     #       Logger
     # ========================================================================
@@ -136,6 +134,9 @@ def run(args):
     lg.logger.info(f'File path: {file_path}')
     lg.logger.info(f'System CPUs: {psutil.cpu_count()}')
     lg.logger.info(f'n_jobs: {n_jobs}')
+
+    # Dump args to file
+    utils.dump_args(args, outdir=run_outdir)
 
 
 
@@ -196,7 +197,6 @@ def run(args):
     # ========================================================================
     #       Define CV split
     # ========================================================================
-    # Split tr/vl data
     if cv_method=='simple':
         cv = KFold(n_splits=cv_folds, shuffle=False, random_state=SEED)
         groups = None
@@ -226,15 +226,15 @@ def run(args):
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
 
     # ML model params
-    if mlmodel == 'lgb_reg':
+    if model_name == 'lgb_reg':
         init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
         fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
-    elif mlmodel == 'nn_reg':
+    elif model_name == 'nn_reg':
         init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
         fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 2, 'validation_split': 0.2}
 
     # Define ML model
-    model = ml_models.get_model(mlmodel=mlmodel, init_params=init_prms)   
+    model = ml_models.get_model(model_name=model_name, init_params=init_prms)   
 
     # Run CV
     t0 = time.time()
@@ -243,11 +243,11 @@ def run(args):
         X=xdata, y=ydata,
         scoring=metrics,
         cv=cv, groups=groups,
-        n_jobs=n_jobs, fit_params=fit_params)
+        n_jobs=n_jobs, fit_params=fit_prms)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
     # Dump results
-    cv_scores = utils.update_cross_validate_scores(cv_scores)
+    cv_scores = utils.update_cross_validate_scores( cv_scores )
     cv_scores = cv_scores.reset_index(drop=True)
     cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='mean', value=cv_scores.iloc[:, -cv_folds:].values.mean(axis=1) )
     cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='std',  value=cv_scores.iloc[:, -cv_folds:].values.std(axis=1) )
@@ -305,27 +305,20 @@ def run(args):
     # lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
     # ML model params
-    if mlmodel == 'lgb_reg':
+    if model_name == 'lgb_reg':
         init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
         fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
-    elif mlmodel == 'nn_reg':
+    elif model_name == 'nn_reg':
         init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
         fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 2, 'validation_split': 0.2}
 
     # Define ML model
-    model = ml_models.get_model(mlmodel=mlmodel, init_params=init_prms)   
+    model = ml_models.get_model(model_name=model_name, init_params=init_prms)   
 
     t0 = time.time()
-    #fit_params = {'verbose': False, 'sample_weight': sample_weight}  # 'early_stopping_rounds': 10,
-    model_final.model.fit(xdata, ydata, **fit_params)
+    #fit_prms = {'verbose': False, 'sample_weight': sample_weight}  # 'early_stopping_rounds': 10,
+    model_final.model.fit(xdata, ydata, **fit_prms)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-
-    # # Compute scores
-    # scores = model_final.calc_scores(xdata=xdata, ydata=ydata, to_print=True)
-
-    # # Dump preds
-    # model_final.dump_preds(df_data=data, xdata=xdata, target_name=target_name,
-    #                        outpath=os.path.join(run_outdir, 'preds.csv'))
 
     # # Save model
     # model_final.save_model(outdir=run_outdir)
@@ -373,7 +366,7 @@ def run(args):
         csv_scores.append( pd.DataFrame([scores], index=[src]).T )
         
         # Dump preds
-        preds_fname = 'preds_' + src + '_' + mlmodel + '.csv'
+        preds_fname = 'preds_' + src + '_' + model_name + '.csv'
         model_final.dump_preds(df_data=te_src_data, xdata=xte, target_name=target_name,
                                outpath=os.path.join(run_outdir, preds_fname))                 
 
