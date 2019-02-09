@@ -8,6 +8,7 @@ import argparse
 import sklearn
 import time
 import datetime
+from pprint import pprint
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -56,6 +57,7 @@ sys.path.append(lib_path)  # (AP)
 import ml_models
 import lrn_curve
 import classlogger
+import utils
 SEED = None
 
 
@@ -73,7 +75,7 @@ psr.add_argument('--n_jobs',  type=int, default=4) # (AP)
 psr.add_argument('--mltype',  type=str, default='reg', choices=['reg', 'cls']) # (AP)
 psr.add_argument('--ticks',  type=int, default=5) # (AP)
 args = vars(psr.parse_args())
-print(args)
+pprint(args)
 
 
 # Get args
@@ -93,6 +95,8 @@ t = ''.join([str(i) for i in t])
 outdir = os.path.join('./', 'lrn_curve_' + mltype + '_' + t)
 os.makedirs(outdir, exist_ok=True)
 
+# Dump args
+utils.dump_args(args, outdir=outdir)
 
 # Create logger
 logfilename = os.path.join(outdir, 'logfile.log')
