@@ -237,7 +237,7 @@ lrn_curve_scores = lrn_curve.my_learning_curve(
     metrics=None,
     cv=cv,
     groups=None,
-    n_jobs=n_jobs, random_state=SEED, logger=None, outdir=outdir_)
+    n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=outdir_)
 print('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
 # Dump results
