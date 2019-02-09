@@ -256,6 +256,12 @@ def my_learning_curve(X, Y,
             # Delete the estimator/model
             del estimator, history
 
+        # Dump intermediate results
+        tr_df_tmp = scores_to_df(tr_scores_all)
+        vl_df_tmp = scores_to_df(vl_scores_all)
+        scores_all_df_tmp = pd.concat([tr_df_tmp, vl_df_tmp], axis=0)
+        scores_all_df_tmp.to_csv(os.path.join(outdir, model_name + '_lrn_curve_scores_tmp_cv' + str(fold_id+1) + '.csv'), index=False)
+
     tr_df = scores_to_df(tr_scores_all)
     vl_df = scores_to_df(vl_scores_all)
     scores_all_df = pd.concat([tr_df, vl_df], axis=0)
