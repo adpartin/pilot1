@@ -52,7 +52,7 @@ file_path = os.path.dirname(os.path.realpath(__file__))
 # Utils
 lib_path = '/vol/ml/apartin/Benchmarks/common/'  # (AP)
 sys.path.append(lib_path)  # (AP)
-import attn_utils
+# import attn_utils
 import ml_models
 import lrn_curve
 import classlogger
