@@ -60,6 +60,7 @@ def calc_scores(y_true, y_preds, mltype, metrics=None):
         scores['auroc'] = sklearn.metrics.roc_auc_score(y_true, y_preds)
         scores['f1_score'] = sklearn.metrics.f1_score(y_true, y_preds, average='micro')
         scores['acc_blnc'] = sklearn.metrics.balanced_accuracy_score(y_true, y_preds)
+
     elif mltype == 'reg':
         scores['r2'] = sklearn.metrics.r2_score(y_true=y_true, y_pred=y_preds)
         scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(y_true=y_true, y_pred=y_preds)
@@ -106,7 +107,7 @@ def my_learning_curve(X, Y,
 
     Examples:
         cv = sklearn.model_selection.KFold(n_splits=5, shuffle=False, random_state=0)
-        my_learning_curve(X=xdata, Y=ydata, mltype='reg', cv=cv, lr_curve_ticks=5)
+        lrn_curve.my_learning_curve(X=xdata, Y=ydata, mltype='reg', cv=cv, lr_curve_ticks=5)
     """
     X = pd.DataFrame(X).values
     Y = pd.DataFrame(Y).values
@@ -190,15 +191,18 @@ def my_learning_curve(X, Y,
                 # Create output dir
                 out_nn_model = os.path.join(outdir, 'cv'+str(fold_id+1) + '_sz'+str(tr_sz))
                 
-                # Keras callbacks
+                # Add keras callbacks
                 os.makedirs(out_nn_model, exist_ok=False)
                 checkpointer = ModelCheckpoint(filepath=os.path.join(out_nn_model, 'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
                 csv_logger = CSVLogger(filename=os.path.join(out_nn_model, 'training.log'))
-                early_stop = EarlyStopping(monitor='val_loss', patience=30, verbose=1, mode='auto')
-                reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=10, verbose=1, mode='auto',
+                reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
                                               min_delta=0.0001, cooldown=3, min_lr=0.000000001)
+                early_stop = EarlyStopping(monitor='val_loss', patience=100, verbose=1, mode='auto')
                 callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
                 fit_params['callbacks'] = callback_list
+
+                # Set validation set
+                fit_params['validation_data'] = (xvl, yvl)
 
             # Train model
             history = estimator.model.fit(xtr_sub, ytr_sub, **fit_params)

@@ -182,46 +182,42 @@ class BaseMLModel():
 
 
 class KERAS_REGRESSOR(BaseMLModel):
-
+    """ Neural network regressor. """
     def __init__(self, input_dim, attn=False, dr_rate=0.2,
                  logger=None):
-        metrics = ['mean_absolute_error', r2] # 'acc'
-
         inputs = Input(shape=(input_dim,))
-        x = Dense(1000, activation='relu')(inputs)
-
-        # Attention
         if attn:
-            a = Dense(1000, activation='relu')(x)
-            b = Dense(1000, activation='softmax')(x)
+            a = Dense(1000, activation='relu')(inputs)
+            b = Dense(1000, activation='softmax')(inputs)
             x = keras.layers.multiply( [a, b] )
         else:
-            x = Dense(1000, activation='relu')(x)
-
+            x = Dense(1000, activation='relu')(inputs)
+            
+        x = Dense(1000, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        
         x = Dense(500, activation='relu')(x)
         x = Dropout(dr_rate)(x)
-
+        
         x = Dense(250, activation='relu')(x)
         x = Dropout(dr_rate)(x)
-
+        
         x = Dense(125, activation='relu')(x)
         x = Dropout(dr_rate)(x)
-
+        
         x = Dense(60, activation='relu')(x)
         x = Dropout(dr_rate)(x)
-
+        
         x = Dense(30, activation='relu')(x)
         x = Dropout(dr_rate)(x)
-
-        outputs = Dense(1, activation='linear')(x)
-        model = Model(inputs=inputs, outputs=outputs)
         
-        # Define optimizer
-        optimizer = optimizers.SGD(lr=0.00001, momentum=0.9)
-        #optimizer = optimizers.Adam()
-        model.compile(optimizer=optimizer,
-                      loss='mean_squared_error',
-                      metrics=metrics)
+        outputs = Dense(1, activation='relu')(x)
+        model = Model(inputs=inputs, outputs=outputs)
+        model.summary()
+        
+        model.compile(loss='mean_squared_error',
+                      optimizer=SGD(lr=0.0001, momentum=0.9),
+                      metrics=['mae', r2])
         self.model = model
 
 

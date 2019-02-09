@@ -205,7 +205,7 @@ def run(args):
         fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
     elif model_name == 'nn_reg':
         init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 2, 'validation_split': 0.2} 
+        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': 0.2} 
 
 
     # -----------------------------------------------

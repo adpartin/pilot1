@@ -55,24 +55,26 @@ sys.path.append(lib_path)  # (AP)
 import attn_utils
 import ml_models
 import lrn_curve
-SEED = 0
+import classlogger
+SEED = None
 
 
 # Arg parser
 psr = argparse.ArgumentParser(description='input agg csv file')
 psr.add_argument('--in',  default=None)
-psr.add_argument('--ep',  type=int, default=150)
+psr.add_argument('--ep',  type=int, default=300)
 psr.add_argument('--batch',  type=int, default=32)
 psr.add_argument('-dr', '--dr_rate',  type=float, default=0.2)
 psr.add_argument('--nrows',  type=int, default=None) # (AP)
-psr.add_argument('--cv_folds',  type=int, default=5) # (AP)
-psr.add_argument('--cv_method',  type=str, default='stratify') # (AP)
+psr.add_argument('--cv_folds',  type=int, default=1) # (AP)
+psr.add_argument('--cv_method',  type=str, default='simple') # (AP)
 psr.add_argument('--attn',  type=int, default=0, choices=[0, 1]) # (AP)
 psr.add_argument('--n_jobs',  type=int, default=4) # (AP)
 psr.add_argument('--mltype',  type=str, default='reg', choices=['reg', 'cls']) # (AP)
 psr.add_argument('--ticks',  type=int, default=5) # (AP)
 args = vars(psr.parse_args())
 print(args)
+
 
 # Get args
 data_path = args['in']
@@ -90,6 +92,12 @@ t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
 t = ''.join([str(i) for i in t])
 outdir = os.path.join('./', 'lrn_curve_' + mltype + '_' + t)
 os.makedirs(outdir, exist_ok=True)
+
+
+# Create logger
+logfilename = os.path.join(outdir, 'logfile.log')
+lg = classlogger.Logger(logfilename=logfilename) 
+
 
 EPOCH = args['ep']
 BATCH = args['batch'] # 32
@@ -121,12 +129,21 @@ print('Done ({:.3f} mins).\n'.format((time.time()-t0)/60))
     
 if mltype == 'cls':
     df_y = df[:, 0].astype('int')
+    Y_onehot = np_utils.to_categorical(df_y, nb_classes)
+    print('Y_onehot.shape:', Y_onehot.shape)
+    
+    # y_integers = np.argmax(df_y, axis=1)
+    y_integers = df_y
+    class_weights = compute_class_weight('balanced', np.unique(y_integers), y_integers)
+    d_class_weights = dict(enumerate(class_weights))
+    # print(d_class_weights)
+
+    # print('bincount(y):\n', pd.Series(df_y).value_counts())
 else:
     df_y = df[:, 0]
-df_x = df[:, 1:PL].astype(np.float32)
-Y_onehot = np_utils.to_categorical(df_y, nb_classes)
 
-# print('bincount(y):\n', pd.Series(df_y).value_counts())
+df_x = df[:, 1:PL].astype(np.float32)
+
 
 # Scale features
 scaler = StandardScaler()
@@ -134,13 +151,6 @@ df_x = scaler.fit_transform(df_x)
 
 print('df_x.shape:', df_x.shape)
 print('df_y.shape:', df_y.shape)
-print('Y_onehot.shape:', Y_onehot.shape)
-
-#y_integers = np.argmax(df_y, axis=1)
-y_integers = df_y
-class_weights = compute_class_weight('balanced', np.unique(y_integers), y_integers)
-d_class_weights = dict(enumerate(class_weights))
-# print(d_class_weights)
 
 
 # ---------
@@ -168,37 +178,37 @@ elif mltype == 'reg':
         cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
 
 
-# -------------------------
-# Learning curve (lightgbm)
-# -------------------------
-# ML model params
-model_name = 'lgb_reg'
-init_prms = {'n_jobs': n_jobs, 'random_state': SEED}
-fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
+# # -------------------------
+# # Learning curve (lightgbm)
+# # -------------------------
+# # ML model params
+# model_name = 'lgb_reg'
+# init_prms = {'n_jobs': n_jobs, 'random_state': SEED}
+# fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
 
-print(f'\nLearning curve ({model_name}) ...')
-outdir_ = os.path.join(outdir, model_name)
-os.makedirs(outdir_, exist_ok=True)
+# print(f'\nLearning curve ({model_name}) ...')
+# outdir_ = os.path.join(outdir, model_name)
+# os.makedirs(outdir_, exist_ok=True)
 
-# Run learning curve
-t0 = time.time()
-lrn_curve_scores = lrn_curve.my_learning_curve(
-    X=df_x, Y=df_y,
-    mltype=mltype,
-    model_name=model_name,
-    fit_params=fit_prms,
-    init_params=init_prms,
-    args=args,
-    lr_curve_ticks=ticks,
-    data_sizes_frac=None,
-    metrics=None,
-    cv=cv,
-    groups=None,
-    n_jobs=n_jobs, random_state=SEED, logger=None, outdir=outdir_)
-print('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+# # Run learning curve
+# t0 = time.time()
+# lrn_curve_scores = lrn_curve.my_learning_curve(
+#     X=df_x, Y=df_y,
+#     mltype=mltype,
+#     model_name=model_name,
+#     fit_params=fit_prms,
+#     init_params=init_prms,
+#     args=args,
+#     lr_curve_ticks=ticks,
+#     data_sizes_frac=None,
+#     metrics=None,
+#     cv=cv,
+#     groups=None,
+#     n_jobs=n_jobs, random_state=SEED, logger=None, outdir=outdir_)
+# print('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
-# Dump results
-lrn_curve_scores.to_csv(os.path.join(outdir, model_name + '_lrn_curve_scores.csv'), index=False)
+# # Dump results
+# lrn_curve_scores.to_csv(os.path.join(outdir, model_name + '_lrn_curve_scores.csv'), index=False)
 
 
 # -------------------
@@ -207,7 +217,7 @@ lrn_curve_scores.to_csv(os.path.join(outdir, model_name + '_lrn_curve_scores.csv
 # ML model params
 model_name = 'nn_reg'
 init_prms = {'input_dim': df_x.shape[1], 'dr_rate': DR, 'attn': attn}
-fit_prms = {'batch_size': BATCH, 'epochs': EPOCH, 'verbose': 2, 'validation_split': 0.2}
+fit_prms = {'batch_size': BATCH, 'epochs': EPOCH, 'verbose': 1}
     
 print(f'\nLearning curve ({model_name}) ...')
 outdir_ = os.path.join(outdir, model_name)

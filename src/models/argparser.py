@@ -28,7 +28,7 @@ dflt_args = {
     'epochs': 300,
     'batch_size': 32,
     'dr_rate': 0.2,
-    'attn': 0,
+    'attn': 't',
     'scaler': None,
 }
 
