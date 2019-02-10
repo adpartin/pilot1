@@ -27,7 +27,7 @@ def create_outdir(outdir='./', args=None):
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
     if args is not None:
-        name_sffx = '.'.join(args['train_sources'] + [args['mlmodel']] + [args['cv_method']] + args['cell_features'] + args['drug_features'] + [args['target_name']])
+        name_sffx = '.'.join(args['train_sources'] + [args['model_name']] + [args['cv_method']] + args['cell_features'] + args['drug_features'] + [args['target_name']])
     else:
         name_sffx = 'out'
     run_outdir = os.path.join(outdir, name_sffx + '~' + t)
@@ -55,8 +55,67 @@ def subsample(df, v, axis=0):
     return df
 
 
+def reg_auroc(y_true, y_pred):
+    """ Compute area under the ROC for regression. TODO: check this func. """
+    y_true = np.where(y_true < 0.5, 1, 0)
+    y_score = np.where(y_pred < 0.5, 1, 0)
+    auroc = sklearn.metrics.roc_auc_score(y_true, y_score)
+    return auroc
+
+
+def calc_preds(estimator, xdata, ydata, mltype):
+    """ Calc predictions. """
+    if mltype == 'cls':    
+        if ydata.ndim > 1 and ydata.shape[1] > 1:
+            y_preds = estimator.predict_proba(xdata)
+            y_preds = np.argmax(y_preds, axis=1)
+            y_true = np.argmax(ydata, axis=1)
+        else:
+            y_preds = estimator.predict_proba(xdata)
+            y_preds = np.argmax(y_preds, axis=1)
+            y_true = ydata
+            
+    elif mltype == 'reg':
+        y_preds = estimator.predict(xdata)
+        y_true = ydata
+
+    return y_preds, y_true
+
+
+def calc_scores(y_true, y_preds, mltype, metrics=None):
+    """ Create dict of scores.
+    Args:
+        metrics : TODO allow to pass a string of metrics
+    """
+    scores = OrderedDict()
+
+    if mltype == 'cls':    
+        scores['auroc'] = sklearn.metrics.roc_auc_score(y_true, y_preds)
+        scores['f1_score'] = sklearn.metrics.f1_score(y_true, y_preds, average='micro')
+        scores['acc_blnc'] = sklearn.metrics.balanced_accuracy_score(y_true, y_preds)
+
+    elif mltype == 'reg':
+        scores['r2'] = sklearn.metrics.r2_score(y_true=y_true, y_pred=y_preds)
+        scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(y_true=y_true, y_pred=y_preds)
+        scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(y_true=y_true, y_pred=y_preds)
+        scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(y_true=y_true, y_pred=y_preds)
+        scores['auroc_reg'] = reg_auroc(y_true=y_true, y_pred=y_preds)
+
+    # score_names = ['r2', 'mean_absolute_error', 'median_absolute_error', 'mean_squared_error']
+
+    # # https://scikit-learn.org/stable/modules/model_evaluation.html
+    # for metric_name, metric in metrics.items():
+    #     if isinstance(metric, str):
+    #         scorer = sklearn.metrics.get_scorer(metric_name) # get a scorer from string
+    #         scores[metric_name] = scorer(ydata, preds)
+    #     else:
+    #         scores[metric_name] = scorer(ydata, preds)
+
+    return scores
+
+
 def update_cross_validate_scores(cv_scores):
-    """ Takes dict of scores from cross_validate and convert it to df
+    """ Takes dict of scores from sklean's cross_validate and converts to df
     with certain updates. """
     # TODO: move this func to cvrun.py (rename cvrun.py utils_cv.py)
     cv_folds = len(list(cv_scores.values())[0])
@@ -75,29 +134,29 @@ def update_cross_validate_scores(cv_scores):
             df.iloc[i, -cv_folds:] = abs(df.iloc[i, -cv_folds:])
     df['metric'] = df['metric'].map(lambda s: s.split('neg_')[-1] if 'neg_' in s else s)
 
-    # Add `train_set` col
+    # Add `tr_set` col
     v = list(map(lambda x: True if 'train' in x else False, df.index))
     df.insert(loc=1, column='tr_set', value=v)
     return df
 
 
-def cv_scores_to_df(scores, decimals=3, calc_stats=False):
-    """ Convert a dict of cv scores to df.
+def cv_scores_to_df(cv_scores, decimals=3, calc_stats=False):
+    """ Takes dict of scores from sklean's cross_validate and converts to df.
     Args:
         scores : that's the output from sklearn.model_selection.cross_validate()
     """
-    # Drop keys that come from cross_validate()
+    # Drop certain keys that come from cross_validate()
     for k in ['fit_time', 'train_time', 'score_time']:
-        if k in scores.keys():
-            del scores[k]  # scores.pop(k, None)
+        if k in cv_scores.keys():
+            del cv_scores[k]  # cv_scores.pop(k, None)
 
-    scores = pd.DataFrame(scores).T
-    scores.columns = ['f'+str(c) for c in scores.columns]
+    cv_scores = pd.DataFrame(cv_scores).T
+    cv_scores.columns = ['f'+str(c) for c in cv_scores.columns]
     if calc_stats:
-        scores.insert(loc=0, column='mean', value=scores.mean(axis=1))
-        scores.insert(loc=1, column='std', value=scores.std(axis=1))
-    scores = scores.round(decimals=decimals)
-    return scores
+        cv_scores.insert(loc=0, column='mean', value=cv_scores.mean(axis=1))
+        cv_scores.insert(loc=1, column='std', value=cv_scores.std(axis=1))
+    cv_scores = cv_scores.round(decimals=decimals)
+    return cv_scores
 
 
 # def adj_r2_score(ydata, preds, x_size):

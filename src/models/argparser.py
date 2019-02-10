@@ -133,7 +133,7 @@ def get_cli_args(args=None):
     parser.add_argument('--lc_ticks',
         # default=5,
         type=int,
-        help='Number of xticks in the learning cure plot.')
+        help='Number of ticks in the learning curve plot.')
 
     # Take care of utliers
     # parser.add_argument("--outlier", default=False)
@@ -159,7 +159,7 @@ def get_cli_args(args=None):
     parser.add_argument('-e', '--epochs',
         # default=100,
         type=int,
-        help='Number of epochs for the neural network.')
+        help='Number of epochs to train the neural network.')
     parser.add_argument('-b', '--batch_size',
         # default=64,
         type=int,
@@ -176,7 +176,7 @@ def get_cli_args(args=None):
         # default=0.2,
         type=str,
         choices=['stnd', 'minmax', 'rbst'],
-        help='Feature scaler (primarily for neural network).')                                       
+        help='Feature scaler (primarily for neural networks).')                                       
 
     return parser
 

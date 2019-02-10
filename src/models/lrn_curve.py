@@ -5,6 +5,7 @@ Performance (error or score) vs training set size.
 import os
 import numpy as np
 import pandas as pd
+from collections import OrderedDict
 
 import matplotlib
 # matplotlib.use('TkAgg')
@@ -13,10 +14,12 @@ import matplotlib.pyplot as plt
 
 import sklearn
 from sklearn.model_selection import cross_validate
-from sklearn.model_selection import ShuffleSplit, GroupShuffleSplit, KFold, GroupKFold
+
+from sklearn.model_selection import ShuffleSplit, KFold
+from sklearn.model_selection import GroupShuffleSplit, GroupKFold
+from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 
 from pandas.api.types import is_string_dtype
-from collections import OrderedDict
 from sklearn.preprocessing import LabelEncoder
 
 from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
@@ -25,60 +28,62 @@ import utils
 import ml_models
 
 
-def reg_auroc(y_true, y_pred):
-        y_true = np.where(y_true < 0.5, 1, 0)
-        y_score = np.where(y_pred < 0.5, 1, 0)
-        auroc = sklearn.metrics.roc_auc_score(y_true, y_score)
-        return auroc
+# def reg_auroc(y_true, y_pred):
+#     y_true = np.where(y_true < 0.5, 1, 0)
+#     y_score = np.where(y_pred < 0.5, 1, 0)
+#     auroc = sklearn.metrics.roc_auc_score(y_true, y_score)
+#     return auroc
 
 
-def calc_preds(estimator, xdata, ydata, mltype):
-    """ Calc predictions. """
-    if mltype == 'cls':    
-        if ydata.ndim > 1 and ydata.shape[1] > 1:
-            y_preds = estimator.predict_proba(xdata)
-            y_preds = np.argmax(y_preds, axis=1)
-            y_true = np.argmax(ydata, axis=1)
-        else:
-            y_preds = estimator.predict_proba(xdata)
-            y_preds = np.argmax(y_preds, axis=1)
-            y_true = ydata
-    elif mltype == 'reg':
-        y_preds = estimator.predict(xdata)
-        y_true = ydata
-    return y_preds, y_true
+# def calc_preds(estimator, xdata, ydata, mltype):
+#     """ Calc predictions. """
+#     if mltype == 'cls':    
+#         if ydata.ndim > 1 and ydata.shape[1] > 1:
+#             y_preds = estimator.predict_proba(xdata)
+#             y_preds = np.argmax(y_preds, axis=1)
+#             y_true = np.argmax(ydata, axis=1)
+#         else:
+#             y_preds = estimator.predict_proba(xdata)
+#             y_preds = np.argmax(y_preds, axis=1)
+#             y_true = ydata
+
+#     elif mltype == 'reg':
+#         y_preds = estimator.predict(xdata)
+#         y_true = ydata
+
+#     return y_preds, y_true
 
 
-def calc_scores(y_true, y_preds, mltype, metrics=None):
-    """ Create dict of scores.
-    Args:
-        metrics : TODO allow to pass a string of metrics
-    """
-    scores = OrderedDict()
+# def calc_scores(y_true, y_preds, mltype, metrics=None):
+#     """ Create dict of scores.
+#     Args:
+#         metrics : TODO allow to pass a string of metrics
+#     """
+#     scores = OrderedDict()
 
-    if mltype == 'cls':    
-        scores['auroc'] = sklearn.metrics.roc_auc_score(y_true, y_preds)
-        scores['f1_score'] = sklearn.metrics.f1_score(y_true, y_preds, average='micro')
-        scores['acc_blnc'] = sklearn.metrics.balanced_accuracy_score(y_true, y_preds)
+#     if mltype == 'cls':    
+#         scores['auroc'] = sklearn.metrics.roc_auc_score(y_true, y_preds)
+#         scores['f1_score'] = sklearn.metrics.f1_score(y_true, y_preds, average='micro')
+#         scores['acc_blnc'] = sklearn.metrics.balanced_accuracy_score(y_true, y_preds)
 
-    elif mltype == 'reg':
-        scores['r2'] = sklearn.metrics.r2_score(y_true=y_true, y_pred=y_preds)
-        scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(y_true=y_true, y_pred=y_preds)
-        scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(y_true=y_true, y_pred=y_preds)
-        scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(y_true=y_true, y_pred=y_preds)
-        scores['auroc_reg'] = reg_auroc(y_true=y_true, y_pred=y_preds)
+#     elif mltype == 'reg':
+#         scores['r2'] = sklearn.metrics.r2_score(y_true=y_true, y_pred=y_preds)
+#         scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(y_true=y_true, y_pred=y_preds)
+#         scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(y_true=y_true, y_pred=y_preds)
+#         scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(y_true=y_true, y_pred=y_preds)
+#         scores['auroc_reg'] = reg_auroc(y_true=y_true, y_pred=y_preds)
 
-    # score_names = ['r2', 'mean_absolute_error', 'median_absolute_error', 'mean_squared_error']
+#     # score_names = ['r2', 'mean_absolute_error', 'median_absolute_error', 'mean_squared_error']
 
-    # # https://scikit-learn.org/stable/modules/model_evaluation.html
-    # for metric_name, metric in metrics.items():
-    #     if isinstance(metric, str):
-    #         scorer = sklearn.metrics.get_scorer(metric_name) # get a scorer from string
-    #         scores[metric_name] = scorer(ydata, preds)
-    #     else:
-    #         scores[metric_name] = scorer(ydata, preds)
+#     # # https://scikit-learn.org/stable/modules/model_evaluation.html
+#     # for metric_name, metric in metrics.items():
+#     #     if isinstance(metric, str):
+#     #         scorer = sklearn.metrics.get_scorer(metric_name) # get a scorer from string
+#     #         scores[metric_name] = scorer(ydata, preds)
+#     #     else:
+#     #         scores[metric_name] = scorer(ydata, preds)
 
-    return scores
+#     return scores
 
 
 def my_learning_curve(X, Y,
@@ -209,11 +214,11 @@ def my_learning_curve(X, Y,
 
             # Calc preds and scores TODO: dump preds
             # ... training set
-            y_preds, y_true = calc_preds(estimator=estimator.model, xdata=xtr_sub, ydata=ytr_sub, mltype=mltype)
-            tr_scores = calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
+            y_preds, y_true = utils.calc_preds(estimator=estimator.model, xdata=xtr_sub, ydata=ytr_sub, mltype=mltype)
+            tr_scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
             # ... val set
-            y_preds, y_true = calc_preds(estimator=estimator.model, xdata=xvl, ydata=yvl, mltype=mltype)
-            vl_scores = calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
+            y_preds, y_true = utils.calc_preds(estimator=estimator.model, xdata=xvl, ydata=yvl, mltype=mltype)
+            vl_scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
 
             if 'nn' in model_name:
                 # Summarize history for loss     
@@ -410,5 +415,6 @@ def scores_to_df(scores_all):
     df = df.rename(columns={'variable': 'metric'})
     df = df.pivot_table(index=['metric', 'tr_size', 'tr_set'], columns=['fold'], values='value')
     df = df.reset_index(drop=False)
+    df.columns.name = None
     return df
 

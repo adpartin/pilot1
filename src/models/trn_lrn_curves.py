@@ -61,7 +61,7 @@ DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
 DATAFILENAME = 'tidy_data_no_fibro.parquet'
 # DATAFILENAME = 'tidy_data.parquet'
-CONFIGFILENAME = 'config_params.txt'
+CONFIGFILENAME = 'config_prms.txt'
 os.makedirs(OUTDIR, exist_ok=True)
 
 SEED = 0

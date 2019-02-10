@@ -5,7 +5,6 @@ import warnings
 warnings.filterwarnings('ignore')
 
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = 2
 
 import sys
 import time
@@ -58,7 +57,7 @@ DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
 DATAFILENAME = 'tidy_data_no_fibro.parquet'
 # DATAFILENAME = 'tidy_data.parquet'
-CONFIGFILENAME = 'config_params.txt'
+CONFIGFILENAME = 'config_prms.txt'
 os.makedirs(OUTDIR, exist_ok=True)
 
 SEED = 0
@@ -214,13 +213,10 @@ def run(args):
     # ========================================================================
     #       CV training
     # ========================================================================
-    lg.logger.info('\n\n{}'.format('='*50))
+    lg.logger.info('\n{}'.format('='*50))
     lg.logger.info('CV training ...')
     lg.logger.info('='*50)
 
-    # -----------------
-    # sklearn CV method
-    # -----------------
     # Get data
     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
@@ -231,45 +227,57 @@ def run(args):
         fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
     elif model_name == 'nn_reg':
         init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': 0.2}
+        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.2
 
-    # Define ML model
-    model = ml_models.get_model(model_name=model_name, init_params=init_prms)   
 
-    # Run CV
+    # # -----------------
+    # # sklearn CV method
+    # # ----------------- 
+    # # Define ML model
+    # model = ml_models.get_model(model_name=model_name, init_params=init_prms)  
+
+    # # Run CV
+    # t0 = time.time()
+    # cv_scores = cross_validate(
+    #     estimator=model.model,
+    #     X=xdata, y=ydata,
+    #     scoring=metrics,
+    #     cv=cv, groups=groups,
+    #     n_jobs=n_jobs, fit_params=fit_prms)
+    # lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+
+    # # Dump results
+    # cv_scores = utils.update_cross_validate_scores( cv_scores )
+    # cv_scores = cv_scores.reset_index(drop=True)
+    # cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='mean', value=cv_scores.iloc[:, -cv_folds:].values.mean(axis=1) )
+    # cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='std',  value=cv_scores.iloc[:, -cv_folds:].values.std(axis=1) )
+    # cv_scores = cv_scores.round(3)
+    # cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
+    # lg.logger.info(f'cv_scores\n{cv_scores}')
+
+
+    # ------------
+    # My CV method
+    # ------------
+    from cvrun import my_cross_validate
     t0 = time.time()
-    cv_scores = cross_validate(
-        estimator=model.model, # sklearn.base.clone(model.model),
-        X=xdata, y=ydata,
-        scoring=metrics,
-        cv=cv, groups=groups,
-        n_jobs=n_jobs, fit_params=fit_prms)
+    cv_scores = my_cross_validate(
+        X=xdata, Y=ydata,
+        mltype=mltype,
+        model_name=model_name,
+        fit_params=fit_prms,
+        init_params=init_prms,
+        args=args,
+        metrics=metrics,
+        cv=cv,
+        groups=groups,
+        n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-
+    
     # Dump results
-    cv_scores = utils.update_cross_validate_scores( cv_scores )
-    cv_scores = cv_scores.reset_index(drop=True)
-    cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='mean', value=cv_scores.iloc[:, -cv_folds:].values.mean(axis=1) )
-    cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='std',  value=cv_scores.iloc[:, -cv_folds:].values.std(axis=1) )
     cv_scores = cv_scores.round(3)
     cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
     lg.logger.info(f'cv_scores\n{cv_scores}')
-
-
-    # # ------------
-    # # My CV method
-    # # ------------
-    # # from cvrun import my_cv_run
-    # # model, _ = init_model(mlmodel, logger=lg.logger)
-    # # tr_cv_scores, vl_cv_scores = my_cv_run(
-    # #     data=data,
-    # #     target_name=target_name,
-    # #     model=model.model,
-    # #     #metrics=metrics,  # TODO: implement this option
-    # #     fea_prfx_dict=fea_prfx_dict,
-    # #     cv_method=cv_method, cv_folds=cv_folds,
-    # #     logger=lg.logger, verbose=True, random_state=SEED, outdir=run_outdir)
-
 
 
     # ========================================================================
@@ -286,37 +294,24 @@ def run(args):
 
     # Define sample weight
     # From lightgbm docs: n_samples / (n_classes * np.bincount(y))
-    th_target = 0.5
-    a = np.where(ydata.values < th_target, 0, 1)
-    wgt = len(a) / (2 * np.bincount(a))
-    sample_weight = np.array([wgt[0] if v < 0.5 else wgt[1] for v in a])
-
-    # Define and train ML model
-    # model_final, _ = init_model(mlmodel, lg.logger)
-    # t0 = time.time()
-    # if 'lgb_reg' in mlmodel:
-    #     # model_final.fit(xdata, ydata, eval_set=[(xdata, ydata)])  # use my class fit method
-    #     params = {'verbose': False, 'sample_weight': sample_weight}
-    #     model_final.fit(xdata, ydata, **params)  # use my class fit method
-    #     # model_final.model.fit(xdata, ydata, **params)
-    #     # model_final.model.fit(xdata, ydata, eval_set=[(xdata, ydata)]) # use lightgbm fit method
-    # else:
-    #     model_final.fit(xdata, ydata)
-    # lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+    # thres_target = 0.5
+    # a = np.where(ydata.values < thres_target, 0, 1)
+    # wgt = len(a) / (2 * np.bincount(a))
+    # sample_weight = np.array([wgt[0] if v < 0.5 else wgt[1] for v in a])
 
     # ML model params
     if model_name == 'lgb_reg':
         init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-        fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
+        fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
     elif model_name == 'nn_reg':
         init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
         fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': 0.2}
 
     # Define ML model
-    model = ml_models.get_model(model_name=model_name, init_params=init_prms)   
+    model_final = ml_models.get_model(model_name=model_name, init_params=init_prms)   
 
+    # Train
     t0 = time.time()
-    #fit_prms = {'verbose': False, 'sample_weight': sample_weight}  # 'early_stopping_rounds': 10,
     model_final.model.fit(xdata, ydata, **fit_prms)
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
@@ -361,8 +356,9 @@ def run(args):
 
         # Calc and save scores
         lg.logger.info('\nscores:')
-        scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
-        #csv_scores.append(scores)
+        #scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
+        y_preds, y_true = utils.calc_preds(estimator=model_final.model, xdata=xte, ydata=yte, mltype=mltype)
+        scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
         csv_scores.append( pd.DataFrame([scores], index=[src]).T )
         
         # Dump preds
@@ -392,10 +388,8 @@ def run(args):
     lg.logger.info('\ncsv_scores\n{}'.format(csv_scores_all))
     csv_scores_all.to_csv(os.path.join(run_outdir, 'csv_scores_' + train_sources_name + '.csv'), index=False)
 
-
     # Kill logger
     lg.kill_logger()
-
     del data, xdata, ydata, model, model_final
     return csv_scores_all
 
