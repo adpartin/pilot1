@@ -173,27 +173,6 @@ def run(args):
 
 
     # ========================================================================
-    #       Initialize ML model
-    # ========================================================================
-    # from ml_models import LGBM_REGRESSOR, RF_REGRESSOR
-    # def init_model(mlmodel, logger, verbose=False):
-    #     if 'lgb_reg' in mlmodel:
-    #         if verbose:
-    #             logger.info('ML Model: lgb regressor')
-    #         model = LGBM_REGRESSOR(n_jobs=n_jobs, random_state=SEED, logger=logger)
-    #         fit_params = {'verbose': False,
-    #                       #'early_stopping_rounds': 10,
-    #         }
-    #     elif 'rf_reg' in mlmodel:
-    #         if verbose:
-    #             logger.info('ML Model: rf regressor')
-    #         model = RF_REGRESSOR(n_jobs=4, random_state=SEED, logger=logger)
-    #         fit_params = {'verbose': False, 'n_jobs': n_jobs, 'random_state': SEED}
-    #     return model, fit_params
-
-
-
-    # ========================================================================
     #       Define CV split
     # ========================================================================
     if cv_method=='simple':
@@ -333,7 +312,7 @@ def run(args):
         t0 = time.time()
 
         if train_sources == [src]:
-            lg.logger.info("That's the taining set (so no preds).")
+            lg.logger.info("That's the training set (so no preds).")
             continue
 
         te_src_data = te_data[te_data['SOURCE'].isin([src])].reset_index(drop=True)
@@ -359,6 +338,7 @@ def run(args):
         #scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
         y_preds, y_true = utils.calc_preds(estimator=model_final.model, xdata=xte, ydata=yte, mltype=mltype)
         scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
+        lg.logger.info(scores)
         csv_scores.append( pd.DataFrame([scores], index=[src]).T )
         
         # Dump preds
@@ -390,7 +370,7 @@ def run(args):
 
     # Kill logger
     lg.kill_logger()
-    del data, xdata, ydata, model, model_final
+    del data, xdata, ydata, model_final
     return csv_scores_all
 
 
