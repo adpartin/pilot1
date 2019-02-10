@@ -334,11 +334,9 @@ def run(args):
         utils_tidy.print_feature_shapes(df=xte, logger=lg.logger)
 
         # Calc and save scores
-        lg.logger.info('\nscores:')
         #scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
         y_preds, y_true = utils.calc_preds(estimator=model_final.model, xdata=xte, ydata=yte, mltype=mltype)
         scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
-        lg.logger.info(scores)
         csv_scores.append( pd.DataFrame([scores], index=[src]).T )
         
         # Dump preds

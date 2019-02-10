@@ -207,7 +207,8 @@ def my_learning_curve(X, Y,
                 fit_params['callbacks'] = callback_list
 
                 # Set validation set
-                fit_params['validation_data'] = (xvl, yvl)
+                #fit_params['validation_data'] = (xvl, yvl)
+                fit_params['validation_split'] = 0.1
 
             # Train model
             history = estimator.model.fit(xtr_sub, ytr_sub, **fit_params)
