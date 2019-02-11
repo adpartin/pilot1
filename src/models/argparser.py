@@ -7,7 +7,7 @@ from collections import OrderedDict
 # Default (arg, value) pairs for argparse object
 dflt_args = {
     'target_name': 'AUC',
-    'target_transform': 'f',
+    'target_transform': False, # 'f'
     'train_sources': ['ccle'],
     'test_sources': ['ccle'],
     'row_sample': None,
@@ -21,14 +21,13 @@ dflt_args = {
     'cv_method': 'simple',
     'cv_folds': 5,
     'lc_ticks': 5,
-    'verbose': 't',
     'n_jobs': 4,
     'outdir': None,
 
     'epochs': 300,
     'batch_size': 32,
     'dr_rate': 0.2,
-    'attn': 't',
+    'attn': False, # 'f'
     'scaler': None,
 }
 
@@ -67,8 +66,7 @@ def get_cli_args(args=None):
         choices=['AUC', 'AUC1', 'IC50'],
         help='Column name of the target variable.') # target_name = 'AUC1'
     parser.add_argument('-tt', '--target_transform',
-        # default='f',
-        choices=['t', 'f'], type=str_to_bool,
+        type=str2bool,
         help="'t': transform target, 'f': do not transform target.")
 
     # Select train and test (inference) sources
@@ -138,12 +136,6 @@ def get_cli_args(args=None):
     # Take care of utliers
     # parser.add_argument("--outlier", default=False)
 
-    # Define verbosity
-    parser.add_argument('-v', '--verbose',
-        # default="t",
-        choices=['t', 'f'], type=str_to_bool,
-        help="'t': verbose, 'f': not verbose.")
-
     # Define n_jobs
     parser.add_argument('--n_jobs',
         # default=4,
@@ -169,8 +161,7 @@ def get_cli_args(args=None):
         type=float,
         help='Dropout ratefor the neural network.')
     parser.add_argument('--attn',
-        # default=0.2,
-        choices=['t', 'f'], type=str_to_bool,
+        type=str2bool,
         help='Whether to use attention layer to the neural network.')
     parser.add_argument('--scaler',
         # default=0.2,
@@ -228,15 +219,21 @@ def override_dflt_with_config(dflt_args, config_params):
 #     return params
 
 
-def str_to_bool(s):
-    """ Convert string to bool (in argparse context).
-    https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
-    """
-    if s.lower() not in ['t', 'f']:
-        raise ValueError("Need 't' or 'f'; got %r" % s)
-    return {'t': True, 'f': False}[s.lower()]
+# def str_to_bool(v):
+#     """ Convert string to bool (in argparse context).
+#     https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
+#     """
+#     if v.lower() not in ['t', 'f']:
+#         raise ValueError("Need 't' or 'f'; got %r" % v)
+#     return {'t': True, 'f': False}[v.lower()]
 
 
-
+def str2bool(v):
+    if v.lower() in ('yes', 'y', 'true', 't', '1'):
+        return True
+    elif v.lower() in ('no', 'n', 'false', 'f', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
