@@ -18,7 +18,7 @@ matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
 
-import tensorflow as tf
+# import tensorflow as tf
 
 import keras as ke
 from keras import backend as K
@@ -90,6 +90,7 @@ n_jobs = args['n_jobs']
 mltype = args['mltype']
 ticks = args['ticks']
 model_name = args['model_name']
+scaler = args['scaler']
 
 
 # Set output dir
@@ -210,13 +211,13 @@ lrn_curve_scores = lrn_curve.my_learning_curve(
     model_name=model_name,
     fit_params=fit_prms,
     init_params=init_prms,
-    args=args,
+    args=None,
     lr_curve_ticks=ticks,
     data_sizes_frac=None,
     metrics=None,
     cv=cv,
     groups=None,
-    n_jobs=n_jobs, random_state=SEED, logger=None, outdir=outdir_)
+    n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=outdir_)
 print('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
 # Dump results
