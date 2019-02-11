@@ -74,6 +74,8 @@ psr.add_argument('--attn',  type=int, default=0, choices=[0, 1]) # (AP)
 psr.add_argument('--n_jobs',  type=int, default=4) # (AP)
 psr.add_argument('--mltype',  type=str, default='reg', choices=['reg', 'cls']) # (AP)
 psr.add_argument('--ticks',  type=int, default=5) # (AP)
+psr.add_argument('-ml', '--model_name',  type=str, default='lgb_reg') # (AP)
+
 args = vars(psr.parse_args())
 pprint(args)
 
@@ -86,13 +88,14 @@ cv_method = args['cv_method']
 n_jobs = args['n_jobs']
 mltype = args['mltype']
 ticks = args['ticks']
+model_name = args['model_name']
 
 
 # Set output dir
 t = datetime.datetime.now()
 t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
 t = ''.join([str(i) for i in t])
-outdir = os.path.join('./', 'lrn_curve_' + mltype + '_' + t)
+outdir = os.path.join('./', model_name + '_lrn_curve_' + mltype + '_' + t)
 os.makedirs(outdir, exist_ok=True)
 
 # Dump args
@@ -182,47 +185,17 @@ elif mltype == 'reg':
         cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
 
 
-# # -------------------------
-# # Learning curve (lightgbm)
-# # -------------------------
-# # ML model params
-# model_name = 'lgb_reg'
-# init_prms = {'n_jobs': n_jobs, 'random_state': SEED}
-# fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
-
-# print(f'\nLearning curve ({model_name}) ...')
-# outdir_ = os.path.join(outdir, model_name)
-# os.makedirs(outdir_, exist_ok=True)
-
-# # Run learning curve
-# t0 = time.time()
-# lrn_curve_scores = lrn_curve.my_learning_curve(
-#     X=df_x, Y=df_y,
-#     mltype=mltype,
-#     model_name=model_name,
-#     fit_params=fit_prms,
-#     init_params=init_prms,
-#     args=args,
-#     lr_curve_ticks=ticks,
-#     data_sizes_frac=None,
-#     metrics=None,
-#     cv=cv,
-#     groups=None,
-#     n_jobs=n_jobs, random_state=SEED, logger=None, outdir=outdir_)
-# print('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-
-# # Dump results
-# lrn_curve_scores.to_csv(os.path.join(outdir, model_name + '_lrn_curve_scores.csv'), index=False)
-
-
-# -------------------
-# Learning curve (nn)
-# -------------------
+# -------------------------
+# Learning curve (lightgbm)
+# -------------------------
 # ML model params
-model_name = 'nn_reg'
-init_prms = {'input_dim': df_x.shape[1], 'dr_rate': DR, 'attn': attn}
-fit_prms = {'batch_size': BATCH, 'epochs': EPOCH, 'verbose': 1}
-    
+if model_name == 'lgb_reg':
+    init_prms = {'n_jobs': n_jobs, 'random_state': SEED}
+    fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
+if model_name == 'nn_reg':
+    init_prms = {'input_dim': df_x.shape[1], 'dr_rate': DR, 'attn': attn}
+    fit_prms = {'batch_size': BATCH, 'epochs': EPOCH, 'verbose': 1}
+
 print(f'\nLearning curve ({model_name}) ...')
 outdir_ = os.path.join(outdir, model_name)
 os.makedirs(outdir_, exist_ok=True)
@@ -235,16 +208,49 @@ lrn_curve_scores = lrn_curve.my_learning_curve(
     model_name=model_name,
     fit_params=fit_prms,
     init_params=init_prms,
-    args=None,
+    args=args,
     lr_curve_ticks=ticks,
     data_sizes_frac=None,
     metrics=None,
     cv=cv,
     groups=None,
-    n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=outdir_)
+    n_jobs=n_jobs, random_state=SEED, logger=None, outdir=outdir_)
 print('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
 # Dump results
 lrn_curve_scores.to_csv(os.path.join(outdir, model_name + '_lrn_curve_scores.csv'), index=False)
+
+
+# # -------------------
+# # Learning curve (nn)
+# # -------------------
+# # ML model params
+# model_name = 'nn_reg'
+# init_prms = {'input_dim': df_x.shape[1], 'dr_rate': DR, 'attn': attn}
+# fit_prms = {'batch_size': BATCH, 'epochs': EPOCH, 'verbose': 1}
+    
+# print(f'\nLearning curve ({model_name}) ...')
+# outdir_ = os.path.join(outdir, model_name)
+# os.makedirs(outdir_, exist_ok=True)
+
+# # Run learning curve
+# t0 = time.time()
+# lrn_curve_scores = lrn_curve.my_learning_curve(
+#     X=df_x, Y=df_y,
+#     mltype=mltype,
+#     model_name=model_name,
+#     fit_params=fit_prms,
+#     init_params=init_prms,
+#     args=None,
+#     lr_curve_ticks=ticks,
+#     data_sizes_frac=None,
+#     metrics=None,
+#     cv=cv,
+#     groups=None,
+#     n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=outdir_)
+# print('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+
+# # Dump results
+# lrn_curve_scores.to_csv(os.path.join(outdir, model_name + '_lrn_curve_scores.csv'), index=False)
 
 
