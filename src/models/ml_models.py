@@ -19,17 +19,6 @@ import matplotlib.pyplot as plt
 
 from sklearn.ensemble import RandomForestRegressor
 
-# Keras
-import tensorflow as tf
-import keras
-from keras import backend as K
-from keras.layers import Input, Dense, Dropout, Activation, BatchNormalization
-from keras import optimizers
-from keras.optimizers import SGD, Adam, RMSprop, Adadelta
-from keras.models import Sequential, Model, model_from_json, model_from_yaml
-from keras.utils import np_utils, multi_gpu_model
-from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
-
 try:
     import lightgbm as lgb
 except ImportError:
@@ -182,6 +171,17 @@ class BaseMLModel():
 
 
 class KERAS_REGRESSOR(BaseMLModel):
+    # Load keras modules only if keras model is invoked
+    import tensorflow as tf
+    import keras
+    from keras import backend as K
+    from keras.layers import Input, Dense, Dropout, Activation, BatchNormalization
+    from keras import optimizers
+    from keras.optimizers import SGD, Adam, RMSprop, Adadelta
+    from keras.models import Sequential, Model, model_from_json, model_from_yaml
+    from keras.utils import np_utils, multi_gpu_model
+    from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
+
     """ Neural network regressor. """
     def __init__(self, input_dim, attn=False, dr_rate=0.2,
                  logger=None):
