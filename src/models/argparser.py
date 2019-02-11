@@ -20,6 +20,7 @@ dflt_args = {
     'model_name': 'lgb_reg',
     'cv_method': 'simple',
     'cv_folds': 5,
+    'retrain': True,
     'lc_ticks': 5,
     'n_jobs': 4,
     'outdir': None,
@@ -126,6 +127,11 @@ def get_cli_args(args=None):
         # default=5,
         type=int,
         help='Number cross-val folds.')
+
+    # Re-train model
+    parser.add_argument('--retrain',
+        type=str2bool,
+        help='Whether to re-train final model using the entire dataset.')        
 
     # Learning curve
     parser.add_argument('--lc_ticks',

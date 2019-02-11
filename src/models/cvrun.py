@@ -82,6 +82,10 @@ def my_cross_validate(X, Y,
     elif mltype == 'reg':
         splitter = cv.split(X, Y, groups=groups)
 
+    # Placeholder to save the best model
+    best_model = None
+    best_score = -np.Inf
+
     # Start CV iters
     for fold_id, (tr_idx, vl_idx) in enumerate(splitter):
         if logger is not None:
@@ -106,7 +110,7 @@ def my_cross_validate(X, Y,
 
         if 'nn' in model_name:
             from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
-            
+
             # Create output dir
             out_nn_model = os.path.join(outdir, 'cv'+str(fold_id+1))
             
@@ -134,6 +138,15 @@ def my_cross_validate(X, Y,
         y_preds, y_true = utils.calc_preds(estimator=estimator.model, xdata=xvl, ydata=yvl, mltype=mltype)
         vl_scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
 
+        # Save the best model
+        if mltype == 'cls':
+            vl_scores['f1_score'] > best_score
+            best_model = estimator
+        elif mltype == 'reg':
+            vl_scores['r2'] > best_score
+            best_model = estimator
+
+        # Plot training curves
         if 'nn' in model_name:
             # Summarize history for loss     
             pr_metrics = ml_models.get_keras_performance_metrics(history)
@@ -177,7 +190,7 @@ def my_cross_validate(X, Y,
     vl_df = scores_to_df(vl_scores_all)
     scores_all_df = pd.concat([tr_df, vl_df], axis=0)
 
-    return scores_all_df
+    return scores_all_df, best_model
 
 
 def scores_to_df(scores_all):

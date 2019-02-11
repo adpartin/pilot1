@@ -89,6 +89,7 @@ def run(args):
     model_name = args['model_name']
     cv_method = args['cv_method']
     cv_folds = args['cv_folds']
+    retrain = args['retrain']
     lr_curve_ticks = args['lc_ticks']
     n_jobs = args['n_jobs']
 
@@ -220,6 +221,8 @@ def run(args):
                 cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
             groups = None
 
+
+
     # ========================================================================
     #       CV training
     # ========================================================================
@@ -271,7 +274,7 @@ def run(args):
     # ------------
     from cvrun import my_cross_validate
     t0 = time.time()
-    cv_scores = my_cross_validate(
+    cv_scores, best_model = my_cross_validate(
         X=xdata, Y=ydata,
         mltype=mltype,
         model_name=model_name,
@@ -293,41 +296,44 @@ def run(args):
     # ========================================================================
     #       Train final model (entire dataset)
     # ========================================================================
-    lg.logger.info('\n{}'.format('='*50))
-    lg.logger.info(f'Train final model (use entire dataset) ... {train_sources}')
-    lg.logger.info('='*50)
+    if retrain:
+        lg.logger.info('\n{}'.format('='*50))
+        lg.logger.info(f'Train final model (use entire dataset) ... {train_sources}')
+        lg.logger.info('='*50)
 
-    # Get the data
-    xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-    ydata = utils_tidy.extract_target(data=data, target_name=target_name)
-    utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
+        # Get the data
+        xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+        ydata = utils_tidy.extract_target(data=data, target_name=target_name)
+        utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
 
-    # Define sample weight
-    # From lightgbm docs: n_samples / (n_classes * np.bincount(y))
-    # thres_target = 0.5
-    # a = np.where(ydata.values < thres_target, 0, 1)
-    # wgt = len(a) / (2 * np.bincount(a))
-    # sample_weight = np.array([wgt[0] if v < 0.5 else wgt[1] for v in a])
+        # Define sample weight
+        # From lightgbm docs: n_samples / (n_classes * np.bincount(y))
+        # thres_target = 0.5
+        # a = np.where(ydata.values < thres_target, 0, 1)
+        # wgt = len(a) / (2 * np.bincount(a))
+        # sample_weight = np.array([wgt[0] if v < 0.5 else wgt[1] for v in a])
 
-    # ML model params
-    if model_name == 'lgb_reg':
-        init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-        fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
-    elif model_name == 'nn_reg':
-        init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': 0.1}
+        # ML model params
+        if model_name == 'lgb_reg':
+            init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
+            fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
+        elif model_name == 'nn_reg':
+            init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
+            fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': 0.1}
 
-    # Define ML model
-    model_final = ml_models.get_model(model_name=model_name, init_params=init_prms)   
+        # Define ML model
+        model_final = ml_models.get_model(model_name=model_name, init_params=init_prms)   
 
-    # Train
-    t0 = time.time()
-    model_final.model.fit(xdata, ydata, **fit_prms)
-    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+        # Train
+        t0 = time.time()
+        model_final.model.fit(xdata, ydata, **fit_prms)
+        lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
-    # # Save model
-    # model_final.save_model(outdir=run_outdir)
-
+        # # Save model
+        # model_final.save_model(outdir=run_outdir)
+    
+    else:
+        model_final = best_model
 
 
     # ========================================================================
