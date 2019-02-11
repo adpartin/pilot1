@@ -178,18 +178,6 @@ def run(args):
     # ========================================================================
     #       Define CV split
     # ========================================================================
-    # if cv_method=='simple':
-    #     cv = KFold(n_splits=cv_folds, shuffle=False, random_state=SEED)
-    #     groups = None
-    # elif cv_method=='group':
-    #     cv = GroupKFold(n_splits=cv_folds)
-    #     groups = data['CELL'].copy()
-    # elif cv_method=='stratify':
-    #     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-    #     groups = None
-    # else:
-    #     raise ValueError(f'This cv_method ({cv_method}) is not supported')
-
     test_size = 0.2
     if mltype == 'cls':
         # Classification
@@ -376,10 +364,10 @@ def run(args):
         scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
         csv_scores.append( pd.DataFrame([scores], index=[src]).T )
         
-        # Dump preds
-        preds_fname = 'preds_' + src + '_' + model_name + '.csv'
-        model_final.dump_preds(df_data=te_src_data, xdata=xte, target_name=target_name,
-                               outpath=os.path.join(run_outdir, preds_fname))                 
+        # Dump preds --> TODO: error when use keras
+        # preds_fname = 'preds_' + src + '_' + model_name + '.csv'
+        # model_final.dump_preds(df_data=te_src_data, xdata=xte, target_name=target_name,
+        #                        outpath=os.path.join(run_outdir, preds_fname))                 
 
         lg.logger.info('\nRuntime: {:.3f}'.format((time.time()-t0)/60))
 
