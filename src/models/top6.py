@@ -75,7 +75,8 @@ psr.add_argument('--n_jobs',  type=int, default=4) # (AP)
 psr.add_argument('--mltype',  type=str, default='reg', choices=['reg', 'cls']) # (AP)
 psr.add_argument('--ticks',  type=int, default=5) # (AP)
 psr.add_argument('-ml', '--model_name',  type=str, default='lgb_reg') # (AP)
-
+psr.add_argument('--scaler',  type=str,  choices=['stnd'], default=None) 
+    
 args = vars(psr.parse_args())
 pprint(args)
 
@@ -153,8 +154,9 @@ df_x = df[:, 1:PL].astype(np.float32)
 
 
 # Scale features
-scaler = StandardScaler()
-df_x = scaler.fit_transform(df_x)
+if scaler is not None:
+    scaler = StandardScaler()
+    df_x = scaler.fit_transform(df_x)
 
 print('df_x.shape:', df_x.shape)
 print('df_y.shape:', df_y.shape)
