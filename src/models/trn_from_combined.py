@@ -87,7 +87,6 @@ def run(args):
     cv_method = args['cv_method']
     cv_folds = args['cv_folds']
     lr_curve_ticks = args['lc_ticks']
-    verbose = args['verbose']
     n_jobs = args['n_jobs']
 
     epochs = args['epochs']
