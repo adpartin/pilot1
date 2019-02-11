@@ -32,7 +32,10 @@ import sklearn
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import learning_curve
 from sklearn.model_selection import cross_val_score, cross_validate, learning_curve
-from sklearn.model_selection import ShuffleSplit, GroupShuffleSplit, KFold, GroupKFold, StratifiedKFold
+
+from sklearn.model_selection import ShuffleSplit, KFold
+from sklearn.model_selection import GroupShuffleSplit, GroupKFold
+from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 
 # Get file path
 # ... manutally run ...
@@ -60,7 +63,7 @@ DATAFILENAME = 'tidy_data_no_fibro.parquet'
 CONFIGFILENAME = 'config_prms.txt'
 os.makedirs(OUTDIR, exist_ok=True)
 
-SEED = 0
+SEED = None
 
 # Feature prefix (some already present in the tidy dataframe)
 fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.',
@@ -174,19 +177,48 @@ def run(args):
     # ========================================================================
     #       Define CV split
     # ========================================================================
-    if cv_method=='simple':
-        cv = KFold(n_splits=cv_folds, shuffle=False, random_state=SEED)
-        groups = None
-    elif cv_method=='group':
-        cv = GroupKFold(n_splits=cv_folds)
-        groups = data['CELL'].copy()
-    elif cv_method=='stratify':
-        cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-        groups = None
-    else:
-        raise ValueError(f'This cv_method ({cv_method}) is not supported')
+    # if cv_method=='simple':
+    #     cv = KFold(n_splits=cv_folds, shuffle=False, random_state=SEED)
+    #     groups = None
+    # elif cv_method=='group':
+    #     cv = GroupKFold(n_splits=cv_folds)
+    #     groups = data['CELL'].copy()
+    # elif cv_method=='stratify':
+    #     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
+    #     groups = None
+    # else:
+    #     raise ValueError(f'This cv_method ({cv_method}) is not supported')
 
+    test_size = 0.2
+    if mltype == 'cls':
+        # Classification
+        if cv_method == 'simple':
+            if cv_folds == 1:
+                cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
+            else:
+                cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
+            groups = None
+        elif cv_method == 'stratify':
+            if cv_folds == 1:
+                cv = StratifiedShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
+            else:
+                cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
+            groups = None
 
+    elif mltype == 'reg':
+        # Regression
+        if cv_method == 'group':
+            if cv_folds == 1:
+                cv = GroupShuffleSplit(random_state=SEED)
+            else:
+                cv = GroupKFold(n_splits=cv_folds)
+            groups = data['CELL'].copy()
+        elif cv_method == 'simple':
+            if cv_folds == 1:
+                cv = ShuffleSplit(n_splits=cv_folds, test_size=0.2, random_state=SEED)
+            else:
+                cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
+            groups = None
 
     # ========================================================================
     #       CV training

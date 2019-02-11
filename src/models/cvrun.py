@@ -19,8 +19,6 @@ from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 from pandas.api.types import is_string_dtype
 from sklearn.preprocessing import LabelEncoder
 
-from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
-
 import utils
 import utils_tidy
 import ml_models
@@ -107,6 +105,8 @@ def my_cross_validate(X, Y,
         estimator = ml_models.get_model(model_name=model_name, init_params=init_params)
 
         if 'nn' in model_name:
+            from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
+            
             # Create output dir
             out_nn_model = os.path.join(outdir, 'cv'+str(fold_id+1))
             

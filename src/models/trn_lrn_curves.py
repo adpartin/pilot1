@@ -64,7 +64,7 @@ DATAFILENAME = 'tidy_data_no_fibro.parquet'
 CONFIGFILENAME = 'config_prms.txt'
 os.makedirs(OUTDIR, exist_ok=True)
 
-SEED = 0
+SEED = None
 
 # Feature prefix (some already present in the tidy dataframe)
 fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.',
