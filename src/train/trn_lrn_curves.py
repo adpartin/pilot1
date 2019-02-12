@@ -312,7 +312,6 @@ def main(args):
     args = argparser.get_args(args=args, config_fname=config_fname)
     pprint(vars(args))
     args = vars(args)
-    #if 'outdir' not in args:
     if args['outdir'] is None:
         args['outdir'] = OUTDIR
     lrn_curve_scores = run(args)

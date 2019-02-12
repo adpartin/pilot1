@@ -192,10 +192,12 @@ def my_learning_curve(X, Y,
 
             if 'nn' in model_name:
                 from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
-                
+                from keras.utils import plot_model
+
                 # Create output dir
                 out_nn_model = os.path.join(outdir, 'cv'+str(fold_id+1) + '_sz'+str(tr_sz))
-                
+                plot_model(estimator.model, to_file=os.path.join(out_nn_model, 'model.png'))
+
                 # Add keras callbacks
                 os.makedirs(out_nn_model, exist_ok=False)
                 checkpointer = ModelCheckpoint(filepath=os.path.join(out_nn_model, 'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)

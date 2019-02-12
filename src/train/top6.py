@@ -189,7 +189,7 @@ elif mltype == 'reg':
 
 
 # -------------------------
-# Learning curve (lightgbm)
+# Learning curve
 # -------------------------
 # ML model params
 if model_name == 'lgb_reg':
@@ -222,38 +222,5 @@ print('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
 # Dump results
 lrn_curve_scores.to_csv(os.path.join(outdir, model_name + '_lrn_curve_scores.csv'), index=False)
-
-
-# # -------------------
-# # Learning curve (nn)
-# # -------------------
-# # ML model params
-# model_name = 'nn_reg'
-# init_prms = {'input_dim': df_x.shape[1], 'dr_rate': DR, 'attn': attn}
-# fit_prms = {'batch_size': BATCH, 'epochs': EPOCH, 'verbose': 1}
-    
-# print(f'\nLearning curve ({model_name}) ...')
-# outdir_ = os.path.join(outdir, model_name)
-# os.makedirs(outdir_, exist_ok=True)
-
-# # Run learning curve
-# t0 = time.time()
-# lrn_curve_scores = lrn_curve.my_learning_curve(
-#     X=df_x, Y=df_y,
-#     mltype=mltype,
-#     model_name=model_name,
-#     fit_params=fit_prms,
-#     init_params=init_prms,
-#     args=None,
-#     lr_curve_ticks=ticks,
-#     data_sizes_frac=None,
-#     metrics=None,
-#     cv=cv,
-#     groups=None,
-#     n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=outdir_)
-# print('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-
-# # Dump results
-# lrn_curve_scores.to_csv(os.path.join(outdir, model_name + '_lrn_curve_scores.csv'), index=False)
 
 

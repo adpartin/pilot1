@@ -32,31 +32,31 @@ def main(args):
     os.makedirs(csv_outdir, exist_ok=True)
 
     # Full set
-    cross_study_sets = [
-        {'tr_src': ['gcsi'],
-         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
-
-        {'tr_src': ['ccle'],
-         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
-
-        {'tr_src': ['gdsc'],
-         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
-
-        {'tr_src': ['ctrp'],
-         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
-
-         {'tr_src': ['nci60'],
-         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']}
-    ]
-
-    # # Smaller set
     # cross_study_sets = [
     #     {'tr_src': ['gcsi'],
-    #      'te_src': ['ccle', 'gcsi', 'gdsc']},
+    #      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
 
     #     {'tr_src': ['ccle'],
-    #      'te_src': ['ccle', 'gcsi', 'gdsc']},
+    #      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
+
+    #     {'tr_src': ['gdsc'],
+    #      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
+
+    #     {'tr_src': ['ctrp'],
+    #      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
+
+    #      {'tr_src': ['nci60'],
+    #      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']}
     # ]
+
+    # Smaller set
+    cross_study_sets = [
+        {'tr_src': ['gcsi'],
+         'te_src': ['ccle', 'gcsi', 'gdsc']},
+
+        {'tr_src': ['ccle'],
+         'te_src': ['ccle', 'gcsi', 'gdsc']},
+    ]
 
 
     # Single run
@@ -67,7 +67,7 @@ def main(args):
     #     *args])
 
 
-    # Multiple runs
+    # Train using specific data source and predict on others
     dfs = []
     for run_id in range(len(cross_study_sets)):
         print('{} Run {} {}'.format('-'*40, run_id+1, '-'*40))
@@ -78,8 +78,11 @@ def main(args):
              *args])
         dfs.append(csv_scores_all)
 
-    # Create csv table for each available metric 
+    # Combine csv scores from all runs
     df = pd.concat(dfs, axis=0, sort=False)
+    df.to_csv(os.path.jin(csv_outdir, 'csv_all.csv'), index=False)
+
+    # Create csv table for each available metric 
     for m in df['metric'].unique():
         csv = df[df['metric']==m].reset_index(drop=True)
         csv.drop(columns=['metric'], inplace=True)
@@ -92,8 +95,8 @@ def main(args):
         csv = csv.sort_values('train_src')
 
         # save table
-        csv = csv.round(2)
-        csv.to_csv(os.path.join(csv_outdir, f'cross-study-val-{m}.csv'), index=False)
+        csv = csv.round(3)
+        csv.to_csv(os.path.join(csv_outdir, f'csv_{m}.csv'), index=False)
 
     print('\nTotal runtime {:.3f}\n'.format((time.time()-t0)/60))
 

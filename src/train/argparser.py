@@ -7,7 +7,7 @@ from collections import OrderedDict
 # Default (arg, value) pairs for argparse object
 dflt_args = {
     'target_name': 'AUC',
-    'target_transform': False, # 'f'
+    'target_transform': False,
     'train_sources': ['ccle'],
     'test_sources': ['ccle'],
     'row_sample': None,
@@ -19,16 +19,19 @@ dflt_args = {
     'mltype': 'reg',
     'model_name': 'lgb_reg',
     'cv_method': 'simple',
-    'cv_folds': 5,
+    'cv_folds': 1,
     'retrain': True,
-    'lc_ticks': 5,
     'n_jobs': 4,
     'outdir': None,
 
+    # Learning curve
+    'lc_ticks': 5,
+
+    # Neural network
     'epochs': 300,
     'batch_size': 32,
     'dr_rate': 0.2,
-    'attn': False, # 'f'
+    'attn': False,
     'scaler': None,
 }
 

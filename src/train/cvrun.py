@@ -31,7 +31,6 @@ def my_cross_validate(X, Y,
                       cv=5, groups=None,
                       lr_curve_ticks=5, data_sizes_frac=None,
                       args=None, fit_params=None, init_params=None,
-                      metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'neg_mean_squared_error'],
                       n_jobs=1, random_state=None, logger=None, outdir='./'):
     """
     Train estimator using various train set sizes and generate learning curves for different metrics.
@@ -46,7 +45,7 @@ def my_cross_validate(X, Y,
         data_sizes_frac : relative numbers of training samples that will be used to generate learning curves
         fit_params : dict of parameters to the estimator's "fit" method
 
-        metrics : allow to pass a string of metrics  TODO!
+        metrics : allow to pass a list of metrics  TODO!
         args : command line args
 
     Examples:
@@ -110,9 +109,11 @@ def my_cross_validate(X, Y,
 
         if 'nn' in model_name:
             from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
+            from keras.utils import plot_model
 
             # Create output dir
             out_nn_model = os.path.join(outdir, 'cv'+str(fold_id+1))
+            plot_model(estimator.model, to_file=os.path.join(out_nn_model, 'model.png'))
             
             # Add keras callbacks
             os.makedirs(out_nn_model, exist_ok=False)
@@ -133,10 +134,10 @@ def my_cross_validate(X, Y,
         # Calc preds and scores TODO: dump preds
         # ... training set
         y_preds, y_true = utils.calc_preds(estimator=estimator.model, xdata=xtr, ydata=ytr, mltype=mltype)
-        tr_scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
+        tr_scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype)
         # ... val set
         y_preds, y_true = utils.calc_preds(estimator=estimator.model, xdata=xvl, ydata=yvl, mltype=mltype)
-        vl_scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
+        vl_scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype)
 
         # Save the best model
         if mltype == 'cls':
@@ -295,7 +296,6 @@ def my_cv_run(data, target_name,
     return tr_cv_scores, vl_cv_scores
 
 
-
 def adj_r2_score(ydata, preds, x_size):
     """ Calc adjusted r^2.
     https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2
@@ -305,7 +305,6 @@ def adj_r2_score(ydata, preds, x_size):
     r2 = sklearn.metrics.r2_score(ydata, preds)
     adj_r2 = 1 - (1 - r2) * (x_size[0] - 1)/(x_size[0] - x_size[1] - 1)
     return adj_r2
-
 
 
 def calc_scores(model, xdata, ydata):

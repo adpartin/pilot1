@@ -19,7 +19,6 @@ from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 
 import utils
-import utils_tidy
 import classlogger
 
 
@@ -55,7 +54,7 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
 
     if args['col_sample']:
         col_sample = eval(args['col_sample'])
-        fea_data, other_data = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+        fea_data, other_data = split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
         fea_data = utils.subsample(df=fea_data, v=col_sample, axis=1)
         data = pd.concat([other_data, fea_data], axis=1)
         print('data.shape', data.shape)
@@ -63,6 +62,22 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
 
     # Drop data points where target is NaN 
     data = data[~data[args['target_name']].isna()]
+
+
+    # Scale features
+    if args['scaler'] is not None:
+        fea_data, other_data = split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+        if args['scaler'] == 'stnd':
+            scaler = StandardScaler()
+        elif args['scaler'] == 'minmax':
+            scaler = MinMaxScaler()
+        elif args['scaler'] == 'rbst':
+            scaler = RobustScaler()
+
+        colnames = fea_data.columns
+        fea_data = scaler.fit_transform(fea_data)
+        fea_data = pd.DataFrame(fea_data, columns=colnames)
+        data = pd.concat([other_data, fea_data], axis=1)
 
 
     # Extract test sources
@@ -105,22 +120,6 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
     # print('data.shape', data.shape)
     # data = data[[False if x>1.0 else True for x in data[target_name]]].reset_index(drop=True)
     # print('data.shape', data.shape)
-
-
-    # Scale features
-    if args['scaler'] is not None:
-        fea_data, other_data = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-        if args['scaler'] == 'stnd':
-            scaler = StandardScaler()
-        elif args['scaler'] == 'minmax':
-            scaler = MinMaxScaler()
-        elif args['scaler'] == 'rbst':
-            scaler = RobustScaler()
-
-        colnames = fea_data.columns
-        fea_data = scaler.fit_transform(fea_data)
-        fea_data = pd.DataFrame(fea_data, columns=colnames)
-        data = pd.concat([other_data, fea_data], axis=1)
 
 
     # Transform the target

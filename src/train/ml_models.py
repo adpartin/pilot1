@@ -172,6 +172,7 @@ class BaseMLModel():
 
 
 class KERAS_REGRESSOR(BaseMLModel):
+    model_name = 'nn_reg'
 
     """ Neural network regressor. """
     def __init__(self, input_dim, attn=False, dr_rate=0.2,
@@ -224,7 +225,90 @@ class KERAS_REGRESSOR(BaseMLModel):
         self.model = model
 
 
+    def dump_model(self, outdir='./'):
+        """ Dump trained model. """
+        # Serialize model to JSON                                                                                                                     
+        model_json = self.model.to_json()
+        modelpath = os.path.join(outdir, 'model.' + KERAS_REGRESSOR.model_name + '.json')
+        with open(modelpath, 'w') as mfile:
+            mfile.write(model_json)
+
+        # Serialize model to YAML                                                                                                                     
+        # model_yaml = self.model.to_yaml()
+        # modelpath = os.path.join(outdir, KERAS_REGRESSOR.model_name + '.model.yaml')
+        # with open(modelpath, 'w') as mfile:
+        #         mfile.write(model_yaml)
+
+        # serialize weights to HDF5                                                 
+        weightpath = os.path.join(outdir, 'weights.' + KERAS_REGRESSOR.model_name + '.h5')
+        self.model.save_weights(weightpath)
+        # print("Saved model to disk")
+
+
+
+class LGBM_REGRESSOR(BaseMLModel):
+    """ LightGBM regressor. """
+    ml_objective = 'regression'
+    model_name = 'lgb_reg'
+
+    def __init__(self, eval_metric=['l2', 'l1'], n_jobs=1, random_state=None,
+                 logger=None):
+        # TODO: use config file to set default parameters (like in candle)
+        self.eval_metric = eval_metric
+        self.n_jobs = n_jobs
+        self.random_state = random_state
+        self.logger = logger
         
+        # ----- lightgbm "sklearn API" - start
+        self.model = lgb.LGBMModel(objective=LGBM_REGRESSOR.ml_objective,
+                                   n_jobs=self.n_jobs,
+                                   random_state=self.random_state)
+        # ----- lightgbm "sklearn API" - end
+
+
+    # def fit(self, X, y, eval_set=None, **fit_params):
+    #     #self.eval_set = eval_set
+    #     #self.X = X
+    #     #self.y = y
+    #     #self.x_size = X.shape  # this is used to calc adjusteed r^2
+        
+    #     t0 = time.time()
+    #     self.model.fit(X, y,
+    #                    eval_metric=self.eval_metric,
+    #                    eval_set=eval_set,
+    #                    **fit_params)
+    #     self.train_runtime = time.time() - t0
+
+    #     if self.logger is not None:
+    #         self.logger.info('Train time: {:.2f} mins'.format(self.train_runtime/60))
+
+
+    def dump_model(self, outdir='./'):
+        # lgb_reg.save_model(os.path.join(run_outdir, 'lgb_'+ml_type+'_model.txt'))
+        joblib.dump(self.model, filename=os.path.join(outdir, 'model.' + LGBM_REGRESSOR.model_name + '.pkl'))
+        # lgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
+
+        
+    def plot_fi(self, max_num_features=20, title='LGBMRegressor', outdir=None):
+        lgb.plot_importance(booster=self.model, max_num_features=max_num_features, grid=True, title=title)
+        plt.tight_layout()
+
+        filename = LGBM_REGRESSOR.model_name+'_fi.png'
+        if outdir is None:
+            plt.savefig(filename, bbox_inches='tight')
+        else:
+            plt.savefig(os.path.join(outdir, filename), bbox_inches='tight')
+
+
+    # # Plot learning curves
+    # # TODO: note, plot_metric didn't accept 'mae' although it's alias for 'l1' 
+    # # TODO: plot_metric requires dict from train(), but train returns 'lightgbm.basic.Booster'??
+    # for m in eval_metric:
+    #     ax = lgb.plot_metric(booster=lgb_reg, metric=m, grid=True)
+    #     plt.savefig(os.path.join(run_outdir, model_name+'_learning_curve_'+m+'.png'))
+    
+
+
 class RF_REGRESSOR(BaseMLModel):
     """ Random forest regressor. """
     # Define class attributes (www.toptal.com/python/python-class-attributes-an-overly-thorough-guide)
@@ -273,100 +357,15 @@ class RF_REGRESSOR(BaseMLModel):
         pass # TODO
 
 
-    def save_model(self, outdir='./'):
-        joblib.dump(self.model, filename=os.path.join(outdir, RF_REGRESSOR.model_name+'_model.pkl'))
+    def dump_model(self, outdir='./'):
+        joblib.dump(self.model, filename=os.path.join(outdir, 'model.' + RF_REGRESSOR.model_name + '.pkl'))
         # model_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
-
-
-
-class LGBM_REGRESSOR(BaseMLModel):
-    """ Lightgbm regressor. """
-    ml_objective = 'regression'
-    model_name = 'lgb_reg'
-
-    def __init__(self, eval_metric=['l2', 'l1'], n_jobs=1, random_state=None,
-                 logger=None):
-        # TODO: use config file to set default parameters (like in candle)
-        self.eval_metric = eval_metric
-        self.n_jobs = n_jobs
-        self.random_state = random_state
-        self.logger = logger
-        
-        # ----- lightgbm "Training API" - start
-        # lgb_tr = lgb.Dataset(data=xtr, label=ytr, categorical_feature='auto')
-        # lgb_vl = lgb.Dataset(data=xvl, label=yvl, categorical_feature='auto')
-        # # https://lightgbm.readthedocs.io/en/latest/Parameters.html
-        # params = {'task': 'train', # default='train'
-        #         'objective': ml_objective, # default='regression' which alias for 'rmse' and 'mse' (but these are different??)
-        #         'boosting': 'gbdt', # default='gbdt'
-        #         'num_iterations': 100, # default=100 (num of boosting iterations)
-        #         'learning_rate': 0.1, # default=0.1
-        #         'num_leaves': 31, # default=31 (num of leaves in 1 tree)
-        #         'seed': SEED,
-        #         'num_threads': n_jobs, # default=0 (set to the num of real CPU cores)
-        #         'device_type': 'cpu', # default='cpu'
-        #         'metric': eval_metric # metric(s) to be evaluated on the evaluation set(s)
-        #         }
-        # t0 = time.time()
-        # lgb_reg = lgb.train(params=params, train_set=lgb_tr, valid_sets=lgb_vl, verbose_eval=False)
-        # # lgb_cv = lgb.train(params=params, train_set=lgb_tr, nfolds=5)
-        # train_runtime['lgb_reg'] = time.time() - t0
-        # logger.info('Runtime: {:.2f} mins'.format(train_runtime['lgb_reg']/60))
-        # ----- lightgbm "Training API" - end 
-
-        # ----- lightgbm "sklearn API" - start
-        self.model = lgb.LGBMModel(objective=LGBM_REGRESSOR.ml_objective,
-                                   n_jobs=self.n_jobs,
-                                   random_state=self.random_state)
-        # ----- lightgbm "sklearn API" - end
-
-
-    # def fit(self, X, y, eval_set=None, **fit_params):
-    #     #self.eval_set = eval_set
-    #     #self.X = X
-    #     #self.y = y
-    #     #self.x_size = X.shape  # this is used to calc adjusteed r^2
-        
-    #     t0 = time.time()
-    #     self.model.fit(X, y,
-    #                    eval_metric=self.eval_metric,
-    #                    eval_set=eval_set,
-    #                    **fit_params)
-    #     self.train_runtime = time.time() - t0
-
-    #     if self.logger is not None:
-    #         self.logger.info('Train time: {:.2f} mins'.format(self.train_runtime/60))
-
-
-    def plot_fi(self, max_num_features=20, title='LGBMRegressor', outdir=None):
-        lgb.plot_importance(booster=self.model, max_num_features=max_num_features, grid=True, title=title)
-        plt.tight_layout()
-
-        filename = LGBM_REGRESSOR.model_name+'_fi.png'
-        if outdir is None:
-            plt.savefig(filename, bbox_inches='tight')
-        else:
-            plt.savefig(os.path.join(outdir, filename), bbox_inches='tight')
-
-
-    def save_model(self, outdir='./'):
-        # lgb_reg.save_model(os.path.join(run_outdir, 'lgb_'+ml_type+'_model.txt'))
-        joblib.dump(self.model, filename=os.path.join(outdir, LGBM_REGRESSOR.model_name+'_model.pkl'))
-        # lgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
-
-
-    # # Plot learning curves
-    # # TODO: note, plot_metric didn't accept 'mae' although it's alias for 'l1' 
-    # # TODO: plot_metric requires dict from train(), but train returns 'lightgbm.basic.Booster'??
-    # for m in eval_metric:
-    #     ax = lgb.plot_metric(booster=lgb_reg, metric=m, grid=True)
-    #     plt.savefig(os.path.join(run_outdir, model_name+'_learning_curve_'+m+'.png'))
 
 
 
 class LGBM_CLASSIFIER(BaseMLModel):
     # TODO: finish
-    """ Lightgbm classifier. """
+    """ LightGBM classifier. """
     ml_objective = 'binary'
     model_name = 'lgb_cls'
 

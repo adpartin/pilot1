@@ -54,6 +54,7 @@ import argparser
 import classlogger
 import lrn_curve
 import ml_models
+from cvrun import my_cross_validate
 from cvsplitter import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
 
 DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
@@ -125,7 +126,6 @@ def run(args):
     }
 
 
-
     # ========================================================================
     #       Logger
     # ========================================================================
@@ -141,7 +141,6 @@ def run(args):
     utils.dump_args(args, outdir=run_outdir)
 
 
-
     # ========================================================================
     #       Load data and pre-proc
     # ========================================================================
@@ -149,22 +148,26 @@ def run(args):
     data, te_data = utils_tidy.load_data(datapath=datapath, fea_prfx_dict=fea_prfx_dict,
                                          args=args, logger=lg.logger, random_state=SEED)
 
-    # Plots
-    utils.boxplot_rsp_per_drug(df=data, target_name=target_name,
-        path=os.path.join(run_outdir, f'{target_name}_per_drug_boxplot.png'))
-    utils.plot_hist(x=data[target_name], var_name=target_name,
-        path=os.path.join(run_outdir, target_name+'_hist.png'))
-    utils.plot_qq(x=data[target_name], var_name=target_name,
-        path=os.path.join(run_outdir, target_name+'_qqplot.png'))
-    utils.plot_hist_drugs(x=data['DRUG'], path=os.path.join(run_outdir, 'drugs_hist.png'))
 
+    # ========================================================================
+    #       Save plots
+    # ========================================================================
+    figpath = os.path.join(run_outdir, 'figs')
+    os.makedirs(figpath, exist_ok=True)
+
+    utils.boxplot_rsp_per_drug(df=data, target_name=target_name,
+        path=os.path.join(figpath, f'{target_name}_per_drug_boxplot.png'))
+    utils.plot_hist(x=data[target_name], var_name=target_name,
+        path=os.path.join(figpath, target_name+'_hist.png'))
+    utils.plot_qq(x=data[target_name], var_name=target_name,
+        path=os.path.join(figpath, target_name+'_qqplot.png'))
+    utils.plot_hist_drugs(x=data['DRUG'], path=os.path.join(figpath, 'drugs_hist.png'))
 
 
     # ========================================================================
-    #       TODO: outlier removal
+    #       TODO: outlier removal (move this to data preparation step)
     # ========================================================================
     pass
-
 
 
     # ========================================================================
@@ -172,7 +175,6 @@ def run(args):
     # ========================================================================
     data = utils_tidy.extract_subset_features(data=data, feature_list=feature_list, fea_prfx_dict=fea_prfx_dict)
     # data = utils_tidy.impute_values(data=data, fea_prfx_dict=fea_prfx_dict, logger=lg.logger)
-
 
 
     # ========================================================================
@@ -210,29 +212,33 @@ def run(args):
             groups = None
 
 
+    # ========================================================================
+    #       ML Model
+    # ========================================================================
+    # ML model params
+    if model_name == 'lgb_reg':
+        init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
+        fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
+    elif model_name == 'nn_reg':
+        xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+        init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
+        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
+
 
     # ========================================================================
     #       CV training
     # ========================================================================
     lg.logger.info('\n{}'.format('='*50))
-    lg.logger.info('CV training ...')
+    lg.logger.info(f'CV training ... {train_sources}')
     lg.logger.info('='*50)
 
     # Get data
     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
 
-    # ML model params
-    if model_name == 'lgb_reg':
-        init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-        fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
-    elif model_name == 'nn_reg':
-        init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
-
 
     # # -----------------
-    # # sklearn CV method
+    # # sklearn CV method - (doesn't work with keras models)
     # # ----------------- 
     # # Define ML model
     # model = ml_models.get_model(model_name=model_name, init_params=init_prms)  
@@ -258,9 +264,8 @@ def run(args):
 
 
     # ------------
-    # My CV method
+    # My CV method - (works with keras models)
     # ------------
-    from cvrun import my_cross_validate
     t0 = time.time()
     cv_scores, best_model = my_cross_validate(
         X=xdata, Y=ydata,
@@ -269,7 +274,6 @@ def run(args):
         fit_params=fit_prms,
         init_params=init_prms,
         args=args,
-        metrics=metrics,
         cv=cv,
         groups=groups,
         n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
@@ -301,14 +305,6 @@ def run(args):
         # wgt = len(a) / (2 * np.bincount(a))
         # sample_weight = np.array([wgt[0] if v < 0.5 else wgt[1] for v in a])
 
-        # ML model params
-        if model_name == 'lgb_reg':
-            init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-            fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
-        elif model_name == 'nn_reg':
-            init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-            fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
-
         # Define ML model
         model_final = ml_models.get_model(model_name=model_name, init_params=init_prms)   
 
@@ -323,6 +319,10 @@ def run(args):
     else:
         model_final = best_model
 
+    # Dump model
+    model_final.dump_model(outdir=run_outdir)
+
+
 
     # ========================================================================
     #       Infer
@@ -331,38 +331,37 @@ def run(args):
     lg.logger.info(f'Inference ... {test_sources}')
     lg.logger.info('='*50)
 
-    csv_scores = []  # cross-study-validation scores
-    for i, src in enumerate(test_sources):
-        lg.logger.info(f'\nTest source {i+1}:  _____ {src} _____')
+    csv = []  # cross-study-validation scores
+    for i, te_src in enumerate(test_sources):
+        lg.logger.info(f'\nTest source {i+1}:  _____ {te_src} _____')
         t0 = time.time()
 
-        if train_sources == [src]:
+        if train_sources == [te_src]:
             lg.logger.info("That's the training set (so no preds).")
             continue
 
-        te_src_data = te_data[te_data['SOURCE'].isin([src])].reset_index(drop=True)
+        te_src_data = te_data[te_data['SOURCE'].isin([te_src])].reset_index(drop=True)
         lg.logger.info(f'src_data.shape {te_src_data.shape}')
         if te_src_data.shape[0] == 0:
-            continue
+            continue  # continue if there is no data for this source
 
         # Prepare test data for predictions
-        # te_src_data = utils_tidy.impute_values(data=te_src_data, fea_prfx_dict=fea_prfx_dict, logger=lg.logger)
         xte, _ = utils_tidy.split_features_and_other_cols(te_src_data, fea_prfx_dict=fea_prfx_dict)
         yte = utils_tidy.extract_target(data=te_src_data, target_name=target_name)
 
         # Plot dist of response
         utils.plot_hist(x=te_src_data[target_name], var_name=target_name,
-                        path=os.path.join(run_outdir, target_name + '_hist_' + src + '.png'))
+                        path=os.path.join(figpath, target_name + '_hist_' + te_src + '.png'))
 
         # Print feature shapes
-        lg.logger.info(f'\nxte_'+src)
+        lg.logger.info(f'\nxte_' + te_src)
         utils_tidy.print_feature_shapes(df=xte, logger=lg.logger)
 
         # Calc and save scores
         #scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
         y_preds, y_true = utils.calc_preds(estimator=model_final.model, xdata=xte, ydata=yte, mltype=mltype)
-        scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
-        csv_scores.append( pd.DataFrame([scores], index=[src]).T )
+        scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype)
+        csv.append( pd.DataFrame([scores], index=[te_src]).T )
         
         # Dump preds --> TODO: error when use keras
         # preds_fname = 'preds_' + src + '_' + model_name + '.csv'
@@ -372,8 +371,8 @@ def run(args):
         lg.logger.info('\nRuntime: {:.3f}'.format((time.time()-t0)/60))
 
     # Combine test set preds
-    if len(csv_scores) > 0:
-        csv_scores = pd.concat(csv_scores, axis=1)
+    if len(csv) > 0:
+        csv = pd.concat(csv, axis=1)
 
     # (New) Adjust cv_scores in order to combine with test set preds
     # (take the cv score for val set)
@@ -381,20 +380,21 @@ def run(args):
     cv_scores[train_sources_name] = cv_scores.iloc[:, -cv_folds:].mean(axis=1)
     cv_scores = cv_scores[['metric', train_sources_name]]
     cv_scores = cv_scores.set_index('metric')
+    cv_scores.index.name = None
 
     # Combine scores from val set cross-validation and test set
-    csv_scores_all = pd.concat([cv_scores, csv_scores], axis=1)
+    csv_all = pd.concat([cv_scores, csv], axis=1)
+    csv_all.insert(loc=0, column='train_src', value=train_sources_name)
+    csv_all = csv_all.reset_index().rename(columns={'index': 'metric'})
+    csv_all = csv_all.round(decimals=3)
 
-    csv_scores_all = csv_scores_all.round(decimals=3)
-    csv_scores_all.insert(loc=0, column='train_src', value=train_sources_name)
-    csv_scores_all = csv_scores_all.reset_index().rename(columns={'index': 'metric'})
-    lg.logger.info('\ncsv_scores\n{}'.format(csv_scores_all))
-    csv_scores_all.to_csv(os.path.join(run_outdir, 'csv_scores_' + train_sources_name + '.csv'), index=False)
+    lg.logger.info('\ncsv_scores\n{}'.format(csv_all))
+    csv_all.to_csv(os.path.join(run_outdir, 'csv_scores_' + train_sources_name + '.csv'), index=False)
 
     # Kill logger
     lg.kill_logger()
     del data, xdata, ydata, model_final
-    return csv_scores_all
+    return csv_all
 
 
 def main(args):
@@ -402,7 +402,6 @@ def main(args):
     args = argparser.get_args(args=args, config_fname=config_fname)
     pprint(vars(args))
     args = vars(args)
-    #if 'outdir' not in args:
     if args['outdir'] is None:
         args['outdir'] = OUTDIR
     csv_scores_all = run(args)
