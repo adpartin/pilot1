@@ -80,7 +80,7 @@ def main(args):
 
     # Combine csv scores from all runs
     df = pd.concat(dfs, axis=0, sort=False)
-    df.to_csv(os.path.jin(csv_outdir, 'csv_all.csv'), index=False)
+    df.to_csv(os.path.join(csv_outdir, 'csv_all.csv'), index=False)
 
     # Create csv table for each available metric 
     for m in df['metric'].unique():
