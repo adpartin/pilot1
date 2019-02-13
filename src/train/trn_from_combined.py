@@ -216,14 +216,14 @@ def run(args):
     # ========================================================================
     #       ML Model
     # ========================================================================
-    # ML model params
-    if model_name == 'lgb_reg':
-        init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-        fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
-    elif model_name == 'nn_reg':
-        xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-        init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
+    # # ML model params
+    # if model_name == 'lgb_reg':
+    #     init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
+    #     fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
+    # elif model_name == 'nn_reg':
+    #     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+    #     init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
+    #     fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
 
 
     # ========================================================================
@@ -236,6 +236,15 @@ def run(args):
     # Get data
     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
+
+    # ML model params
+    if model_name == 'lgb_reg':
+        init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
+        fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
+    elif model_name == 'nn_reg':
+        xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+        init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
+        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
 
 
     # # -----------------
@@ -306,12 +315,21 @@ def run(args):
         # wgt = len(a) / (2 * np.bincount(a))
         # sample_weight = np.array([wgt[0] if v < 0.5 else wgt[1] for v in a])
 
+        # ML model params
+        if model_name == 'lgb_reg':
+            init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
+            fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
+        elif model_name == 'nn_reg':
+            xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
+            init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
+            fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': 0.1}
+
         # Define ML model
         model_final = ml_models.get_model(model_name=model_name, init_params=init_prms)   
 
         # Train
         t0 = time.time()
-        model_final.model.fit(xdata, ydata, **fit_prms)
+        model_final.model.fit(xdata, ydata, **fit_prms) # TODO: there is a problem here with fit_prms (it seems like it reuses them from my_cross_validate)
         lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
         # # Save model
