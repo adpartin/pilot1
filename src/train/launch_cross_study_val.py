@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 import trn_from_combined
+import classlogger
 
 file_path = os.path.dirname(os.path.realpath(__file__))
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
@@ -21,7 +22,7 @@ OUTDIR = os.path.join(file_path, '../../models/from_combined')
 
 def main(args):
 
-    t0 = time.time()
+    t0 = time.time()    
 
     # Create folder to store results
     t = datetime.datetime.now()
@@ -30,6 +31,10 @@ def main(args):
     dirname = 'cross_study_val~' + t
     csv_outdir = os.path.join(OUTDIR, dirname)
     os.makedirs(csv_outdir, exist_ok=True)
+
+    # Create logger
+    logfilename = os.path.join(csv_outdir, 'csv_logfile.log')
+    # lg = classlogger.Logger(logfilename=logfilename)
 
     # Full set
     cross_study_sets = [
@@ -68,6 +73,7 @@ def main(args):
 
 
     # Train using specific data source and predict on others
+    # lg.logger.info('Start interrate over training sources ...')
     dfs = []
     for run_id in range(len(cross_study_sets)):
         print('{} Run {} {}'.format('-'*40, run_id+1, '-'*40))
@@ -82,7 +88,8 @@ def main(args):
     df = pd.concat(dfs, axis=0, sort=False)
     df.to_csv(os.path.join(csv_outdir, 'csv_all.csv'), index=False)
 
-    # Create csv table for each available metric 
+    # Create csv table for each available metric
+    # lg.logger.info('Create csv table ...')
     for m in df['metric'].unique():
         csv = df[df['metric']==m].reset_index(drop=True)
         csv.drop(columns=['metric'], inplace=True)
@@ -98,7 +105,7 @@ def main(args):
         csv = csv.round(3)
         csv.to_csv(os.path.join(csv_outdir, f'csv_{m}.csv'), index=False)
 
-    print('\nTotal runtime {:.3f}\n'.format((time.time()-t0)/60))
+    # lg.logger.info('\nTotal runtime {:.3f}\n'.format((time.time()-t0)/60))
 
 
 main(sys.argv[1:])
