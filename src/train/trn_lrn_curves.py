@@ -136,6 +136,10 @@ def run(args):
     # Dump args to file
     utils.dump_args(args, outdir=run_outdir)
 
+    # Create outdir for figs
+    # figpath = os.path.join(run_outdir, 'figs')
+    # os.makedirs(figpath, exist_ok=True)
+
 
     # ========================================================================
     #       Load data and pre-proc
@@ -232,6 +236,11 @@ def run(args):
 
     # Dump results
     lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores.csv'), index=False) 
+
+    # Save network figure
+    if 'nn' in model_name:
+        from keras.utils import plot_model
+        plot_model(model_final.model, to_file=os.path.join(figpath, 'nn_model.png'))
 
 
     # -----------------------------------------------

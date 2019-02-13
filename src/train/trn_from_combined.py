@@ -140,6 +140,10 @@ def run(args):
     # Dump args to file
     utils.dump_args(args, outdir=run_outdir)
 
+    # Create outdir for figs
+    figpath = os.path.join(run_outdir, 'figs')
+    os.makedirs(figpath, exist_ok=True)
+
 
     # ========================================================================
     #       Load data and pre-proc
@@ -152,9 +156,6 @@ def run(args):
     # ========================================================================
     #       Save plots
     # ========================================================================
-    figpath = os.path.join(run_outdir, 'figs')
-    os.makedirs(figpath, exist_ok=True)
-
     utils.boxplot_rsp_per_drug(df=data, target_name=target_name,
         path=os.path.join(figpath, f'{target_name}_per_drug_boxplot.png'))
     utils.plot_hist(x=data[target_name], var_name=target_name,
@@ -321,6 +322,11 @@ def run(args):
 
     # Dump model
     model_final.dump_model(outdir=run_outdir)
+
+    # Save network figure
+    if 'nn' in model_name:
+        from keras.utils import plot_model
+        plot_model(model_final.model, to_file=os.path.join(figpath, 'nn_model.png'))
 
 
 
