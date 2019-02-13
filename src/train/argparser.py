@@ -122,7 +122,7 @@ def get_cli_args(args=None):
         help='ML model to use for training.')
 
     # Select CV scheme
-    parser.add_argument('-cvs', '--cv_method',
+    parser.add_argument('-cvm', '--cv_method',
         # default="simple",
         choices=['simple', 'group'],
         help='Cross-val split method.')

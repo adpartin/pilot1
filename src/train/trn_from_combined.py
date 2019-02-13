@@ -281,7 +281,7 @@ def run(args):
     lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
     
     # Dump results
-    cv_scores = cv_scores.round(3)
+    # cv_scores = cv_scores.round(3)
     cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
     lg.logger.info(f'cv_scores\n{cv_scores}')
 
