@@ -392,7 +392,7 @@ def run(args):
     csv_all = pd.concat([cv_scores, csv], axis=1)
     csv_all.insert(loc=0, column='train_src', value=train_sources_name)
     csv_all = csv_all.reset_index().rename(columns={'index': 'metric'})
-    csv_all = csv_all.round(decimals=3)
+    # csv_all = csv_all.round(decimals=3)
 
     lg.logger.info('\ncsv_scores\n{}'.format(csv_all))
     csv_all.to_csv(os.path.join(run_outdir, 'csv_scores_' + train_sources_name + '.csv'), index=False)
