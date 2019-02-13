@@ -42,6 +42,10 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
     data.columns = [regex.sub('_', c) if any(x in str(c) for x in set(('[', ']', '<'))) else c for c in data.columns.values]
 
 
+    # Shuffle data
+    data = data.sample(frac=1.0, axis=0, random_state=random_state).reset_index(drop=True)
+
+
     if args['tissue_type']:
         data = data[data[''].isin([args['tissue_type']])].reset_index(drop=True)
 
@@ -64,22 +68,6 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
     data = data[~data[args['target_name']].isna()]
 
 
-    # Scale features
-    if args['scaler'] is not None:
-        fea_data, other_data = split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-        if args['scaler'] == 'stnd':
-            scaler = StandardScaler()
-        elif args['scaler'] == 'minmax':
-            scaler = MinMaxScaler()
-        elif args['scaler'] == 'rbst':
-            scaler = RobustScaler()
-
-        colnames = fea_data.columns
-        fea_data = scaler.fit_transform(fea_data)
-        fea_data = pd.DataFrame(fea_data, columns=colnames)
-        data = pd.concat([other_data, fea_data], axis=1)
-
-
     # Extract test sources
     if logger:
         logger.info('\nExtract test sources ... {}'.format(args['test_sources']))
@@ -99,20 +87,41 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
     # Extract train sources
     if logger:
         logger.info('\nExtract train sources ... {}'.format(args['train_sources']))
-    data = data[data['SOURCE'].isin(args['train_sources'])].reset_index(drop=True)
+    tr_data = data[data['SOURCE'].isin(args['train_sources'])].reset_index(drop=True)
     if logger:
-        logger.info(f'data.shape {data.shape}')
-        logger.info('data memory usage: {:.3f} GB'.format(sys.getsizeof(data)/1e9))
-        logger.info(data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+        logger.info(f'tr_data.shape {tr_data.shape}')
+        logger.info('tr_data memory usage: {:.3f} GB'.format(sys.getsizeof(tr_data)/1e9))
+        logger.info(tr_data.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
+
+
+    # Scale features
+    if args['scaler'] is not None:
+        if args['scaler'] == 'stnd':
+            scaler = StandardScaler()
+        elif args['scaler'] == 'minmax':
+            scaler = MinMaxScaler()
+        elif args['scaler'] == 'rbst':
+            scaler = RobustScaler()
+
+        # Scale train data
+        fea_data, other_data = split_features_and_other_cols(tr_data, fea_prfx_dict=fea_prfx_dict)
+        colnames = fea_data.columns
+        fea_data = scaler.fit_transform(fea_data)
+        fea_data = pd.DataFrame(fea_data, columns=colnames)
+        tr_data = pd.concat([other_data, fea_data], axis=1)
+
+        # Scale test data
+        fea_data, other_data = split_features_and_other_cols(te_data, fea_prfx_dict=fea_prfx_dict)
+        colnames = fea_data.columns
+        fea_data = scaler.transform(fea_data)
+        fea_data = pd.DataFrame(fea_data, columns=colnames)
+        te_data = pd.concat([other_data, fea_data], axis=1)
+
 
 
     # Assign type to categoricals
     # cat_cols = data.select_dtypes(include='object').columns.tolist()
     # data[cat_cols] = data[cat_cols].astype('category', ordered=False)
-
-
-    # Shuffle data
-    data = data.sample(frac=1.0, axis=0, random_state=random_state).reset_index(drop=True)
 
 
     # Filter out AUC>1
@@ -122,49 +131,49 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
     # print('data.shape', data.shape)
 
 
-    # Transform the target
-    if args['target_transform']:
-        y = data[args['target_name']].copy()
-        # y = np.log1p(ydata); plot_hist(x=y, var_name=target_name+'_log1p')
-        # # y = np.log(ydata+1); plot_hist(x=y, var_name=target_name+'_log+1')
-        # y = np.log10(ydata+1); plot_hist(x=y, var_name=target_name+'_log10')
-        # y = np.log2(ydata+1); plot_hist(x=y, var_name=target_name+'_log2')
-        # y = ydata**2; plot_hist(x=ydata, var_name=target_name+'_x^2')
-        y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
-        data[args['target_name']] = y
-        # ydata = pd.DataFrame(y)
+    # # Transform the target
+    # if args['target_transform']:
+    #     y = data[args['target_name']].copy()
+    #     # y = np.log1p(ydata); plot_hist(x=y, var_name=target_name+'_log1p')
+    #     # # y = np.log(ydata+1); plot_hist(x=y, var_name=target_name+'_log+1')
+    #     # y = np.log10(ydata+1); plot_hist(x=y, var_name=target_name+'_log10')
+    #     # y = np.log2(ydata+1); plot_hist(x=y, var_name=target_name+'_log2')
+    #     # y = ydata**2; plot_hist(x=ydata, var_name=target_name+'_x^2')
+    #     y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
+    #     data[args['target_name']] = y
+    #     # ydata = pd.DataFrame(y)
 
-        y = te_data[args['target_name']].copy()
-        y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
-        te_data[args['target_name']] = y
-
-
-    if 'dlb' in args['other_features']:
-        if logger:
-            logger.info('\nAdd drug labels to features ...')
-        # print(data['DRUG'].value_counts())
-
-        # http://queirozf.com/entries/one-hot-encoding-a-feature-on-a-pandas-dataframe-an-example
-        # One-hot encoder
-        dlb = pd.get_dummies(data=data[['DRUG']], prefix=fea_prfx_dict['dlb'],
-                            dummy_na=False).reset_index(drop=True)
-
-        # Label encoder
-        # dlb = data[['DRUG']].astype('category', ordered=False).reset_index(drop=True)
-        # print(dlb.dtype)
-
-        # Concat drug labels and other features
-        data = pd.concat([dlb, data], axis=1).reset_index(drop=True)
-        if logger:
-            logger.info(f'dlb.shape {dlb.shape}')
-            logger.info(f'data.shape {data.shape}')
+    #     y = te_data[args['target_name']].copy()
+    #     y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
+    #     te_data[args['target_name']] = y
 
 
-    if 'rna_clusters' in args['other_features']:
-        # TODO
-        pass
+    # if 'dlb' in args['other_features']:
+    #     if logger:
+    #         logger.info('\nAdd drug labels to features ...')
+    #     # print(data['DRUG'].value_counts())
 
-    return data, te_data
+    #     # http://queirozf.com/entries/one-hot-encoding-a-feature-on-a-pandas-dataframe-an-example
+    #     # One-hot encoder
+    #     dlb = pd.get_dummies(data=data[['DRUG']], prefix=fea_prfx_dict['dlb'],
+    #                         dummy_na=False).reset_index(drop=True)
+
+    #     # Label encoder
+    #     # dlb = data[['DRUG']].astype('category', ordered=False).reset_index(drop=True)
+    #     # print(dlb.dtype)
+
+    #     # Concat drug labels and other features
+    #     data = pd.concat([dlb, data], axis=1).reset_index(drop=True)
+    #     if logger:
+    #         logger.info(f'dlb.shape {dlb.shape}')
+    #         logger.info(f'data.shape {data.shape}')
+
+
+    # if 'rna_clusters' in args['other_features']:
+    #     # TODO
+    #     pass
+
+    return tr_data, te_data
 
 
 def split_features_and_other_cols(data, fea_prfx_dict):
