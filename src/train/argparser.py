@@ -20,7 +20,7 @@ dflt_args = {
     'model_name': 'lgb_reg',
     'cv_method': 'simple',
     'cv_folds': 1,
-    'retrain': True,
+    'retrain': False,
     'n_jobs': 4,
     'outdir': None,
 

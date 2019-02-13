@@ -32,31 +32,31 @@ def main(args):
     os.makedirs(csv_outdir, exist_ok=True)
 
     # Full set
-    # cross_study_sets = [
-    #     {'tr_src': ['gcsi'],
-    #      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
-
-    #     {'tr_src': ['ccle'],
-    #      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
-
-    #     {'tr_src': ['gdsc'],
-    #      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
-
-    #     {'tr_src': ['ctrp'],
-    #      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
-
-    #      {'tr_src': ['nci60'],
-    #      'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']}
-    # ]
-
-    # Smaller set
     cross_study_sets = [
         {'tr_src': ['gcsi'],
-         'te_src': ['ccle', 'gcsi', 'gdsc']},
+         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
 
         {'tr_src': ['ccle'],
-         'te_src': ['ccle', 'gcsi', 'gdsc']},
+         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
+
+        {'tr_src': ['gdsc'],
+         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
+
+        {'tr_src': ['ctrp'],
+         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
+
+         {'tr_src': ['nci60'],
+         'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']}
     ]
+
+    # Smaller set
+    # cross_study_sets = [
+    #     {'tr_src': ['gcsi'],
+    #      'te_src': ['ccle', 'gcsi', 'gdsc']},
+
+    #     {'tr_src': ['ccle'],
+    #      'te_src': ['ccle', 'gcsi', 'gdsc']},
+    # ]
 
 
     # Single run
