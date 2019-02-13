@@ -196,10 +196,10 @@ def my_learning_curve(X, Y,
 
                 # Create output dir
                 out_nn_model = os.path.join(outdir, 'cv'+str(fold_id+1) + '_sz'+str(tr_sz))
+                os.makedirs(out_nn_model, exist_ok=False)
                 plot_model(estimator.model, to_file=os.path.join(out_nn_model, 'model.png'))
 
                 # Add keras callbacks
-                os.makedirs(out_nn_model, exist_ok=False)
                 checkpointer = ModelCheckpoint(filepath=os.path.join(out_nn_model, 'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
                 csv_logger = CSVLogger(filename=os.path.join(out_nn_model, 'training.log'))
                 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',

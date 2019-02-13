@@ -113,10 +113,10 @@ def my_cross_validate(X, Y,
 
             # Create output dir
             out_nn_model = os.path.join(outdir, 'cv'+str(fold_id+1))
+            os.makedirs(out_nn_model, exist_ok=False)
             plot_model(estimator.model, to_file=os.path.join(out_nn_model, 'model.png'))
             
             # Add keras callbacks
-            os.makedirs(out_nn_model, exist_ok=False)
             checkpointer = ModelCheckpoint(filepath=os.path.join(out_nn_model, 'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
             csv_logger = CSVLogger(filename=os.path.join(out_nn_model, 'training.log'))
             reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
@@ -205,118 +205,118 @@ def scores_to_df(scores_all):
 
 
 
-def my_cv_run(data, target_name,
-              model, # model_name,
-              fea_prfx_dict,
-              cv_method, cv_folds, logger,
-              verbose=False, random_state=None, outdir=None):
-    """ Run cross-validation.
-    Args:
-        data : tidy dataset
-        model_name : model name available ml_models.py
-        cv_method : cv splitting method
-        cv_folds : number cv folds
-        logger : 
-    """
-    data = data.copy().reset_index(drop=True)
+# def my_cv_run(data, target_name,
+#               model, # model_name,
+#               fea_prfx_dict,
+#               cv_method, cv_folds, logger,
+#               verbose=False, random_state=None, outdir=None):
+#     """ Run cross-validation.
+#     Args:
+#         data : tidy dataset
+#         model_name : model name available ml_models.py
+#         cv_method : cv splitting method
+#         cv_folds : number cv folds
+#         logger : 
+#     """
+#     data = data.copy().reset_index(drop=True)
 
-    # Split tr/vl data
-    if cv_method=='simple':
-        splitter = SimpleSplit(n_splits=cv_folds, random_state=random_state)
-        splitter.split(X=data)
-    elif cv_method=='group':
-        splitter = GroupSplit(n_splits=cv_folds, random_state=random_state)
-        splitter.split(X=data, groups=data['CELL'])
-    elif cv_method=='stratify':
-        pass
-    else:
-        raise ValueError(f'This cv_method ({cv_method}) is not supported.')
+#     # Split tr/vl data
+#     if cv_method=='simple':
+#         splitter = SimpleSplit(n_splits=cv_folds, random_state=random_state)
+#         splitter.split(X=data)
+#     elif cv_method=='group':
+#         splitter = GroupSplit(n_splits=cv_folds, random_state=random_state)
+#         splitter.split(X=data, groups=data['CELL'])
+#     elif cv_method=='stratify':
+#         pass
+#     else:
+#         raise ValueError(f'This cv_method ({cv_method}) is not supported.')
 
-    # Model
-    # model, _ = init_model(model_name, logger)
+#     # Model
+#     # model, _ = init_model(model_name, logger)
 
-    # Run CV training
-    # if verbose:
-    #     logger.info(f'CV split method: {cv_method}')
-    #     logger.info(f'ML model: {model_name}')
-    tr_scores = []
-    vl_scores = []
-    for i in range(splitter.n_splits):
-        estimator = sklearn.base.clone(model)
+#     # Run CV training
+#     # if verbose:
+#     #     logger.info(f'CV split method: {cv_method}')
+#     #     logger.info(f'ML model: {model_name}')
+#     tr_scores = []
+#     vl_scores = []
+#     for i in range(splitter.n_splits):
+#         estimator = sklearn.base.clone(model)
 
-        if verbose:
-            logger.info(f'Fold {i+1}/{splitter.n_splits}')
-        tr_idx = splitter.tr_cv_idx[i]
-        vl_idx = splitter.vl_cv_idx[i]
-        tr_data = data.iloc[tr_idx, :]
-        vl_data = data.iloc[vl_idx, :]
+#         if verbose:
+#             logger.info(f'Fold {i+1}/{splitter.n_splits}')
+#         tr_idx = splitter.tr_cv_idx[i]
+#         vl_idx = splitter.vl_cv_idx[i]
+#         tr_data = data.iloc[tr_idx, :]
+#         vl_data = data.iloc[vl_idx, :]
 
-        # Confirm that group splits are correct ...
-        # tr_cells = set(tr_data['CELL'].values)
-        # vl_cells = set(vl_data['CELL'].values)
-        # print('total cell intersections btw tr and vl: ', len(tr_cells.intersection(vl_cells)))
-        # print('a few intersections : ', list(tr_cells.intersection(vl_cells))[:3])
+#         # Confirm that group splits are correct ...
+#         # tr_cells = set(tr_data['CELL'].values)
+#         # vl_cells = set(vl_data['CELL'].values)
+#         # print('total cell intersections btw tr and vl: ', len(tr_cells.intersection(vl_cells)))
+#         # print('a few intersections : ', list(tr_cells.intersection(vl_cells))[:3])
 
-        xtr, _ = utils_tidy.split_features_and_other_cols(tr_data, fea_prfx_dict=fea_prfx_dict)
-        xvl, _ = utils_tidy.split_features_and_other_cols(vl_data, fea_prfx_dict=fea_prfx_dict)
+#         xtr, _ = utils_tidy.split_features_and_other_cols(tr_data, fea_prfx_dict=fea_prfx_dict)
+#         xvl, _ = utils_tidy.split_features_and_other_cols(vl_data, fea_prfx_dict=fea_prfx_dict)
 
-        # utils_tidy.print_feature_shapes(df=xtr, logger=logger)
-        # utils_tidy.print_feature_shapes(df=xvl, logger=logger)
+#         # utils_tidy.print_feature_shapes(df=xtr, logger=logger)
+#         # utils_tidy.print_feature_shapes(df=xvl, logger=logger)
 
-        ytr = utils_tidy.extract_target(data=tr_data, target_name=target_name)
-        yvl = utils_tidy.extract_target(data=vl_data, target_name=target_name)
+#         ytr = utils_tidy.extract_target(data=tr_data, target_name=target_name)
+#         yvl = utils_tidy.extract_target(data=vl_data, target_name=target_name)
 
-        if outdir:
-            title = f'{target_name}; split {str(i)}'
-            plot_ytr_yvl_dist(ytr, yvl, title=title, outpath=os.path.join(outdir, title+'.png'))
+#         if outdir:
+#             title = f'{target_name}; split {str(i)}'
+#             plot_ytr_yvl_dist(ytr, yvl, title=title, outpath=os.path.join(outdir, title+'.png'))
 
-        # Train
-        #model, _ = init_model(model_name, logger)
-        #model.fit(xtr, ytr, eval_set=[(xtr, ytr), (xvl, yvl)])
-        estimator.fit(xtr, ytr, eval_set=[(xtr, ytr), (xvl, yvl)], verbose=False)
+#         # Train
+#         #model, _ = init_model(model_name, logger)
+#         #model.fit(xtr, ytr, eval_set=[(xtr, ytr), (xvl, yvl)])
+#         estimator.fit(xtr, ytr, eval_set=[(xtr, ytr), (xvl, yvl)], verbose=False)
 
-        # Combine scores from all cv folds
-        ##tr_scores.append(model.calc_scores(xdata=xtr, ydata=ytr, to_print=False))
-        ##vl_scores.append(model.calc_scores(xdata=xvl, ydata=yvl, to_print=False))
-        # tr_scores.append(utils.calc_scores(model=estimator, xdata=xtr, ydata=ytr))
-        # vl_scores.append(utils.calc_scores(model=estimator, xdata=xvl, ydata=yvl))
-        tr_scores.append(calc_scores(model=estimator, xdata=xtr, ydata=ytr))
-        vl_scores.append(calc_scores(model=estimator, xdata=xvl, ydata=yvl))
+#         # Combine scores from all cv folds
+#         ##tr_scores.append(model.calc_scores(xdata=xtr, ydata=ytr, to_print=False))
+#         ##vl_scores.append(model.calc_scores(xdata=xvl, ydata=yvl, to_print=False))
+#         # tr_scores.append(utils.calc_scores(model=estimator, xdata=xtr, ydata=ytr))
+#         # vl_scores.append(utils.calc_scores(model=estimator, xdata=xvl, ydata=yvl))
+#         tr_scores.append(calc_scores(model=estimator, xdata=xtr, ydata=ytr))
+#         vl_scores.append(calc_scores(model=estimator, xdata=xvl, ydata=yvl))
 
-    # Summarize cv scores
-    tr_cv_scores = utils.cv_scores_to_df(tr_scores, calc_stats=True)
-    vl_cv_scores = utils.cv_scores_to_df(vl_scores, calc_stats=True)
-    # print('\ntr scores\n{}'.format(tr_cv_scores))
-    # print('\nvl scores\n{}'.format(vl_cv_scores))
+#     # Summarize cv scores
+#     tr_cv_scores = utils.cv_scores_to_df(tr_scores, calc_stats=True)
+#     vl_cv_scores = utils.cv_scores_to_df(vl_scores, calc_stats=True)
+#     # print('\ntr scores\n{}'.format(tr_cv_scores))
+#     # print('\nvl scores\n{}'.format(vl_cv_scores))
 
-    if outdir:
-        tr_cv_scores.to_csv(os.path.join(outdir, 'tr_cv_scores.csv'), index=False)
-        vl_cv_scores.to_csv(os.path.join(outdir, 'vl_cv_scores.csv'), index=False)
+#     if outdir:
+#         tr_cv_scores.to_csv(os.path.join(outdir, 'tr_cv_scores.csv'), index=False)
+#         vl_cv_scores.to_csv(os.path.join(outdir, 'vl_cv_scores.csv'), index=False)
 
-    return tr_cv_scores, vl_cv_scores
-
-
-def adj_r2_score(ydata, preds, x_size):
-    """ Calc adjusted r^2.
-    https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2
-    https://dziganto.github.io/data%20science/linear%20regression/machine%20learning/python/Linear-Regression-101-Metrics/
-    https://stats.stackexchange.com/questions/334004/can-r2-be-greater-than-1
-    """
-    r2 = sklearn.metrics.r2_score(ydata, preds)
-    adj_r2 = 1 - (1 - r2) * (x_size[0] - 1)/(x_size[0] - x_size[1] - 1)
-    return adj_r2
+#     return tr_cv_scores, vl_cv_scores
 
 
-def calc_scores(model, xdata, ydata):
-    """ Create dict of scores. """
-    # TODO: replace `if` with `try`
-    preds = model.predict(xdata)
-    scores = OrderedDict()
+# def adj_r2_score(ydata, preds, x_size):
+#     """ Calc adjusted r^2.
+#     https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2
+#     https://dziganto.github.io/data%20science/linear%20regression/machine%20learning/python/Linear-Regression-101-Metrics/
+#     https://stats.stackexchange.com/questions/334004/can-r2-be-greater-than-1
+#     """
+#     r2 = sklearn.metrics.r2_score(ydata, preds)
+#     adj_r2 = 1 - (1 - r2) * (x_size[0] - 1)/(x_size[0] - x_size[1] - 1)
+#     return adj_r2
 
-    scores['r2'] = sklearn.metrics.r2_score(ydata, preds)
-    #scores['adj_r2_score'] = self.__adj_r2_score(ydata, preds)
-    scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
-    scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
-    scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(ydata, preds)
 
-    return scores
+# def calc_scores(model, xdata, ydata):
+#     """ Create dict of scores. """
+#     # TODO: replace `if` with `try`
+#     preds = model.predict(xdata)
+#     scores = OrderedDict()
+
+#     scores['r2'] = sklearn.metrics.r2_score(ydata, preds)
+#     #scores['adj_r2_score'] = self.__adj_r2_score(ydata, preds)
+#     scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
+#     scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
+#     scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(ydata, preds)
+
+#     return scores
