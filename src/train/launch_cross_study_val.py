@@ -20,6 +20,25 @@ file_path = os.path.dirname(os.path.realpath(__file__))
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
 
 
+def create_csv(df, outdir='./'):
+    """ Creates CSV table for each available metric. """
+    # lg.logger.info('Create csv table ...')
+    for m in df['metric'].unique():
+        csv = df[df['metric']==m].reset_index(drop=True)
+        csv.drop(columns=['metric'], inplace=True)
+
+        # Sort rows and cols
+        tr_src = csv['train_src']
+        csv.drop(columns='train_src', inplace=True)
+        csv = csv[sorted(csv.columns)]
+        csv = pd.concat([tr_src, csv], axis=1, sort=False)
+        csv = csv.sort_values('train_src')
+
+        # save table
+        csv = csv.round(3)
+        csv.to_csv(os.path.join(outdir, f'csv_{m}.csv'), index=False)
+
+
 def main(args):
 
     t0 = time.time()    
@@ -77,35 +96,39 @@ def main(args):
     dfs = []
     for run_id in range(len(cross_study_sets)):
         print('{} Run {} {}'.format('-'*40, run_id+1, '-'*40))
-        csv_scores_all, prms = trn_from_combined.main(
+        csv_scores, prms = trn_from_combined.main(
             ['-tr', *cross_study_sets[run_id]['tr_src'],
              '-te', *cross_study_sets[run_id]['te_src'],
              '--outdir', csv_outdir,
              *args])
-        dfs.append(csv_scores_all)
+        dfs.append(csv_scores)
+
 
     # Combine csv scores from all runs
-    df = pd.concat(dfs, axis=0, sort=False)
-    df.to_csv(os.path.join(csv_outdir, 'csv_all.csv'), index=False)
+    csv_all = pd.concat(dfs, axis=0, sort=False)
+    csv_all.to_csv(os.path.join(csv_outdir, 'csv_all.csv'), index=False)
+
 
     # Create csv table for each available metric
-    # lg.logger.info('Create csv table ...')
-    for m in df['metric'].unique():
-        csv = df[df['metric']==m].reset_index(drop=True)
-        csv.drop(columns=['metric'], inplace=True)
+    create_csv(df=csv_all, outdir=csv_outdir)
 
-        # Sort rows and cols
-        tr_src = csv['train_src']
-        csv.drop(columns='train_src', inplace=True)
-        csv = csv[sorted(csv.columns)]
-        csv = pd.concat([tr_src, csv], axis=1, sort=False)
-        csv = csv.sort_values('train_src')
+    # for m in df['metric'].unique():
+    #     csv = df[df['metric']==m].reset_index(drop=True)
+    #     csv.drop(columns=['metric'], inplace=True)
 
-        # save table
-        csv = csv.round(3)
-        csv.to_csv(os.path.join(csv_outdir, f'csv_{m}.csv'), index=False)
+    #     # Sort rows and cols
+    #     tr_src = csv['train_src']
+    #     csv.drop(columns='train_src', inplace=True)
+    #     csv = csv[sorted(csv.columns)]
+    #     csv = pd.concat([tr_src, csv], axis=1, sort=False)
+    #     csv = csv.sort_values('train_src')
 
-    # lg.logger.info('\nTotal runtime {:.3f}\n'.format((time.time()-t0)/60))
+    #     # save table
+    #     csv = csv.round(3)
+    #     csv.to_csv(os.path.join(csv_outdir, f'csv_{m}.csv'), index=False)
+
+    # lg.logger.info('\nTotal CSV runtime {:.3f}\n'.format((time.time()-t0)/60))
+    print('\nTotal CSV runtime {:.3f}\n'.format((time.time()-t0)/60))
 
 
 main(sys.argv[1:])

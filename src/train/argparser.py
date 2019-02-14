@@ -172,7 +172,7 @@ def get_cli_args(args=None):
     parser.add_argument('--attn',
         type=str2bool,
         help='Whether to use attention layer to the neural network.')
-    parser.add_argument('--scaler',
+    parser.add_argument('-sc', '--scaler',
         # default=0.2,
         type=str,
         choices=['stnd', 'minmax', 'rbst'],

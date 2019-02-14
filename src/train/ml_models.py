@@ -172,9 +172,9 @@ class BaseMLModel():
 
 
 class KERAS_REGRESSOR(BaseMLModel):
+    """ Neural network regressor. """
     model_name = 'nn_reg'
 
-    """ Neural network regressor. """
     def __init__(self, input_dim, attn=False, dr_rate=0.2,
                  logger=None):
         # Load keras modules only if keras model is invoked
@@ -251,19 +251,15 @@ class LGBM_REGRESSOR(BaseMLModel):
     ml_objective = 'regression'
     model_name = 'lgb_reg'
 
-    def __init__(self, eval_metric=['l2', 'l1'], n_jobs=1, random_state=None,
+    def __init__(self, n_estimators=100, eval_metric=['l2', 'l1'], n_jobs=1, random_state=None,
                  logger=None):
         # TODO: use config file to set default parameters (like in candle)
-        self.eval_metric = eval_metric
-        self.n_jobs = n_jobs
-        self.random_state = random_state
-        self.logger = logger
         
-        # ----- lightgbm "sklearn API" - start
-        self.model = lgb.LGBMModel(objective=LGBM_REGRESSOR.ml_objective,
-                                   n_jobs=self.n_jobs,
-                                   random_state=self.random_state)
-        # ----- lightgbm "sklearn API" - end
+        self.model = lgb.LGBMModel(
+            objective=LGBM_REGRESSOR.ml_objective,
+            n_estimators=n_estimators,
+            n_jobs=n_jobs,
+            random_state=random_state)
 
 
     # def fit(self, X, y, eval_set=None, **fit_params):
@@ -293,14 +289,14 @@ class LGBM_REGRESSOR(BaseMLModel):
         lgb.plot_importance(booster=self.model, max_num_features=max_num_features, grid=True, title=title)
         plt.tight_layout()
 
-        filename = LGBM_REGRESSOR.model_name+'_fi.png'
+        filename = LGBM_REGRESSOR.model_name + '_fi.png'
         if outdir is None:
             plt.savefig(filename, bbox_inches='tight')
         else:
             plt.savefig(os.path.join(outdir, filename), bbox_inches='tight')
 
 
-    # # Plot learning curves
+    # # Plot training curves
     # # TODO: note, plot_metric didn't accept 'mae' although it's alias for 'l1' 
     # # TODO: plot_metric requires dict from train(), but train returns 'lightgbm.basic.Booster'??
     # for m in eval_metric:
@@ -319,38 +315,15 @@ class RF_REGRESSOR(BaseMLModel):
                  max_features='sqrt',
                  bootstrap=True, oob_score=True, verbose=0, 
                  n_jobs=1, random_state=None,
-                 logger=None):
-        self.n_estimators = n_estimators
-        self.criterion = criterion
-        self.max_depth = max_depth
-        self.min_samples_split = min_samples_split
-        self.n_jobs = n_jobs
-        self.random_state = random_state
-        self.logger = logger                 
+                 logger=None):               
 
         self.model = RandomForestRegressor(
-            n_estimators=self.n_estimators,
-            criterion=self.criterion,
-            max_depth=self.max_depth,
-            min_samples_split=self.min_samples_split,
+            n_estimators=n_estimators,
+            criterion=criterion,
+            max_depth=max_depth,
+            min_samples_split=min_samples_split,
             max_features=max_features, bootstrap=bootstrap, oob_score=oob_score,
-            verbose=verbose, random_state=self.random_state, n_jobs=self.n_jobs)
-
-
-    # def fit(self, X, y, eval_set=None):
-    #     """ 
-    #     Args:
-    #         eval_set : Always ignored, exists for compatibility.
-    #     """
-    #     self.X = X
-    #     self.y = y
-        
-    #     t0 = time.time()
-    #     self.model.fit(self.X, self.y)
-    #     self.train_runtime = time.time() - t0
-
-    #     if self.logger is not None:
-    #         self.logger.info('Train time: {:.2f} mins'.format(self.train_runtime/60))
+            verbose=verbose, random_state=random_state, n_jobs=n_jobs)
 
 
     def plot_fi(self):

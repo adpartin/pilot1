@@ -33,6 +33,7 @@ from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import learning_curve
 from sklearn.model_selection import cross_val_score, cross_validate, learning_curve
 
+from sklearn.model_selection import train_test_split
 from sklearn.model_selection import ShuffleSplit, KFold
 from sklearn.model_selection import GroupShuffleSplit, GroupKFold
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
@@ -319,6 +320,13 @@ def run(args):
         if model_name == 'lgb_reg':
             init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
             fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
+
+            # Use early stopping
+            init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'n_estimators': 2000, 'logger': lg.logger}
+            X_train, X_test, y_train, y_test = train_test_split(xdata, ydata, test_size=0.2, random_state=SEED)
+            xdata, ydata = X_train, y_train
+            eval_set = (X_test, y_test)
+            fit_prms = {'verbose': False, 'eval_set': eval_set, 'early_stopping_rounds': 10}  # 'sample_weight': sample_weight
         elif model_name == 'nn_reg':
             xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
             init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
@@ -361,27 +369,23 @@ def run(args):
         t0 = time.time()
 
         if train_sources == [te_src]:
-            lg.logger.info("That's the training set (so no preds).")
+            lg.logger.info("That's the train set (take preds preds from cv run).")
             continue
 
         te_src_data = te_data[te_data['SOURCE'].isin([te_src])].reset_index(drop=True)
-        lg.logger.info(f'src_data.shape {te_src_data.shape}')
         if te_src_data.shape[0] == 0:
-            continue  # continue if there is no data for this source
-
-        # Prepare test data for predictions
-        xte, _ = utils_tidy.split_features_and_other_cols(te_src_data, fea_prfx_dict=fea_prfx_dict)
-        yte = utils_tidy.extract_target(data=te_src_data, target_name=target_name)
+            continue  # continue if there are no data samples available for this source
 
         # Plot dist of response
         utils.plot_hist(x=te_src_data[target_name], var_name=target_name,
                         path=os.path.join(figpath, target_name + '_hist_' + te_src + '.png'))
 
-        # Print feature shapes
-        lg.logger.info(f'\nxte_' + te_src)
+        # Prep test data for preds
+        xte, _ = utils_tidy.split_features_and_other_cols(te_src_data, fea_prfx_dict=fea_prfx_dict)
+        yte = utils_tidy.extract_target(data=te_src_data, target_name=target_name)
         utils_tidy.print_feature_shapes(df=xte, logger=lg.logger)
 
-        # Calc and save scores
+        # Calc scores
         #scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
         y_preds, y_true = utils.calc_preds(estimator=model_final.model, xdata=xte, ydata=yte, mltype=mltype)
         scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype)
@@ -398,8 +402,8 @@ def run(args):
     if len(csv) > 0:
         csv = pd.concat(csv, axis=1)
 
-    # (New) Adjust cv_scores in order to combine with test set preds
-    # (take the cv score for val set)
+    # Adjust cv_scores in order to combine with test set preds
+    # (take the mean cv score for val set)
     cv_scores = cv_scores[cv_scores['tr_set']==False].drop(columns='tr_set')
     cv_scores[train_sources_name] = cv_scores.iloc[:, -cv_folds:].mean(axis=1)
     cv_scores = cv_scores[['metric', train_sources_name]]
