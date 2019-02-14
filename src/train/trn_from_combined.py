@@ -318,8 +318,8 @@ def run(args):
 
         # ML model params
         if model_name == 'lgb_reg':
-            init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-            fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
+            # init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
+            # fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
 
             # Use early stopping
             init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'n_estimators': 2000, 'logger': lg.logger}
