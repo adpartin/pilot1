@@ -159,10 +159,13 @@ def run(args):
     # ========================================================================
     utils.boxplot_rsp_per_drug(df=data, target_name=target_name,
         path=os.path.join(figpath, f'{target_name}_per_drug_boxplot.png'))
+
     utils.plot_hist(x=data[target_name], var_name=target_name,
         path=os.path.join(figpath, target_name+'_hist.png'))
+    
     utils.plot_qq(x=data[target_name], var_name=target_name,
         path=os.path.join(figpath, target_name+'_qqplot.png'))
+    
     utils.plot_hist_drugs(x=data['DRUG'], path=os.path.join(figpath, 'drugs_hist.png'))
 
 
@@ -243,7 +246,6 @@ def run(args):
         init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
         fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
     elif model_name == 'nn_reg':
-        xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
         init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
         fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
 
@@ -328,9 +330,11 @@ def run(args):
             eval_set = (X_test, y_test)
             fit_prms = {'verbose': False, 'eval_set': eval_set, 'early_stopping_rounds': 10}  # 'sample_weight': sample_weight
         elif model_name == 'nn_reg':
+            val_split = 0.1
             xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
             init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-            fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': 0.1}
+            fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': val_split}
+            args['final_model_val_split'] = val_split
 
         # Define ML model
         model_final = ml_models.get_model(model_name=model_name, init_params=init_prms)   

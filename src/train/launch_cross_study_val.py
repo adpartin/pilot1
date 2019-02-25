@@ -20,7 +20,7 @@ file_path = os.path.dirname(os.path.realpath(__file__))
 OUTDIR = os.path.join(file_path, '../../models/from_combined')
 
 
-def create_csv(df, outdir='./'):
+def create_csv(df, outdir='.'):
     """ Creates CSV table for each available metric. """
     # lg.logger.info('Create csv table ...')
     for m in df['metric'].unique():
@@ -112,20 +112,6 @@ def main(args):
     # Create csv table for each available metric
     create_csv(df=csv_all, outdir=csv_outdir)
 
-    # for m in df['metric'].unique():
-    #     csv = df[df['metric']==m].reset_index(drop=True)
-    #     csv.drop(columns=['metric'], inplace=True)
-
-    #     # Sort rows and cols
-    #     tr_src = csv['train_src']
-    #     csv.drop(columns='train_src', inplace=True)
-    #     csv = csv[sorted(csv.columns)]
-    #     csv = pd.concat([tr_src, csv], axis=1, sort=False)
-    #     csv = csv.sort_values('train_src')
-
-    #     # save table
-    #     csv = csv.round(3)
-    #     csv.to_csv(os.path.join(csv_outdir, f'csv_{m}.csv'), index=False)
 
     # lg.logger.info('\nTotal CSV runtime {:.3f}\n'.format((time.time()-t0)/60))
     print('\nTotal CSV runtime {:.3f}\n'.format((time.time()-t0)/60))

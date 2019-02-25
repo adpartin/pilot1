@@ -131,21 +131,24 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
     # print('data.shape', data.shape)
 
 
-    # # Transform the target
-    # if args['target_transform']:
-    #     y = data[args['target_name']].copy()
-    #     # y = np.log1p(ydata); plot_hist(x=y, var_name=target_name+'_log1p')
-    #     # # y = np.log(ydata+1); plot_hist(x=y, var_name=target_name+'_log+1')
-    #     # y = np.log10(ydata+1); plot_hist(x=y, var_name=target_name+'_log10')
-    #     # y = np.log2(ydata+1); plot_hist(x=y, var_name=target_name+'_log2')
-    #     # y = ydata**2; plot_hist(x=ydata, var_name=target_name+'_x^2')
-    #     y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
-    #     data[args['target_name']] = y
-    #     # ydata = pd.DataFrame(y)
+    # Transform the target
+    # https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.boxcox.html
+    # https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.inv_boxcox.html
+    # https://otexts.com/fpp2/transformations.html
+    if args['target_transform']:
+        y = data[args['target_name']].copy()
+        # y = np.log1p(ydata); plot_hist(x=y, var_name=target_name+'_log1p')
+        # # y = np.log(ydata+1); plot_hist(x=y, var_name=target_name+'_log+1')
+        # y = np.log10(ydata+1); plot_hist(x=y, var_name=target_name+'_log10')
+        # y = np.log2(ydata+1); plot_hist(x=y, var_name=target_name+'_log2')
+        # y = ydata**2; plot_hist(x=ydata, var_name=target_name+'_x^2')
+        y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
+        data[args['target_name']] = y
+        # ydata = pd.DataFrame(y)
 
-    #     y = te_data[args['target_name']].copy()
-    #     y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
-    #     te_data[args['target_name']] = y
+        y = te_data[args['target_name']].copy()
+        y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
+        te_data[args['target_name']] = y
 
 
     # if 'dlb' in args['other_features']:

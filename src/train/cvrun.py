@@ -117,9 +117,12 @@ def my_cross_validate(X, Y,
             # Add keras callbacks
             checkpointer = ModelCheckpoint(filepath=os.path.join(out_nn_model, 'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
             csv_logger = CSVLogger(filename=os.path.join(out_nn_model, 'training.log'))
-            reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
+            # reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
+            #                               min_delta=0.0001, cooldown=3, min_lr=0.000000001)
+            # early_stop = EarlyStopping(monitor='val_loss', patience=100, verbose=1, mode='auto')
+            reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=10, verbose=1, mode='auto',
                                           min_delta=0.0001, cooldown=3, min_lr=0.000000001)
-            early_stop = EarlyStopping(monitor='val_loss', patience=100, verbose=1, mode='auto')
+            early_stop = EarlyStopping(monitor='val_loss', patience=40, verbose=1, mode='auto')            
             callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
             fit_params['callbacks'] = callback_list
 
