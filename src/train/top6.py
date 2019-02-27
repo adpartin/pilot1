@@ -50,9 +50,14 @@ file_path = os.path.dirname(os.path.realpath(__file__))
 #lib_path = os.path.abspath(os.path.join(file_path, '..', '..', 'common')) # (AP)
 #sys.path.append(lib_path) # (AP)
 
+# Create dir to dump results (AP)
+OUTDIR = os.path.join(file_path, '../../models/top6')
+os.makedirs(OUTDIR, exist_ok=True)
+
 # Utils
 lib_path = '/vol/ml/apartin/Benchmarks/common/'  # (AP)
 sys.path.append(lib_path)  # (AP)
+
 # import attn_utils
 import ml_models
 import lrn_curve
@@ -76,7 +81,7 @@ psr.add_argument('--mltype',  type=str, default='reg', choices=['reg', 'cls']) #
 psr.add_argument('--ticks',  type=int, default=5) # (AP)
 psr.add_argument('-ml', '--model_name',  type=str, default='lgb_reg') # (AP)
 psr.add_argument('--scaler',  type=str,  choices=['stnd'], default=None) 
-    
+
 args = vars(psr.parse_args())
 pprint(args)
 
@@ -97,7 +102,8 @@ scaler = args['scaler']
 t = datetime.datetime.now()
 t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
 t = ''.join([str(i) for i in t])
-outdir = os.path.join('./', model_name + '_lrn_curve_' + mltype + '_' + t)
+#outdir = os.path.join('./', 'top6_lrn_curve_' + model_name + t)
+outdir = os.path.join(OUTDIR,  'lrn_curve_' + model_name + t)
 os.makedirs(outdir, exist_ok=True)
 
 # Dump args
