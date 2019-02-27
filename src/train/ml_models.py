@@ -246,6 +246,18 @@ class KERAS_REGRESSOR(BaseMLModel):
 
 
 
+class TORCH_REGRESSOR(BaseMLModel):
+    """ Neural network regressor. """
+    model_name = 'nn_reg'
+    
+    def __init__(self):
+        pass
+
+    def dump_model(self):
+        pass
+
+
+
 class LGBM_REGRESSOR(BaseMLModel):
     """ LightGBM regressor. """
     ml_objective = 'regression'
