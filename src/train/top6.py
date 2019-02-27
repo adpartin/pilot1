@@ -1,17 +1,22 @@
+from __future__ import print_function
+from __future__ import division
+
+import warnings
+warnings.filterwarnings('ignore')
+
+from comet_ml import Experiment  # (AP)
+import os
+
+import sys
 import itertools
 import pandas as pd
 import numpy as np
-import os
-import sys
 import gzip
 import argparse
 import sklearn
 import time
 import datetime
 from pprint import pprint
-
-import warnings
-warnings.filterwarnings('ignore')
 
 import matplotlib
 matplotlib.use('Agg')
@@ -80,7 +85,7 @@ psr.add_argument('--n_jobs',  type=int, default=4) # (AP)
 psr.add_argument('--mltype',  type=str, default='reg', choices=['reg', 'cls']) # (AP)
 psr.add_argument('--ticks',  type=int, default=5) # (AP)
 psr.add_argument('-ml', '--model_name',  type=str, default='lgb_reg') # (AP)
-psr.add_argument('--scaler',  type=str,  choices=['stnd'], default=None) 
+psr.add_argument('-sc', '--scaler',  type=str,  choices=['stnd'], default=None) 
 
 args = vars(psr.parse_args())
 pprint(args)
@@ -103,7 +108,7 @@ t = datetime.datetime.now()
 t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
 t = ''.join([str(i) for i in t])
 #outdir = os.path.join('./', 'top6_lrn_curve_' + model_name + t)
-outdir = os.path.join(OUTDIR,  'lrn_curve_' + model_name + t)
+outdir = os.path.join(OUTDIR,  'lrn_curve_' + model_name + '~' + t)
 os.makedirs(outdir, exist_ok=True)
 
 # Dump args

@@ -109,10 +109,10 @@ def run(args):
     # Define custom metric to calc auroc from regression
     # https://scikit-learn.org/stable/modules/model_evaluation.html#scoring
     def reg_auroc(y_true, y_pred):
-            y_true = np.where(y_true < 0.5, 1, 0)
-            y_score = np.where(y_pred < 0.5, 1, 0)
-            auroc = sklearn.metrics.roc_auc_score(y_true, y_score)
-            return auroc
+        y_true = np.where(y_true < 0.5, 1, 0)
+        y_score = np.where(y_pred < 0.5, 1, 0)
+        auroc = sklearn.metrics.roc_auc_score(y_true, y_score)
+        return auroc
     reg_auroc_score = sklearn.metrics.make_scorer(score_func=reg_auroc, greater_is_better=True)
 
     # Define metrics
@@ -329,6 +329,7 @@ def run(args):
             xdata, ydata = X_train, y_train
             eval_set = (X_test, y_test)
             fit_prms = {'verbose': False, 'eval_set': eval_set, 'early_stopping_rounds': 10}  # 'sample_weight': sample_weight
+            
         elif model_name == 'nn_reg':
             val_split = 0.1
             xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)

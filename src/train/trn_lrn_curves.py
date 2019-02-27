@@ -107,10 +107,10 @@ def run(args):
     # Define custom metric to calc auroc from regression
     # https://scikit-learn.org/stable/modules/model_evaluation.html#scoring
     def reg_auroc(y_true, y_pred):
-            y_true = np.where(y_true < 0.5, 1, 0)
-            y_score = np.where(y_pred < 0.5, 1, 0)
-            auroc = sklearn.metrics.roc_auc_score(y_true, y_score)
-            return auroc
+        y_true = np.where(y_true < 0.5, 1, 0)
+        y_score = np.where(y_pred < 0.5, 1, 0)
+        auroc = sklearn.metrics.roc_auc_score(y_true, y_score)
+        return auroc
     reg_auroc_score = sklearn.metrics.make_scorer(score_func=reg_auroc, greater_is_better=True)
 
     # Define metrics
