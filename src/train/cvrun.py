@@ -1,6 +1,8 @@
 """
 Implementation of cv run.
 """
+from comet_ml import Experiment
+
 import os
 import numpy as np
 import pandas as pd
@@ -52,6 +54,12 @@ def my_cross_validate(X, Y,
         cv = sklearn.model_selection.KFold(n_splits=5, shuffle=False, random_state=0)
         lrn_curve.my_learning_curve(X=xdata, Y=ydata, mltype='reg', cv=cv, lr_curve_ticks=5)
     """
+    # Define comet
+    experiment = Experiment(api_key=os.environ.get("COMET_API_KEY"),
+                            project_name="my_cross_validate")
+    experiment.set_name("my_set_name")
+
+
     X = pd.DataFrame(X).values
     Y = pd.DataFrame(Y).values
 
@@ -188,9 +196,15 @@ def my_cross_validate(X, Y,
         # Delete the estimator/model
         del estimator, history
 
+        # comet
+        experiment.log_metric('Fold {}; F1-score: {:.3f}'.format(fold_id, vl_scores['f1_score']))
+
     tr_df = scores_to_df(tr_scores_all)
     vl_df = scores_to_df(vl_scores_all)
     scores_all_df = pd.concat([tr_df, vl_df], axis=0)
+
+    # comet
+    experiment.log_metric('F1-score (best): {:.3f}'.format(fold_id, best_score))
 
     return scores_all_df, best_model
 
