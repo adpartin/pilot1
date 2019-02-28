@@ -1,6 +1,8 @@
 from __future__ import print_function
 from __future__ import division
 
+from comet_ml import Experiment
+
 import warnings
 warnings.filterwarnings('ignore')
 

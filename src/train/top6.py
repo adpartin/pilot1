@@ -4,7 +4,7 @@ from __future__ import division
 import warnings
 warnings.filterwarnings('ignore')
 
-from comet_ml import Experiment  # (AP)
+import comet_ml
 import os
 
 import sys
@@ -59,6 +59,9 @@ file_path = os.path.dirname(os.path.realpath(__file__))
 OUTDIR = os.path.join(file_path, '../../models/top6')
 os.makedirs(OUTDIR, exist_ok=True)
 
+# Comet (AP)
+COMET_PRJ_NAME = 'top6_lrn_crv'
+
 # Utils
 lib_path = '/vol/ml/apartin/Benchmarks/common/'  # (AP)
 sys.path.append(lib_path)  # (AP)
@@ -105,10 +108,15 @@ scaler = args['scaler']
 
 # Set output dir
 t = datetime.datetime.now()
-t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
+t = [t.year, '-', t.month, '-', t.day, '-', 'h', t.hour, '-', 'm', t.minute]
 t = ''.join([str(i) for i in t])
-#outdir = os.path.join('./', 'top6_lrn_curve_' + model_name + t)
-outdir = os.path.join(OUTDIR,  'lrn_curve_' + model_name + '~' + t)
+if ('nn' in model_name) and (attn is True):
+    outdir_name = 'lrn_crv_' + model_name + '_attn_' + t
+elif ('nn' in model_name) and (attn is False):
+    outdir_name = 'lrn_crv_' + model_name + '_fc_' + t
+else:
+    outdir_name = 'lrn_crv_' + model_name
+outdir = os.path.join(OUTDIR, outdir_name)
 os.makedirs(outdir, exist_ok=True)
 
 # Dump args
@@ -174,6 +182,18 @@ print('df_x.shape:', df_x.shape)
 print('df_y.shape:', df_y.shape)
 
 
+# -----
+# Comet
+# -----
+args['comet_prg_name'] = COMET_PRJ_NAME
+if 'nn' in model_name and attn is True:
+    args['comet_set_name'] = model_name + '_attn'
+elif 'nn' in model_name and attn is False:
+    args['comet_set_name'] = model_name + '_fc'
+else:
+    args['comet_set_name'] = model_name  
+    
+
 # ---------
 # CV scheme
 # ---------
@@ -222,7 +242,8 @@ lrn_curve_scores = lrn_curve.my_learning_curve(
     model_name=model_name,
     fit_params=fit_prms,
     init_params=init_prms,
-    args=None,
+    #args=None,
+    args=args,
     lr_curve_ticks=ticks,
     data_sizes_frac=None,
     metrics=None,
@@ -232,6 +253,6 @@ lrn_curve_scores = lrn_curve.my_learning_curve(
 print('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
 # Dump results
-lrn_curve_scores.to_csv(os.path.join(outdir, model_name + '_lrn_curve_scores.csv'), index=False)
+lrn_curve_scores.to_csv(os.path.join(outdir, model_name + '_lrn_crv_scores.csv'), index=False)
 
 

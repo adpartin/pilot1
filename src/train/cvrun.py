@@ -1,8 +1,6 @@
 """
 Implementation of cv run.
 """
-from comet_ml import Experiment
-
 import os
 import numpy as np
 import pandas as pd
@@ -54,12 +52,6 @@ def my_cross_validate(X, Y,
         cv = sklearn.model_selection.KFold(n_splits=5, shuffle=False, random_state=0)
         lrn_curve.my_learning_curve(X=xdata, Y=ydata, mltype='reg', cv=cv, lr_curve_ticks=5)
     """
-    # Define comet
-    experiment = Experiment(api_key=os.environ.get("COMET_API_KEY"),
-                            project_name="my_cross_validate")
-    experiment.set_name("my_set_name")
-
-
     X = pd.DataFrame(X).values
     Y = pd.DataFrame(Y).values
 
@@ -151,37 +143,40 @@ def my_cross_validate(X, Y,
         # Save the best model
         if mltype == 'cls':
             vl_scores['f1_score'] > best_score
+            best_score = vl_scores['f1_score']
             best_model = estimator
         elif mltype == 'reg':
             vl_scores['r2'] > best_score
+            best_score = vl_scores['r2']
             best_model = estimator
 
         # Plot training curves
         if 'nn' in model_name:
-            # Summarize history for loss     
-            pr_metrics = ml_models.get_keras_performance_metrics(history)
-            epochs = np.asarray(history.epoch) + 1
-            hh = history.history
-            for p, m in enumerate(pr_metrics):
-                metric_name = m
-                metric_name_val = 'val_' + m
+            ml_models.plot_prfrm_metrics(history=history, title=f'cv fold: {fold_id+1}', outdir=out_nn_model)
+#             # Summarize history for los
+#             pr_metrics = ml_models.get_keras_prfrm_metrics(history)
+#             epochs = np.asarray(history.epoch) + 1
+#             hh = history.history
+#             for p, m in enumerate(pr_metrics):
+#                 metric_name = m
+#                 metric_name_val = 'val_' + m
                     
-                ymin = min(set(hh[metric_name]).union(hh[metric_name_val]))
-                ymax = max(set(hh[metric_name]).union(hh[metric_name_val]))
+#                 ymin = min(set(hh[metric_name]).union(hh[metric_name_val]))
+#                 ymax = max(set(hh[metric_name]).union(hh[metric_name_val]))
 
-                plt.figure()
-                plt.plot(epochs, hh[metric_name], 'b.-', alpha=0.6, label=metric_name)
-                plt.plot(epochs, hh[metric_name_val], 'r.-', alpha=0.6, label=metric_name_val)
-                plt.title(f'cv fold: {fold_id+1}')
-                plt.xlabel('epoch')
-                plt.ylabel(metric_name)
-                plt.xlim([0.5, len(epochs) + 0.5])
-                plt.ylim([ymin-0.1, ymax+0.1])
-                plt.grid(True)
-                plt.legend([metric_name, metric_name_val], loc='best')
+#                 plt.figure()
+#                 plt.plot(epochs, hh[metric_name], 'b.-', alpha=0.6, label=metric_name)
+#                 plt.plot(epochs, hh[metric_name_val], 'r.-', alpha=0.6, label=metric_name_val)
+#                 plt.title(f'cv fold: {fold_id+1}')
+#                 plt.xlabel('epoch')
+#                 plt.ylabel(metric_name)
+#                 plt.xlim([0.5, len(epochs) + 0.5])
+#                 plt.ylim([ymin-0.1, ymax+0.1])
+#                 plt.grid(True)
+#                 plt.legend([metric_name, metric_name_val], loc='best')
                     
-                plt.savefig(os.path.join(out_nn_model, metric_name+'_curve.png'), bbox_inches='tight')
-                plt.close()
+#                 plt.savefig(os.path.join(out_nn_model, metric_name+'_curve.png'), bbox_inches='tight')
+#                 plt.close()
 
         # Add info
         tr_scores['tr_set'] = True
@@ -196,15 +191,21 @@ def my_cross_validate(X, Y,
         # Delete the estimator/model
         del estimator, history
 
-        # comet
-        experiment.log_metric('Fold {}; F1-score: {:.3f}'.format(fold_id, vl_scores['f1_score']))
-
+        # Comet log fold scores
+        # https://medium.com/comet-ml/building-reliable-machine-learning-models-with-cross-validation-20b2c3e32f3e
+#         if (args is not None) and ('comet' in args):
+#             experiment = args['comet']
+#             experiment.log_metric('Fold {}'.format(fold_id), vl_scores['r2'])
+            
     tr_df = scores_to_df(tr_scores_all)
     vl_df = scores_to_df(vl_scores_all)
     scores_all_df = pd.concat([tr_df, vl_df], axis=0)
 
-    # comet
-    experiment.log_metric('F1-score (best): {:.3f}'.format(fold_id, best_score))
+
+    # Comet log fold scores
+#     if (args is not None) and ('comet' in args):
+#         experiment = args['comet']
+#         experiment.log_metric('Best score', best_score)
 
     return scores_all_df, best_model
 

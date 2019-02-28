@@ -59,7 +59,7 @@ def get_model(model_name, init_params=None):
     return estimator
 
 
-def get_keras_performance_metrics(history):
+def get_keras_prfrm_metrics(history):
     """ Extract names of all the recorded performance metrics from keras `history` variable
     for train and val sets. The performance metrics can be indentified as those that start
     with 'val'.
@@ -72,6 +72,35 @@ def get_keras_performance_metrics(history):
 
     return pr_metrics
 
+
+def plot_prfrm_metrics(history, title=None, outdir='.'):
+    """ Plots keras training curves. """
+    pr_metrics = get_keras_prfrm_metrics(history)
+    epochs = np.asarray(history.epoch) + 1
+    hh = history.history
+    for p, m in enumerate(pr_metrics):
+        metric_name = m
+        metric_name_val = 'val_' + m
+
+        ymin = min(set(hh[metric_name]).union(hh[metric_name_val]))
+        ymax = max(set(hh[metric_name]).union(hh[metric_name_val]))
+
+        plt.figure()
+        plt.plot(epochs, hh[metric_name], 'b.-', alpha=0.6, label=metric_name)
+        plt.plot(epochs, hh[metric_name_val], 'r.-', alpha=0.6, label=metric_name_val)
+        if title is not None:
+            plt.title(title)
+        plt.xlabel('epoch')
+        plt.ylabel(metric_name)
+        plt.xlim([0.5, len(epochs) + 0.5])
+        plt.ylim([ymin-0.1, ymax+0.1])
+        plt.grid(True)
+        plt.legend([metric_name, metric_name_val], loc='best')
+
+        plt.savefig(os.path.join(outdir, metric_name+'_curve.png'), bbox_inches='tight')
+        plt.close()
+
+        
 
 class BaseMLModel():
     """ A parent class with some general methods for children ML classes.

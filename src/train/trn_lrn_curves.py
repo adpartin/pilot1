@@ -4,6 +4,7 @@ from __future__ import division
 import warnings
 warnings.filterwarnings('ignore')
 
+from comet_ml import Experiment
 import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
@@ -62,6 +63,7 @@ OUTDIR = os.path.join(file_path, '../../models/from_combined')
 DATAFILENAME = 'tidy_data_no_fibro.parquet'
 # DATAFILENAME = 'tidy_data.parquet'
 CONFIGFILENAME = 'config_prms.txt'
+COMET_PRJ_NAME = 'trn_lrn_curves'
 os.makedirs(OUTDIR, exist_ok=True)
 
 SEED = None
@@ -142,6 +144,19 @@ def run(args):
 
 
     # ========================================================================
+    #       Comet
+    # ========================================================================
+    # https://www.comet.ml/docs/python-sdk/Experiment
+    comet_api_key = os.environ.get("COMET_API_KEY")
+    lg.logger.info('\ncomet_api_key:    {}'.format(comet_api_key))
+    lg.logger.info('comet_project_name: {}'.format(COMET_PRJ_NAME))
+    experiment = Experiment(api_key=comet_api_key,
+                            project_name=COMET_PRJ_NAME)
+    experiment.set_name(train_sources_name)  # set experiment name
+    args['comet'] = experiment
+    
+    
+    # ========================================================================
     #       Load data and pre-proc
     # ========================================================================
     datapath = os.path.join(DATADIR, DATAFILENAME)
@@ -194,7 +209,7 @@ def run(args):
     #       Learning curves
     # ========================================================================
     lg.logger.info('\n\n{}'.format('='*50))
-    lg.logger.info('Learning curves ...')
+    lg.logger.info(f'Learning curves ... {train_sources}')
     lg.logger.info('='*50)
 
     # Get the data

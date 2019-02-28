@@ -1,7 +1,9 @@
 """
 Functions to generate learning curves.
-Performance (error or score) vs training set size.
+Records performance (error or score) vs training set size.
 """
+from comet_ml import Experiment
+
 import os
 import numpy as np
 import pandas as pd
@@ -111,7 +113,7 @@ def my_learning_curve(X, Y,
     Examples:
         cv = sklearn.model_selection.KFold(n_splits=5, shuffle=False, random_state=0)
         lrn_curve.my_learning_curve(X=xdata, Y=ydata, mltype='reg', cv=cv, lr_curve_ticks=5)
-    """
+    """  
     X = pd.DataFrame(X).values
     Y = pd.DataFrame(Y).values
 
@@ -146,9 +148,9 @@ def my_learning_curve(X, Y,
         group_encoder = LabelEncoder()
         groups = group_encoder.fit_transform(groups)
     
-    # ... Now start a nested loop of train size and cv folds ...
-    tr_scores_all = [] # list dicts
-    vl_scores_all = [] # list dicts
+    # Now start nested loop of train size and cv folds
+    tr_scores_all = [] # list of dicts
+    vl_scores_all = [] # list of dicts
 
     if mltype == 'cls':
         if Y.ndim > 1 and Y.shape[1] > 1:
@@ -176,12 +178,25 @@ def my_learning_curve(X, Y,
         # print('Total group (e.g., cell) intersections btw tr and vl: ', len(tr_grps_unq.intersection(vl_grps_unq)))
         # print('A few intersections : ', list(tr_grps_unq.intersection(vl_grps_unq))[:3])
 
+        # Comet
+        if (args is not None) and set(('comet_prg_name', 'comet_set_name')).issubset(set(args)):
+            comet_api_key = os.environ.get('COMET_API_KEY')
+            comet_prg_name = args['comet_prg_name']
+            comet_set_name = args['comet_set_name']
+
         # Start run across data sizes
         idx = np.random.permutation(len(xtr))
         for i, tr_sz in enumerate(train_sizes):
             if logger:
                 logger.info(f'    Train size: {tr_sz} ({i+1}/{len(train_sizes)})')   
 
+                
+            # Comet
+            if (args is not None) and set(('comet_prg_name', 'comet_set_name')).issubset(set(args)):
+                experiment = Experiment(api_key=comet_api_key, project_name=comet_prg_name)
+                experiment.set_name(comet_set_name)
+                experiment.add_tag(f'trn size {tr_sz}')
+                
             # Sequentially get subset of samples (the input dataset X must be shuffled)
             xtr_sub = xtr[idx[:tr_sz], :]
             ytr_sub = np.squeeze(ytr[idx[:tr_sz], :])            
@@ -209,7 +224,7 @@ def my_learning_curve(X, Y,
                 fit_params['callbacks'] = callback_list
 
                 # Set validation set
-                #fit_params['validation_data'] = (xvl, yvl)
+                # fit_params['validation_data'] = (xvl, yvl)
                 fit_params['validation_split'] = 0.1
 
             # Train model
@@ -224,30 +239,7 @@ def my_learning_curve(X, Y,
             vl_scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
 
             if 'nn' in model_name:
-                # Summarize history for loss     
-                pr_metrics = ml_models.get_keras_performance_metrics(history)
-                epochs = np.asarray(history.epoch) + 1
-                hh = history.history
-                for p, m in enumerate(pr_metrics):
-                    metric_name = m
-                    metric_name_val = 'val_' + m
-                    
-                    ymin = min(set(hh[metric_name]).union(hh[metric_name_val]))
-                    ymax = max(set(hh[metric_name]).union(hh[metric_name_val]))
-
-                    plt.figure()
-                    plt.plot(epochs, hh[metric_name], 'b.-', alpha=0.6, label=metric_name)
-                    plt.plot(epochs, hh[metric_name_val], 'r.-', alpha=0.6, label=metric_name_val)
-                    plt.title(f'train size: {tr_sz}')
-                    plt.xlabel('epoch')
-                    plt.ylabel(metric_name)
-                    plt.xlim([0.5, len(epochs) + 0.5])
-                    plt.ylim([ymin-0.1, ymax+0.1])
-                    plt.grid(True)
-                    plt.legend([metric_name, metric_name_val], loc='best')
-                    
-                    plt.savefig(os.path.join(out_nn_model, metric_name+'_curve.png'), bbox_inches='tight')
-                    plt.close()
+                ml_models.plot_prfrm_metrics(history=history, title=f'Train size: {tr_sz}', outdir=out_nn_model)
 
             # Add info
             tr_scores['tr_set'] = True
@@ -268,7 +260,7 @@ def my_learning_curve(X, Y,
         tr_df_tmp = scores_to_df(tr_scores_all)
         vl_df_tmp = scores_to_df(vl_scores_all)
         scores_all_df_tmp = pd.concat([tr_df_tmp, vl_df_tmp], axis=0)
-        scores_all_df_tmp.to_csv(os.path.join(outdir, model_name + '_lrn_curve_scores_tmp_cv' + str(fold_id+1) + '.csv'), index=False)
+        scores_all_df_tmp.to_csv(os.path.join(outdir, model_name + '_lrn_crv_scores_cv' + str(fold_id+1) + '.csv'), index=False)
 
     tr_df = scores_to_df(tr_scores_all)
     vl_df = scores_to_df(vl_scores_all)
@@ -315,8 +307,14 @@ def my_learning_curve(X, Y,
     # ---------------------------------------------------------------   
 
     # Plot learning curves
-    plt_learning_curve_multi_metric(df=scores_all_df, cv_folds=cv_folds,
-                                    outdir=outdir, args=args)
+    figs = plt_learning_curve_multi_metric(df=scores_all_df, cv_folds=cv_folds,
+                                           outdir=outdir, args=args)
+    
+    # Comet log figs
+    if (args is not None) and ('comet_prg_name' in args):
+        for i, f in enumerate(figs):
+            experiment.log_figure(figure_name=f'trn_size {train_sizes[i]}', figure=f, overwrite=True)
+    
     return scores_all_df
 
 
@@ -342,6 +340,7 @@ def plt_learning_curve_multi_metric(df, cv_folds, outdir, args=None):
     df = df.copy()
     data_sizes = sorted(df['tr_size'].unique())
 
+    figs = []
     for metric_name in df['metric'].unique():
         aa = df[df['metric']==metric_name].reset_index(drop=True)
         aa.sort_values('tr_size', inplace=True)
@@ -357,7 +356,7 @@ def plt_learning_curve_multi_metric(df, cv_folds, outdir, args=None):
         rslt.append(tr.values)
         rslt.append(vl.values)
 
-        if args is not None:
+        if (args is not None) and set(('target_name', 'train_sources')).issubset(set(args)):
             fname = 'learning_curve_' + args['target_name'] + '_' + metric_name + '.png'
             title = 'Learning curve (target: {}, data: {})'.format(args['target_name'], '_'.join(args['train_sources']))
         else:
@@ -365,8 +364,11 @@ def plt_learning_curve_multi_metric(df, cv_folds, outdir, args=None):
             title = 'Learning curve'
 
         path = os.path.join(outdir, fname)
-        plt_learning_curve(rslt=rslt, metric_name=metric_name,
-            title=title, path=path)
+        fig = plt_learning_curve(rslt=rslt, metric_name=metric_name,
+                                 title=title, path=path)
+        figs.append(fig)
+        
+    return figs
 
 
 def plt_learning_curve(rslt, metric_name='score', ylim=None, title=None, path=None):
@@ -410,6 +412,8 @@ def plt_learning_curve(rslt, metric_name='score', ylim=None, title=None, path=No
     if ylim is not None:
         plt.ylim(ylim)
     plt.savefig(path, bbox_inches='tight')
+
+    return fig
 
 
 def scores_to_df(scores_all):

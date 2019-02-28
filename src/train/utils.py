@@ -24,13 +24,13 @@ DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
 def create_outdir(outdir='./', args=None):
     """ Create output dir. """
     t = datetime.datetime.now()
-    t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
+    t = [t.year, '-', t.month, '-', t.day, '-', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
     if args is not None:
         name_sffx = '.'.join(args['train_sources'] + [args['model_name']] + [args['cv_method']] + args['cell_features'] + args['drug_features'] + [args['target_name']])
     else:
         name_sffx = 'out'
-    run_outdir = os.path.join(outdir, name_sffx + '~' + t)
+    run_outdir = os.path.join(outdir, name_sffx + '_' + t)
     os.makedirs(run_outdir)
     return run_outdir
 
