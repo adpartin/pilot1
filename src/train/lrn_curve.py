@@ -3,18 +3,21 @@ Functions to generate learning curves.
 Records performance (error or score) vs training set size.
 """
 from comet_ml import Experiment
-
 import os
+
+import sys
+import pathlib
+from collections import OrderedDict
+
+import sklearn
 import numpy as np
 import pandas as pd
-from collections import OrderedDict
 
 import matplotlib
 # matplotlib.use('TkAgg')
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-import sklearn
 from sklearn.model_selection import cross_validate
 
 from sklearn.model_selection import ShuffleSplit, KFold
@@ -24,8 +27,14 @@ from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 from pandas.api.types import is_string_dtype
 from sklearn.preprocessing import LabelEncoder
 
+# Utils
 import utils
 import ml_models
+
+# Import custom callbacks
+keras_contrib = '/vol/ml/apartin/projects/keras-contrib/keras_contrib'
+sys.path.append(keras_contrib)
+from callbacks import *
 
 
 # def reg_auroc(y_true, y_pred):
@@ -93,7 +102,7 @@ def my_learning_curve(X, Y,
                       lr_curve_ticks=5, data_sizes_frac=None,
                       args=None, fit_params=None, init_params=None,
                       metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'neg_mean_squared_error'],
-                      n_jobs=1, random_state=None, logger=None, outdir='./'):
+                      n_jobs=1, random_state=None, logger=None, outdir='.'):
     """
     Train estimator using various train set sizes and generate learning curves for different metrics.
     The CV splitter splits the input dataset into cv_folds data subsets.
@@ -179,9 +188,9 @@ def my_learning_curve(X, Y,
         # print('A few intersections : ', list(tr_grps_unq.intersection(vl_grps_unq))[:3])
 
         # Comet
-        if (args is not None) and set(('comet_prg_name', 'comet_set_name')).issubset(set(args)):
+        if (args is not None) and set(('comet_prj_name', 'comet_set_name')).issubset(set(args)):
             comet_api_key = os.environ.get('COMET_API_KEY')
-            comet_prg_name = args['comet_prg_name']
+            comet_prj_name = args['comet_prj_name']
             comet_set_name = args['comet_set_name']
 
         # Start run across data sizes
@@ -192,9 +201,10 @@ def my_learning_curve(X, Y,
 
                 
             # Comet
-            if (args is not None) and set(('comet_prg_name', 'comet_set_name')).issubset(set(args)):
-                experiment = Experiment(api_key=comet_api_key, project_name=comet_prg_name)
-                experiment.set_name(comet_set_name)
+            if (args is not None) and set(('comet_prj_name', 'comet_set_name')).issubset(set(args)):
+                experiment = Experiment(api_key=os.environ.get('COMET_API_KEY'),
+                                        project_name=args['comet_prj_name'])
+                experiment.set_name(args['comet_set_name'])
                 experiment.add_tag(f'trn size {tr_sz}')
                 
             # Sequentially get subset of samples (the input dataset X must be shuffled)
@@ -208,24 +218,30 @@ def my_learning_curve(X, Y,
             if 'nn' in model_name:
                 from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
                 from keras.utils import plot_model
-                plot_model(estimator.model, to_file=os.path.join(outdir, 'nn_model.png'))
+                plot_model(estimator.model, to_file=outdir / 'nn_model.png')
 
                 # Create output dir
-                out_nn_model = os.path.join(outdir, 'cv'+str(fold_id+1) + '_sz'+str(tr_sz))
+                out_nn_model = outdir / ('cv'+str(fold_id+1) + '_sz'+str(tr_sz))
                 os.makedirs(out_nn_model, exist_ok=False)
-
-                # Add keras callbacks
-                checkpointer = ModelCheckpoint(filepath=os.path.join(out_nn_model, 'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
-                csv_logger = CSVLogger(filename=os.path.join(out_nn_model, 'training.log'))
+                
+                # Callbacks (custom)
+                clr_triangular = CyclicLR(base_lr=0.0001, max_lr=0.001, mode='triangular')
+                
+                # Keras callbacks
+                checkpointer = ModelCheckpoint(str(out_nn_model / 'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
+                csv_logger = CSVLogger(out_nn_model / 'training.log')
                 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
                                               min_delta=0.0001, cooldown=3, min_lr=0.000000001)
-                early_stop = EarlyStopping(monitor='val_loss', patience=100, verbose=1, mode='auto')
-                callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
-                fit_params['callbacks'] = callback_list
+                early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1, mode='auto')
+                
+                # Callbacks list
+                callback_list = [checkpointer, csv_logger, early_stop, reduce_lr,  # keras callbacks
+                                 clr_triangular]  # custom callbacks
 
-                # Set validation set
+                # Fit params
                 # fit_params['validation_data'] = (xvl, yvl)
                 fit_params['validation_split'] = 0.1
+                fit_params['callbacks'] = callback_list
 
             # Train model
             history = estimator.model.fit(xtr_sub, ytr_sub, **fit_params)
@@ -239,7 +255,8 @@ def my_learning_curve(X, Y,
             vl_scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
 
             if 'nn' in model_name:
-                ml_models.plot_prfrm_metrics(history=history, title=f'Train size: {tr_sz}', outdir=out_nn_model)
+                ml_models.plot_prfrm_metrics(history=history, title=f'Train size: {tr_sz}',
+                                             skip_epochs=1, add_lr=True, outdir=out_nn_model)
 
             # Add info
             tr_scores['tr_set'] = True
@@ -260,7 +277,7 @@ def my_learning_curve(X, Y,
         tr_df_tmp = scores_to_df(tr_scores_all)
         vl_df_tmp = scores_to_df(vl_scores_all)
         scores_all_df_tmp = pd.concat([tr_df_tmp, vl_df_tmp], axis=0)
-        scores_all_df_tmp.to_csv(os.path.join(outdir, model_name + '_lrn_crv_scores_cv' + str(fold_id+1) + '.csv'), index=False)
+        scores_all_df_tmp.to_csv(outdir / (model_name + '_lrn_crv_scores_cv' + str(fold_id+1) + '.csv'), index=False)
 
     tr_df = scores_to_df(tr_scores_all)
     vl_df = scores_to_df(vl_scores_all)
@@ -311,7 +328,7 @@ def my_learning_curve(X, Y,
                                            outdir=outdir, args=args)
     
     # Comet log figs
-    if (args is not None) and ('comet_prg_name' in args):
+    if (args is not None) and ('comet_prj_name' in args):
         for i, f in enumerate(figs):
             experiment.log_figure(figure_name=f'trn_size {train_sizes[i]}', figure=f, overwrite=True)
     
@@ -363,7 +380,7 @@ def plt_learning_curve_multi_metric(df, cv_folds, outdir, args=None):
             fname = 'learning_curve_' + metric_name + '.png'
             title = 'Learning curve'
 
-        path = os.path.join(outdir, fname)
+        path = outdir / fname
         fig = plt_learning_curve(rslt=rslt, metric_name=metric_name,
                                  title=title, path=path)
         figs.append(fig)

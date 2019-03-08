@@ -73,33 +73,67 @@ def get_keras_prfrm_metrics(history):
     return pr_metrics
 
 
-def plot_prfrm_metrics(history, title=None, outdir='.'):
-    """ Plots keras training curves. """
+def plot_prfrm_metrics(history, title=None, skip_epochs=0, outdir='.', add_lr=False):
+    """ Plots keras training curves.
+    Args:
+        skip_epochs: number of epochs to skip when plotting metrics 
+        add_lr: add curve of learning rate progression over epochs
+    """
     pr_metrics = get_keras_prfrm_metrics(history)
     epochs = np.asarray(history.epoch) + 1
+    eps = epochs[skip_epochs:]
     hh = history.history
+    
     for p, m in enumerate(pr_metrics):
         metric_name = m
         metric_name_val = 'val_' + m
 
-        ymin = min(set(hh[metric_name]).union(hh[metric_name_val]))
-        ymax = max(set(hh[metric_name]).union(hh[metric_name_val]))
+        y_tr = hh[metric_name][skip_epochs:]
+        y_vl = hh[metric_name_val][skip_epochs:]
+        
+        ymin = min(set(y_tr).union(y_vl))
+        ymax = max(set(y_tr).union(y_vl))
+        lim = (ymax - ymin) * 0.1
+        ymin, ymax = ymin - lim, ymax + lim
 
-        plt.figure()
-        plt.plot(epochs, hh[metric_name], 'b.-', alpha=0.6, label=metric_name)
-        plt.plot(epochs, hh[metric_name_val], 'r.-', alpha=0.6, label=metric_name_val)
+        # Start figure
+        fig, ax1 = plt.subplots()
+        
+        # Plot metrics
+        ax1.plot(eps, y_tr, color='b', marker='.', linestyle='-', alpha=0.6, label=metric_name)
+        ax1.plot(eps, y_vl, color='r', marker='.', linestyle='-', alpha=0.6, label=metric_name_val)
+        ax1.set_xlabel('epoch')
+        ax1.set_ylabel(metric_name)
+        ax1.set_xlim([min(eps)-1, max(eps)+1])
+        ax1.set_ylim([ymin, ymax])
+        ax1.tick_params('y', colors='k')
+        
+        # ax1.tick_params(axis='both', which='major', labelsize=12)
+        # ax1.tick_params(axis='both', which='minor', labelsize=12)        
+        
+        # Add learning rate
+        if (add_lr is True) and ('lr' in hh):            
+            ax2 = ax1.twinx()
+            ax2.plot(eps, hh['lr'][skip_epochs:], color='g', marker='.', linestyle=':', alpha=0.6, markersize=5, label='learning rate')
+            ax2.set_ylabel('learning rate', color='g', fontsize=12)
+            
+            yscale = 'log'  # 'linear'
+            ax2.set_yscale(yscale)
+            ax2.tick_params('y', colors='g')
+        
+        ax1.grid(True)
+        #plt.legend([metric_name, metric_name_val], loc='best')
+        #https://medium.com/@samchaaa/how-to-plot-two-different-scales-on-one-plot-in-matplotlib-with-legend-46554ba5915a
+        legend = ax1.legend(loc='best', prop={'size': 10})
+        frame = legend.get_frame()
+        frame.set_facecolor('0.95')
         if title is not None:
             plt.title(title)
-        plt.xlabel('epoch')
-        plt.ylabel(metric_name)
-        plt.xlim([0.5, len(epochs) + 0.5])
-        plt.ylim([ymin-0.1, ymax+0.1])
-        plt.grid(True)
-        plt.legend([metric_name, metric_name_val], loc='best')
-
-        plt.savefig(os.path.join(outdir, metric_name+'_curve.png'), bbox_inches='tight')
+        
+        # fig.tight_layout()
+        figpath = outdir / (metric_name+'_curve.png')
+        plt.savefig(figpath, bbox_inches='tight')
         plt.close()
-
         
 
 class BaseMLModel():
@@ -204,7 +238,7 @@ class KERAS_REGRESSOR(BaseMLModel):
     """ Neural network regressor. """
     model_name = 'nn_reg'
 
-    def __init__(self, input_dim, attn=False, dr_rate=0.2,
+    def __init__(self, input_dim, attn=False, dr_rate=0.2, lr=0.0001,
                  logger=None):
         # Load keras modules only if keras model is invoked
         # TODO: there should be a better way to make this code compatible on machine with and w/o GPU!
@@ -249,29 +283,28 @@ class KERAS_REGRESSOR(BaseMLModel):
         model.summary()
         
         model.compile(loss='mean_squared_error',
-                      optimizer=SGD(lr=0.0001, momentum=0.9),
+                      optimizer=SGD(lr=lr, momentum=0.9),
                       metrics=['mae', r2])
         self.model = model
 
 
     def dump_model(self, outdir='./'):
         """ Dump trained model. """
-        # Serialize model to JSON                                                                                                                     
+        # Serialize model to JSON
         model_json = self.model.to_json()
         modelpath = os.path.join(outdir, 'model.' + KERAS_REGRESSOR.model_name + '.json')
         with open(modelpath, 'w') as mfile:
             mfile.write(model_json)
 
-        # Serialize model to YAML                                                                                                                     
+        # Serialize model to YAML
         # model_yaml = self.model.to_yaml()
         # modelpath = os.path.join(outdir, KERAS_REGRESSOR.model_name + '.model.yaml')
         # with open(modelpath, 'w') as mfile:
         #         mfile.write(model_yaml)
 
-        # serialize weights to HDF5                                                 
+        # serialize weights to HDF5
         weightpath = os.path.join(outdir, 'weights.' + KERAS_REGRESSOR.model_name + '.h5')
         self.model.save_weights(weightpath)
-        # print("Saved model to disk")
 
 
 

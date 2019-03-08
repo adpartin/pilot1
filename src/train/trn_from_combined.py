@@ -1,36 +1,29 @@
-from __future__ import print_function
-from __future__ import division
-
-from comet_ml import Experiment
+from __future__ import print_function, division
 
 import warnings
 warnings.filterwarnings('ignore')
 
+from comet_ml import Experiment
 import os
 
 import sys
-import time
-import datetime
-import logging
+import pathlib
 import psutil
-import re
+import datetime
+from time import time
 from pprint import pprint
-from collections import OrderedDict
+
+import sklearn
 import numpy as np
 import pandas as pd
-
-import argparse
-import configparser
 
 import matplotlib
 # matplotlib.use('TkAgg')
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-import seaborn as sns
-
 from scipy import stats
-import sklearn
+
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import learning_curve
 from sklearn.model_selection import cross_val_score, cross_validate, learning_curve
@@ -40,13 +33,19 @@ from sklearn.model_selection import ShuffleSplit, KFold
 from sklearn.model_selection import GroupShuffleSplit, GroupKFold
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 
-# Get file path
+SEED = None
+t_start = time()
+
+
+# File path
 # ... manutally run ...
 # file_path = os.getcwd()
 # file_path = os.path.join(file_path, 'src/models')
 # os.chdir(file_path)
 # ... auto ...
-file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
+# file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
+file_path = pathlib.Path(__file__).resolve().parent
+
 
 # Utils
 # utils_path = os.path.abspath(os.path.join(file_path, 'utils'))
@@ -60,14 +59,17 @@ import ml_models
 from cvrun import my_cross_validate
 from cvsplitter import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
 
-DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
-OUTDIR = os.path.join(file_path, '../../models/from_combined')
+
+# Path
+# DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
+# OUTDIR = os.path.join(file_path, '../../models/from_combined')
+DATADIR = file_path / '../../data/processed/from_combined'
+OUTDIR = file_path / '../../models/from_combined'
 DATAFILENAME = 'tidy_data_no_fibro.parquet'
 # DATAFILENAME = 'tidy_data.parquet'
 CONFIGFILENAME = 'config_prms.txt'
 os.makedirs(OUTDIR, exist_ok=True)
 
-SEED = None
 
 # Feature prefix (some already present in the tidy dataframe)
 fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.',
@@ -133,25 +135,28 @@ def run(args):
     #       Logger
     # ========================================================================
     run_outdir = utils.create_outdir(outdir=outdir, args=args)
-    logfilename = os.path.join(run_outdir, 'logfile.log')
+    # logfilename = os.path.join(run_outdir, 'logfile.log')
+    logfilename = run_outdir / 'logfile.log'
     lg = classlogger.Logger(logfilename=logfilename)
 
     lg.logger.info(f'File path: {file_path}')
-    lg.logger.info(f'System CPUs: {psutil.cpu_count()}')
+    lg.logger.info(f'System CPUs: {psutil.cpu_count(logical=True)}')
     lg.logger.info(f'n_jobs: {n_jobs}')
 
     # Dump args to file
     utils.dump_args(args, outdir=run_outdir)
 
     # Create outdir for figs
-    figpath = os.path.join(run_outdir, 'figs')
+    # figpath = os.path.join(run_outdir, 'figs')
+    figpath = run_outdir / 'figs'
     os.makedirs(figpath, exist_ok=True)
 
 
     # ========================================================================
     #       Load data and pre-proc
     # ========================================================================
-    datapath = os.path.join(DATADIR, DATAFILENAME)
+    # datapath = os.path.join(DATADIR, DATAFILENAME)
+    datapath = DATADIR / DATAFILENAME
     data, te_data = utils_tidy.load_data(datapath=datapath, fea_prfx_dict=fea_prfx_dict,
                                          args=args, logger=lg.logger, random_state=SEED)
 
@@ -160,15 +165,15 @@ def run(args):
     #       Save plots
     # ========================================================================
     utils.boxplot_rsp_per_drug(df=data, target_name=target_name,
-        path=os.path.join(figpath, f'{target_name}_per_drug_boxplot.png'))
+        path=figpath / f'{target_name}_per_drug_boxplot.png')
 
     utils.plot_hist(x=data[target_name], var_name=target_name,
-        path=os.path.join(figpath, target_name+'_hist.png'))
+        path=figpath / target_name+'_hist.png')
     
     utils.plot_qq(x=data[target_name], var_name=target_name,
-        path=os.path.join(figpath, target_name+'_qqplot.png'))
+        path=figpath / target_name+'_qqplot.png'))
     
-    utils.plot_hist_drugs(x=data['DRUG'], path=os.path.join(figpath, 'drugs_hist.png'))
+    utils.plot_hist_drugs(x=data['DRUG'], path=figpath / 'drugs_hist.png')
 
 
     # ========================================================================
@@ -207,7 +212,7 @@ def run(args):
         # Regression
         if cv_method == 'group':
             if cv_folds == 1:
-                cv = GroupShuffleSplit(random_state=SEED)
+                cv = GroupShuffleSplit(n_splits=cv_folds, random_state=SEED)
             else:
                 cv = GroupKFold(n_splits=cv_folds)
             groups = data['CELL'].copy()
@@ -296,7 +301,7 @@ def run(args):
     
     # Dump results
     # cv_scores = cv_scores.round(3)
-    cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
+    cv_scores.to_csv(run_outdir / 'cv_scores_' + train_sources_name + '.csv', index=False)
     lg.logger.info(f'cv_scores\n{cv_scores}')
 
 
@@ -359,7 +364,7 @@ def run(args):
     # Save network figure
     if 'nn' in model_name:
         from keras.utils import plot_model
-        plot_model(model_final.model, to_file=os.path.join(figpath, 'nn_model.png'))
+        plot_model(model_final.model, to_file=figpath / 'nn_model.png')
 
 
 
@@ -385,7 +390,7 @@ def run(args):
 
         # Plot dist of response
         utils.plot_hist(x=te_src_data[target_name], var_name=target_name,
-                        path=os.path.join(figpath, target_name + '_hist_' + te_src + '.png'))
+                        path=figpath / target_name + '_hist_' + te_src + '.png')
 
         # Prep test data for preds
         xte, _ = utils_tidy.split_features_and_other_cols(te_src_data, fea_prfx_dict=fea_prfx_dict)
@@ -424,7 +429,7 @@ def run(args):
     # csv_all = csv_all.round(decimals=3)
 
     lg.logger.info('\ncsv_scores\n{}'.format(csv_all))
-    csv_all.to_csv(os.path.join(run_outdir, 'csv_scores_' + train_sources_name + '.csv'), index=False)
+    csv_all.to_csv(run_outdir / 'csv_scores_' + train_sources_name + '.csv', index=False)
 
     # Kill logger
     lg.kill_logger()

@@ -1,17 +1,19 @@
 """
-Implementation of cv run.
+Implementation of cross-validation run.
 """
 import os
+import sys
+from collections import OrderedDict
+
+import sklearn
 import numpy as np
 import pandas as pd
-from collections import OrderedDict
 
 import matplotlib
 # matplotlib.use('TkAgg')
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-import sklearn
 from sklearn.model_selection import ShuffleSplit, KFold
 from sklearn.model_selection import GroupShuffleSplit, GroupKFold
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
@@ -19,6 +21,7 @@ from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 from pandas.api.types import is_string_dtype
 from sklearn.preprocessing import LabelEncoder
 
+# Utils
 import utils
 import utils_tidy
 import ml_models
@@ -31,7 +34,7 @@ def my_cross_validate(X, Y,
                       cv=5, groups=None,
                       lr_curve_ticks=5, data_sizes_frac=None,
                       args=None, fit_params=None, init_params=None,
-                      n_jobs=1, random_state=None, logger=None, outdir='./'):
+                      n_jobs=1, random_state=None, logger=None, outdir='.'):
     """
     Train estimator using various train set sizes and generate learning curves for different metrics.
     The CV splitter splits the input dataset into cv_folds data subsets.
@@ -111,23 +114,26 @@ def my_cross_validate(X, Y,
             from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
 
             # Create output dir
-            out_nn_model = os.path.join(outdir, 'cv'+str(fold_id+1))
+            out_nn_model = outdir / ('cv'+str(fold_id+1))
             os.makedirs(out_nn_model, exist_ok=False)
             
-            # Add keras callbacks
-            checkpointer = ModelCheckpoint(filepath=os.path.join(out_nn_model, 'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
-            csv_logger = CSVLogger(filename=os.path.join(out_nn_model, 'training.log'))
-            # reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
-            #                               min_delta=0.0001, cooldown=3, min_lr=0.000000001)
-            # early_stop = EarlyStopping(monitor='val_loss', patience=100, verbose=1, mode='auto')
-            reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=10, verbose=1, mode='auto',
+            # Callbacks (custom)
+            clr_triangular = CyclicLR(base_lr=0.0001, max_lr=0.001, mode='triangular')
+                
+            # Keras callbacks
+            checkpointer = ModelCheckpoint(str(out_nn_model / 'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
+            csv_logger = CSVLogger(out_nn_model / 'training.log')
+            reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
                                           min_delta=0.0001, cooldown=3, min_lr=0.000000001)
-            early_stop = EarlyStopping(monitor='val_loss', patience=40, verbose=1, mode='auto')            
-            callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
-            fit_params['callbacks'] = callback_list
+            early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1, mode='auto')
+                
+            # Callbacks list
+            callback_list = [checkpointer, csv_logger, early_stop, reduce_lr,  # keras callbacks
+                             clr_triangular]  # custom callbacks
 
-            # Set validation set
+            # Fit params
             fit_params['validation_data'] = (xvl, yvl)
+            fit_params['callbacks'] = callback_list
 
         # Train model
         history = estimator.model.fit(xtr, ytr, **fit_params)
@@ -152,31 +158,8 @@ def my_cross_validate(X, Y,
 
         # Plot training curves
         if 'nn' in model_name:
-            ml_models.plot_prfrm_metrics(history=history, title=f'cv fold: {fold_id+1}', outdir=out_nn_model)
-#             # Summarize history for los
-#             pr_metrics = ml_models.get_keras_prfrm_metrics(history)
-#             epochs = np.asarray(history.epoch) + 1
-#             hh = history.history
-#             for p, m in enumerate(pr_metrics):
-#                 metric_name = m
-#                 metric_name_val = 'val_' + m
-                    
-#                 ymin = min(set(hh[metric_name]).union(hh[metric_name_val]))
-#                 ymax = max(set(hh[metric_name]).union(hh[metric_name_val]))
-
-#                 plt.figure()
-#                 plt.plot(epochs, hh[metric_name], 'b.-', alpha=0.6, label=metric_name)
-#                 plt.plot(epochs, hh[metric_name_val], 'r.-', alpha=0.6, label=metric_name_val)
-#                 plt.title(f'cv fold: {fold_id+1}')
-#                 plt.xlabel('epoch')
-#                 plt.ylabel(metric_name)
-#                 plt.xlim([0.5, len(epochs) + 0.5])
-#                 plt.ylim([ymin-0.1, ymax+0.1])
-#                 plt.grid(True)
-#                 plt.legend([metric_name, metric_name_val], loc='best')
-                    
-#                 plt.savefig(os.path.join(out_nn_model, metric_name+'_curve.png'), bbox_inches='tight')
-#                 plt.close()
+            ml_models.plot_prfrm_metrics(history=history, title=f'cv fold: {fold_id+1}',
+                                         skip_epochs=1, add_lr=True, outdir=out_nn_model)
 
         # Add info
         tr_scores['tr_set'] = True

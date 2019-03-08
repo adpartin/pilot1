@@ -1,27 +1,30 @@
 import os
 import logging
+import pathlib
 import datetime
+from collections import OrderedDict
+
+import sklearn
 import numpy as np
 import pandas as pd
-from collections import OrderedDict
 
 import matplotlib
 # matplotlib.use('TkAgg')
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
 import seaborn as sns
+
 from scipy import stats
 
-import sklearn
 from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error, explained_variance_score
 
+# Utils
 import classlogger
 
 DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
 
 
-def create_outdir(outdir='./', args=None):
+def create_outdir(outdir='.', args=None):
     """ Create output dir. """
     t = datetime.datetime.now()
     t = [t.year, '-', t.month, '-', t.day, '-', 'h', t.hour, '-', 'm', t.minute]
@@ -35,7 +38,7 @@ def create_outdir(outdir='./', args=None):
     return run_outdir
 
 
-def dump_args(args, outdir='./'):
+def dump_args(args, outdir='.'):
     """ Dump args (dict) into file.
     Examples:
         utils.dump_args(args, outdir=outdir)

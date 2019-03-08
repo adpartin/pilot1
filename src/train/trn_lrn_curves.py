@@ -1,51 +1,50 @@
-from __future__ import print_function
-from __future__ import division
+from __future__ import print_function, division
 
 import warnings
 warnings.filterwarnings('ignore')
 
 from comet_ml import Experiment
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import sys
-import time
-import datetime
-import logging
+import pathlib
 import psutil
-import re
+import datetime
+from time import time
 from pprint import pprint
-from collections import OrderedDict
+
+import sklearn
 import numpy as np
 import pandas as pd
-
-import argparse
-import configparser
 
 import matplotlib
 # matplotlib.use('TkAgg')
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-import seaborn as sns
-
 from scipy import stats
-import sklearn
+
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import learning_curve
 from sklearn.model_selection import cross_val_score, cross_validate, learning_curve
 
+from sklearn.model_selection import train_test_split
 from sklearn.model_selection import ShuffleSplit, KFold
 from sklearn.model_selection import GroupShuffleSplit, GroupKFold
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 
-# Get file path
+SEED = None
+t_start = time()
+
+
+# File path
 # ... manutally run ...
 # file_path = os.getcwd()
 # file_path = os.path.join(file_path, 'src/models')
 # os.chdir(file_path)
 # ... auto ...
-file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
+# file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
+file_path = pathlib.Path(__file__).resolve().parent
 
 # Utils
 # utils_path = os.path.abspath(os.path.join(file_path, 'utils'))
@@ -58,15 +57,16 @@ import lrn_curve
 import ml_models
 from cvsplitter import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
 
-DATADIR = os.path.join(file_path, '../../data/processed/from_combined')
-OUTDIR = os.path.join(file_path, '../../models/from_combined')
+
+# Path
+DATADIR = file_path / '../../data/processed/from_combined'
+OUTDIR = file_path / '../../models/from_combined'
 DATAFILENAME = 'tidy_data_no_fibro.parquet'
 # DATAFILENAME = 'tidy_data.parquet'
 CONFIGFILENAME = 'config_prms.txt'
 COMET_PRJ_NAME = 'trn_lrn_curves'
 os.makedirs(OUTDIR, exist_ok=True)
 
-SEED = None
 
 # Feature prefix (some already present in the tidy dataframe)
 fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.',
@@ -128,11 +128,11 @@ def run(args):
     #       Logger
     # ========================================================================
     run_outdir = utils.create_outdir(outdir=outdir, args=args)
-    logfilename = os.path.join(run_outdir, 'logfile.log')
+    logfilename = run_outdir / 'logfile.log'
     lg = classlogger.Logger(logfilename=logfilename)
 
     lg.logger.info(f'File path: {file_path}')
-    lg.logger.info(f'System CPUs: {psutil.cpu_count()}')
+    lg.logger.info(f'System CPUs: {psutil.cpu_count(logical=True)}')
     lg.logger.info(f'n_jobs: {n_jobs}')
 
     # Dump args to file
@@ -159,7 +159,7 @@ def run(args):
     # ========================================================================
     #       Load data and pre-proc
     # ========================================================================
-    datapath = os.path.join(DATADIR, DATAFILENAME)
+    datapath = DATADIR / DATAFILENAME
     data, te_data = utils_tidy.load_data(datapath=datapath, fea_prfx_dict=fea_prfx_dict,
                                          args=args, logger=lg.logger, random_state=SEED)
 
@@ -193,7 +193,7 @@ def run(args):
         # Regression
         if cv_method == 'group':
             if cv_folds == 1:
-                cv = GroupShuffleSplit(random_state=SEED)
+                cv = GroupShuffleSplit(n_splits=cv_folds, random_state=SEED)
             else:
                 cv = GroupKFold(n_splits=cv_folds)
             groups = data['CELL'].copy()
@@ -233,7 +233,7 @@ def run(args):
     lg.logger.info('\nStart learning curve (my method) ...')
 
     # Run learning curve
-    t0 = time.time()
+    t0 = time()
     lrn_curve_scores = lrn_curve.my_learning_curve(
         X=xdata, Y=ydata,
         mltype=mltype,
@@ -247,15 +247,15 @@ def run(args):
         cv=cv,
         groups=groups,
         n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
-    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
+    lg.logger.info('Runtime: {:.3f} mins'.format((time()-t0)/60))
 
     # Dump results
-    lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores.csv'), index=False) 
+    lrn_curve_scores.to_csv(run_outdir / 'lrn_curve_scores.csv', index=False) 
 
     # Save network figure
     if 'nn' in model_name:
         from keras.utils import plot_model
-        plot_model(model_final.model, to_file=os.path.join(figpath, 'nn_model.png'))
+        plot_model(model_final.model, to_file=figpath / 'nn_model.png')
 
 
     # -----------------------------------------------
@@ -332,7 +332,7 @@ def run(args):
    
 
 def main(args):
-    config_fname = os.path.join(file_path, CONFIGFILENAME)
+    config_fname = file_path / CONFIGFILENAME
     args = argparser.get_args(args=args, config_fname=config_fname)
     pprint(vars(args))
     args = vars(args)
