@@ -85,6 +85,7 @@ psr.add_argument('--batch', type=int, default=32)
 psr.add_argument('--dr', type=float, default=0.2)
 psr.add_argument('--lr', type=float, default=0.0005, help='Learning rate')
 psr.add_argument('--ep', type=int, default=200, help='Total number epochs')
+psr.add_argument('--ref_ep', type=int, default=150, help='Reference epoch')
 psr.add_argument('--split_method', type=str, choices=['rnd', 'hrd'], default='hrd')
 
 args = vars(psr.parse_args())
