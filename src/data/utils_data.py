@@ -151,12 +151,11 @@ def plot_rsp_dists(rsp, rsp_cols, savepath=None):
             ax.legend(fontsize=5, loc='best')
             ax.grid(True)
 
-    plt.tight_layout()
     # plt.tight_layout(pad=0.5, w_pad=0.5, h_pad=1.0)
     if savepath is not None:
-        plt.savefig(savepath, bbox_inches='tight', dpi=300)
+        plt.savefig(savepath, bbox_inches='tight', dpi=200)
     else:
-        plt.savefig('rsp_dists.png', bbox_inches='tight', dpi=300)
+        plt.savefig('rsp_dists.png', bbox_inches='tight', dpi=200)
 
 
 def plot_dsc_na_dist(dsc, savepath=None):
@@ -166,9 +165,8 @@ def plot_dsc_na_dist(dsc, savepath=None):
     plt.xlabel('Ratio of NA values')
     plt.title('Histogram of descriptors')
     plt.grid(True)
-    plt.tight_layout()
     if savepath is not None:
-        plt.savefig(savepath, bbox_inches='tight', dpi=300)
+        plt.savefig(savepath, bbox_inches='tight', dpi=200)
     else:
         plt.savefig('dsc_hist_ratio_of_na.png', bbox_inches='tight', dpi=200)
 
@@ -189,6 +187,16 @@ def dropna(df, axis=0, th=0.4):
     return df
 
 
+def dump_args(args, outdir='.'):
+    """ Dump args (dict) into file.
+    Examples:
+        utils.dump_args(args, outdir=outdir)
+    """
+    with open(os.path.join(outdir, 'args.txt'), 'w') as file:
+        for k, v in args.items():
+            file.write('{} = {}\n'.format(k, v))
+            
+            
 # --------------------------------------------------------------------------------------------------------------
 class CombinedRNASeqLINCS():
     """ Combined LINCS dataset. """

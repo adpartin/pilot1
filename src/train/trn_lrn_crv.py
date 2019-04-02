@@ -250,12 +250,12 @@ def run(args):
     lg.logger.info('Runtime: {:.3f} mins'.format((time()-t0)/60))
 
     # Dump results
-    lrn_curve_scores.to_csv(run_outdir / 'lrn_curve_scores.csv', index=False) 
+    lrn_curve_scores.to_csv(run_outdir/'lrn_curve_scores.csv', index=False) 
 
     # Save network figure
     if 'nn' in model_name:
         from keras.utils import plot_model
-        plot_model(model_final.model, to_file=figpath / 'nn_model.png')
+        plot_model(model_final.model, to_file=figpath/'nn_model.png')
 
 
     # -----------------------------------------------

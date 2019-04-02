@@ -218,7 +218,7 @@ def my_learning_curve(X, Y,
             if 'nn' in model_name:
                 from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
                 from keras.utils import plot_model
-                plot_model(estimator.model, to_file=outdir / 'nn_model.png')
+                plot_model(estimator.model, to_file=outdir/'nn_model.png')
 
                 # Create output dir
                 out_nn_model = outdir / ('cv'+str(fold_id+1) + '_sz'+str(tr_sz))
@@ -228,8 +228,8 @@ def my_learning_curve(X, Y,
                 clr_triangular = CyclicLR(base_lr=0.0001, max_lr=0.001, mode='triangular')
                 
                 # Keras callbacks
-                checkpointer = ModelCheckpoint(str(out_nn_model / 'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
-                csv_logger = CSVLogger(out_nn_model / 'training.log')
+                checkpointer = ModelCheckpoint(str(out_nn_model/'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
+                csv_logger = CSVLogger(out_nn_model/'training.log')
                 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
                                               min_delta=0.0001, cooldown=3, min_lr=0.000000001)
                 early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1, mode='auto')
@@ -240,7 +240,7 @@ def my_learning_curve(X, Y,
 
                 # Fit params
                 # fit_params['validation_data'] = (xvl, yvl)
-                fit_params['validation_split'] = 0.1
+                fit_params['validation_split'] = 0.2
                 fit_params['callbacks'] = callback_list
 
             # Train model
@@ -256,7 +256,7 @@ def my_learning_curve(X, Y,
 
             if 'nn' in model_name:
                 ml_models.plot_prfrm_metrics(history=history, title=f'Train size: {tr_sz}',
-                                             skip_epochs=1, add_lr=True, outdir=out_nn_model)
+                                             skip_epochs=3, add_lr=True, outdir=out_nn_model)
 
             # Add info
             tr_scores['tr_set'] = True

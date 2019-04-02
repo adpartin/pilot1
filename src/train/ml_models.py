@@ -32,7 +32,7 @@ except ImportError:
 #     # https://www.kaggle.com/spektrum/randomsearchcv-to-hyper-tune-1st-level
 
 
-def r2(y_true, y_pred):
+def r2_krs(y_true, y_pred):
     from keras import backend as K
     SS_res =  K.sum(K.square(y_true - y_pred))
     SS_tot = K.sum(K.square(y_true - K.mean(y_true)))
@@ -59,10 +59,17 @@ def get_model(model_name, init_params=None):
     return estimator
 
 
+def dump_keras_history(history, outdir='.'):
+    fname = 'keras_history.csv'
+    h = pd.DataFrame(history.history)
+    h['epoch'] = np.asarray(history.epoch) + 1
+    h.to_csv(outdir/fname, index=False)
+    return h
+
+
 def get_keras_prfrm_metrics(history):
-    """ Extract names of all the recorded performance metrics from keras `history` variable
-    for train and val sets. The performance metrics can be indentified as those that start
-    with 'val'.
+    """ Extract names of all the recorded performance metrics from keras `history` variable for
+    train and val sets. The performance metrics can be indentified as those starting with 'val'.
     """
     all_metrics = list(history.history.keys())  # all metrics including everything returned from callbacks
     pr_metrics = []  # performance metrics recorded for train and val such as 'loss', etc. (excluding callbacks)
@@ -81,6 +88,8 @@ def plot_prfrm_metrics(history, title=None, skip_epochs=0, outdir='.', add_lr=Fa
     """
     pr_metrics = get_keras_prfrm_metrics(history)
     epochs = np.asarray(history.epoch) + 1
+    if len(epochs) <= skip_epochs:
+        skip_epochs = 0
     eps = epochs[skip_epochs:]
     hh = history.history
     
@@ -114,7 +123,8 @@ def plot_prfrm_metrics(history, title=None, skip_epochs=0, outdir='.', add_lr=Fa
         # Add learning rate
         if (add_lr is True) and ('lr' in hh):            
             ax2 = ax1.twinx()
-            ax2.plot(eps, hh['lr'][skip_epochs:], color='g', marker='.', linestyle=':', alpha=0.6, markersize=5, label='learning rate')
+            ax2.plot(eps, hh['lr'][skip_epochs:], color='g', marker='.', linestyle=':',
+                     alpha=0.6, markersize=5, label='learning rate')
             ax2.set_ylabel('learning rate', color='g', fontsize=12)
             
             yscale = 'log'  # 'linear'
@@ -146,8 +156,8 @@ class BaseMLModel():
         https://dziganto.github.io/data%20science/linear%20regression/machine%20learning/python/Linear-Regression-101-Metrics/
         https://stats.stackexchange.com/questions/334004/can-r2-be-greater-than-1
         """
-        r2 = sklearn.metrics.r2_score(ydata, preds)
-        adj_r2 = 1 - (1 - r2) * (self.x_size[0] - 1)/(self.x_size[0] - self.x_size[1] - 1)
+        r2_score = sklearn.metrics.r2_score(ydata, preds)
+        adj_r2 = 1 - (1 - r2_score) * (self.x_size[0] - 1)/(self.x_size[0] - self.x_size[1] - 1)
         return adj_r2
 
 
@@ -238,7 +248,7 @@ class KERAS_REGRESSOR(BaseMLModel):
     """ Neural network regressor. """
     model_name = 'nn_reg'
 
-    def __init__(self, input_dim, attn=False, dr_rate=0.2, lr=0.0001,
+    def __init__(self, input_dim, attn=False, dr_rate=0.2, optimizer=None,
                  logger=None):
         # Load keras modules only if keras model is invoked
         # TODO: there should be a better way to make this code compatible on machine with and w/o GPU!
@@ -282,9 +292,12 @@ class KERAS_REGRESSOR(BaseMLModel):
         model = Model(inputs=inputs, outputs=outputs)
         model.summary()
         
+        if optimizer is None:
+            optimizer = SGD(lr=0.0001, momentum=0.9)
+            
         model.compile(loss='mean_squared_error',
-                      optimizer=SGD(lr=lr, momentum=0.9),
-                      metrics=['mae', r2])
+                      optimizer=optimizer,
+                      metrics=['mae', r2_krs])
         self.model = model
 
 

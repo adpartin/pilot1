@@ -1,80 +1,118 @@
 """
 This "new" version of the code uses a different dataframe of descriptors:
 'pan_drugs_dragon7_descriptors.tsv' instead of 'Combined_PubChem_dragon7_descriptors.tsv'
-TODO:
-- add chemparter data to the tidy df.
 """
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
 
 import warnings
 warnings.filterwarnings('ignore')
 
 import os
 import sys
+import pathlib
 import platform
-import time
-import datetime
 import argparse
+import datetime
+from time import time
+from pprint import pprint
 import psutil
+
+import sklearn
 import numpy as np
 import pandas as pd
 
 # https://github.com/MTG/sms-tools/issues/36
 import matplotlib
-# matplotlib.use('TkAgg')
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import seaborn as sns
 
-# Utils
-# file_path = os.getcwd()
-# file_path = os.path.join(file_path, 'src/data')
-# os.chdir(file_path)
-# sys.path.append(file_path)
+SEED = None
+t0 = time()
 
-file_path = os.path.dirname(os.path.realpath(__file__))  # os.path.dirname(os.path.abspath(__file__))
-#utils_path = os.path.abspath(os.path.join(file_path, 'utils'))
-#sys.path.append(utils_path)
+
+# Utils
 import utils_data as utils
+
+
+# File path
+# file_path = os.path.dirname(os.path.realpath(__file__))
+file_path = pathlib.Path(__file__).resolve().parent
+
 
 # TODO: fix this similar to CANDLE (i.e. download file server)
 if sys.platform == 'darwin':  # my mac
-    DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
+    DATADIR = pathlib.Path('/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1')
 elif 'theta' in platform.uname()[1]:
     DATADIR = None # TODO: set this
 else:
-    DATADIR = '/vol/ml/apartin/Benchmarks/Data/Pilot1'
-OUTDIR = os.path.join(file_path, '../../data/processed/from_combined')
+    DATADIR = pathlib.Path('/vol/ml/apartin/Benchmarks/Data/Pilot1')
+OUTDIR = file_path / '../../data/processed/from_combined'
 os.makedirs(OUTDIR, exist_ok=True)
 
 RSP_FILENAME = 'combined_single_response_agg'  # reposne data filename
-# RSP_FILENAME = 'ChemPartner_single_response_agg'  # reposne data filename
+RSP_FILENAME_CHEM = 'ChemPartner_single_response_agg'  # reposne data filename
 
-#DSC_FILENAME = 'Combined_PubChem_dragon7_descriptors.tsv'  # drug descriptors data filename (old)
+# DSC_FILENAME = 'Combined_PubChem_dragon7_descriptors.tsv'  # drug descriptors data filename (old)
 DSC_FILENAME = 'pan_drugs_dragon7_descriptors.tsv'  # drug descriptors data filename (new)
 
 DRUG_META_FILENAME = 'drug_info'
 
-t0 = time.time()
 
 
 # ========================================================================
-#       Args TODO: add to argparse
+#       Arg parser
 # ========================================================================
-# sources = ['ccle', 'gcsi', 'gdsc', 'ctrp']
-sources = ['ccle', 'gcsi', 'gdsc', 'ctrp', 'nci60']
-drug_features = ['dsc']  # ['dsc', 'fng']
-cell_features = ['rna']  # ['rna', 'cnv']
-dropna_thres = 0.4
+# Arg parser
+psr = argparse.ArgumentParser(description='Create tidy data. Arg parser.')
+psr.add_argument('--drop_fibro', type=int, choices=[0, 1], default=1)
+psr.add_argument('--drop_bad', type=int, choices=[0, 1], default=1)
+psr.add_argument('--dropna_th', type=float, default=0.4)
+psr.add_argument('--verbose', type=int, choices=[0, 1], default=1)
+psr.add_argument('--drug_fea', type=str, nargs='+', choices=['dsc', 'fng'], default=['dsc'])
+psr.add_argument('--cell_fea', type=str, nargs='+', choices=['rna', 'cnv'], default=['rna'])
 
-verbose = True
+args = vars(psr.parse_args())
+pprint(args)
+
+
+# Args
+drop_fibro = bool(args['drop_fibro'])
+drop_bad = bool(args['drop_bad'])
+dropna_thres = args['dropna_th']
+verbose = bool(args['verbose'])
+drug_features = args['drug_fea']
+cell_features = args['cell_fea']
+
+
+# Create outdir
+if drop_fibro and drop_bad:
+    outdir = OUTDIR / 'tidy_drop_fibro_and_bad'
+elif drop_fibro:
+    outdir = OUTDIR / 'tidy_drop_fibro'
+elif drop_bad:
+    outdir = OUTDIR / 'tidy_drop_bad'
+else:
+    outdir = OUTDIR / 'tidy'
+os.makedirs(outdir, exist_ok=True)
+
+
+
+# ========================================================================
+#       Other settings
+# ========================================================================
+sources = ['ccle', 'gcsi', 'gdsc', 'ctrp', 'nci60', 'chempartner']
 na_values = ['na', '-', '']
-tidy_data_format = 'parquet'
+tidy_file_name = 'tidy_data'
+tidy_file_format = 'parquet'
+
+# Response columns
+rsp_cols = ['AUC', 'AUC1', 'EC50', 'EC50se',
+            'R2fit', 'Einf', 'IC50',
+            'HS', 'AAC1', 'DSS1']
 
 # Analysis of fibro samples are implemented in ccle_fibroblast.py and ccle_preproc.R
-drop_fibro = True
 fibro_names = ['CCLE.HS229T', 'CCLE.HS739T', 'CCLE.HS840T', 'CCLE.HS895T', 'CCLE.RKN',
                'CTRP.Hs-895-T', 'CTRP.RKN', 'GDSC.RKN', 'gCSI.RKN']
 
@@ -87,34 +125,55 @@ prfx_dtypes = {'rna': np.float32,
                'dsc': np.float32,
                'fng': np.int8}
 
+# Dump args
+args['outdir'] = outdir
+args['sources'] = sources
+utils.dump_args(args, outdir=outdir)
+
+
 
 # ========================================================================
 #       Logger
 # ========================================================================
-t = datetime.datetime.now()
-t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
-t = ''.join([str(i) for i in t])
-logfilename = os.path.join(OUTDIR, 'tidy_data_' + t + '.log')
+# t = datetime.datetime.now()
+# t = [t.year, '-', t.month, '-', t.day, '-', 'h', t.hour, '-', 'm', t.minute]
+# t = ''.join([str(i) for i in t])
+# logfilename = outdir/('tidy_data_' + t + '.log')
+logfilename = outdir / 'tidy_data.log'
 logger = utils.setup_logger(logfilename=logfilename)
 
 logger.info(f'File path: {file_path}')
 logger.info(f'Num of system CPUs: {psutil.cpu_count()}')
 
 
+
 # ========================================================================
 #       Load response data
 # ========================================================================
+# Combined response
 logger.info(f'\n\nLoading combined response ... {RSP_FILENAME}')
-rsp_cols = ['AUC', 'AUC1', 'EC50', 'EC50se',
-            'R2fit', 'Einf', 'IC50',
-            'HS', 'AAC1', 'DSS1']
-rsp = pd.read_table(os.path.join(DATADIR, RSP_FILENAME), sep='\t',
-                    na_values=na_values,
+rsp = pd.read_table(DATADIR / RSP_FILENAME,
+                    sep='\t', na_values=na_values,
                     dtype={'SOURCE': str, 'CELL': str, 'DRUG': str,
                            'AUC': np.float32, 'IC50': np.float32, 'EC50': np.float32,
                            'EC50se': np.float32, 'R2fit': np.float32, 'Einf': np.float32,
                            'HS': np.float32, 'AAC1': np.float32, 'AUC1': np.float32, 'DSS1': np.float32},
                     warn_bad_lines=True)
+
+# Chempartner response
+logger.info(f'Loading chempartner response ... {RSP_FILENAME_CHEM}')
+rsp_chem = pd.read_table(DATADIR / RSP_FILENAME_CHEM,
+                         sep='\t', na_values=na_values,
+                         dtype={'SOURCE': str, 'CELL': str, 'DRUG': str,
+                                'AUC': np.float32, 'IC50': np.float32, 'EC50': np.float32,
+                                'EC50se': np.float32, 'R2fit': np.float32, 'Einf': np.float32,
+                                'HS': np.float32, 'AAC1': np.float32, 'AUC1': np.float32, 'DSS1': np.float32},
+                         warn_bad_lines=True)
+rsp_chem['SOURCE'] = rsp_chem['SOURCE'].map(lambda x: x.split('_')[0])
+
+# Merge rsp from combined and chempartner
+rsp = pd.concat([rsp, rsp_chem], axis=0)
+
 rsp['SOURCE'] = rsp['SOURCE'].apply(lambda x: x.lower())
 logger.info(f'rsp.shape {rsp.shape}')
 
@@ -126,18 +185,37 @@ if verbose:
     logger.info('')
     logger.info(rsp.groupby('SOURCE').agg({'CELL': 'nunique', 'DRUG': 'nunique'}).reset_index())
     
-# Plot distributions of target variables
-utils.plot_rsp_dists(rsp=rsp, rsp_cols=rsp_cols, savepath=os.path.join(OUTDIR, 'rsp_dists.png'))
-
-# Plot distribution of a single target
-# target_name = 'EC50se'
-# fig, ax = plt.subplots()
-# x = rsp[target_name].copy()
-# x = x[~x.isna()].values
-# sns.distplot(x, bins=100, ax=ax)
-# plt.savefig(os.path.join(OUTDIR, target_name+'.png'), bbox_inches='tight')
 
 
+# ========================================================================
+#   Drop fibroblast
+# ========================================================================
+if drop_fibro:
+    logger.info('\n\nDrop fibroblast samples ...')
+    # rna = rna[rna['CELL'].map(lambda x: False if x in fibro_names else True)]
+    # cmeta = cmeta[cmeta['CELL'].map(lambda x: False if x in fibro_names else True)]
+    # rsp = rsp[rsp['CELL'].map(lambda x: False if x in fibro_names else True)]
+    id_drop = rsp['CELL'].map(lambda x: True if x in fibro_names else False)
+    logger.info(f'Drops {sum(id_drop)} rsp data points.')
+    rsp = rsp.loc[~id_drop,:]
+    logger.info(f'rsp.shape {rsp.shape}')
+    # logger.info(f'rna.shape   {rna.shape}')
+    # logger.info(f'cmeta.shape {cmeta.shape}')
+    
+    
+    
+# ========================================================================
+#   Drop 'bad' points (defined by Yitan)
+# ========================================================================    
+if drop_bad:
+    logger.info('\n\nDrop bad samples ...')
+    id_drop = (rsp['AUC'] == 0) & (rsp['EC50se'] == 0) & (rsp['R2fit'] == 0)
+    logger.info(f'Drops {sum(id_drop)} rsp data points.')
+    rsp = rsp.loc[~id_drop,:]
+    logger.info(f'rsp.shape {rsp.shape}')   
+    
+    
+    
 # ========================================================================
 #   Load rna (combined_dataset)
 # ========================================================================
@@ -163,7 +241,7 @@ if verbose:
 #   Load drug descriptors
 # ========================================================================
 logger.info(f'\n\nLoading drug descriptors ... {DSC_FILENAME}')
-path = os.path.join(DATADIR, DSC_FILENAME)
+path = DATADIR / DSC_FILENAME
 cols = pd.read_table(path, engine='c', nrows=0)
 dtype_dict = {c: prfx_dtypes['dsc'] for c in cols.columns[1:]}
 dsc = pd.read_table(path, dtype=dtype_dict, na_values=na_values, warn_bad_lines=True)
@@ -180,7 +258,7 @@ logger.info(f'dsc.shape {dsc.shape}')
 # dsc.nunique(dropna=True).sort_values()
 
 logger.info('Drop descriptors with *lots* of NA values ...')
-utils.plot_dsc_na_dist(dsc=dsc, savepath=os.path.join(OUTDIR, 'dsc_hist_ratio_of_na.png'))
+utils.plot_dsc_na_dist(dsc=dsc, savepath=outdir/'dsc_hist_ratio_of_na.png')
 dsc = utils.dropna(df=dsc, axis=1, th=dropna_thres)
 logger.info(f'dsc.shape {dsc.shape}')
 # dsc.isna().sum().sort_values(ascending=False)
@@ -227,22 +305,6 @@ if verbose:
 #     logger.info(dmeta.groupby('SOURCE').agg({'DRUG': 'nunique', 'NAME': 'nunique',
 #                                              'CLEAN_NAME': 'nunique', 'PUBCHEM': 'nunique'}).reset_index())
 
-
-# ========================================================================
-#   Drop fibroblast
-# ========================================================================
-if drop_fibro:
-    logger.info('\n\nDrop fibroblast samples ...')
-    rna = rna[rna['CELL'].map(lambda x: False if x in fibro_names else True)]
-    cmeta = cmeta[cmeta['CELL'].map(lambda x: False if x in fibro_names else True)]
-    rsp = rsp[rsp['CELL'].map(lambda x: False if x in fibro_names else True)]
-    logger.info(f'rsp.shape   {rsp.shape}')
-    logger.info(f'rna.shape   {rna.shape}')
-    logger.info(f'cmeta.shape {cmeta.shape}')
-
-    tidy_data_name = 'tidy_data_no_fibro'
-else:
-    tidy_data_name = 'tidy_data'
 
 
 # ========================================================================
@@ -331,32 +393,49 @@ if verbose:
 #     if len(dict_types) > 0:
 #         data = data.astype(dict_types)
 
-logger.info('\nEnd of data per-processing: {:.2f} mins'.format((time.time()-t0)/60))
+logger.info('\nEnd of data per-processing: {:.2f} mins'.format( (time()-t0)/60) )
+
+
+
+# ========================================================================
+#   Plot rsp distributions
+# ========================================================================
+# Plot distributions of target variables
+utils.plot_rsp_dists(rsp=data, rsp_cols=rsp_cols, savepath=outdir/'rsp_dists.png')
+
+# Plot distribution of a single target
+# target_name = 'EC50se'
+# fig, ax = plt.subplots()
+# x = rsp[target_name].copy()
+# x = x[~x.isna()].values
+# sns.distplot(x, bins=100, ax=ax)
+# plt.savefig(os.path.join(OUTDIR, target_name+'.png'), bbox_inches='tight') 
+
 
 
 # ========================================================================
 #   Finally save data
 # ========================================================================
 logger.info('\nSave tidy dataframe ...')
-t0 = time.time()
+t0 = time()
 data.drop(columns='STUDY', inplace=True) # gives error when save in 'parquet' format
 
-if tidy_data_format == 'parquet':
-    tidy_filepath = os.path.join(OUTDIR, tidy_data_name+'.parquet')
+if tidy_file_format == 'parquet':
+    tidy_filepath = outdir / (tidy_file_name + '.parquet')
     data.to_parquet(tidy_filepath, engine='auto', compression='snappy')
 else: 
-    tidy_filepath = os.path.join(OUTDIR, 'tidy_data')
+    tidy_filepath = outdir / 'tidy_data'
     data.to_csv(tidy_filepath, sep='\t')
-logger.info('Save tidy data to disk: {:.2f} mins'.format((time.time()-t0)/60))
+logger.info('Save tidy data to disk: {:.2f} mins'.format( (time()-t0)/60) )
 
 # Check that the saved data is the same as original one
-logger.info(f'\nLoad tidy dataframe {tidy_data_format} ...')
-t0 = time.time()
-if tidy_data_format == 'parquet':
+logger.info(f'\nLoad tidy dataframe {tidy_file_format} ...')
+t0 = time()
+if tidy_file_format == 'parquet':
     data_fromfile = pd.read_parquet(tidy_filepath, engine='auto', columns=None)
 else:
     data_fromfile = pd.read_table(tidy_filepath, sep='\t')
-logger.info('Load tidy data to disk: {:.2f} mins'.format((time.time()-t0)/60))
+logger.info('Load tidy data to disk: {:.2f} mins'.format( (time()-t0)/60) )
 
 logger.info(f'\nLoaded data is the same as original: {data.equals(data_fromfile)}')
 

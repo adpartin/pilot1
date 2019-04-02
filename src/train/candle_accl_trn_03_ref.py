@@ -7,7 +7,7 @@ warnings.filterwarnings('ignore')
 import os
 
 import sys
-import pathlib
+from pathlib import Path
 import argparse
 import datetime
 from time import time
@@ -34,9 +34,9 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.externals import joblib
 
 from sklearn.model_selection import train_test_split
-from sklearn.model_selection import ShuffleSplit, KFold # (AP)
-from sklearn.model_selection import GroupShuffleSplit, GroupKFold # (AP)
-from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold # (AP)
+from sklearn.model_selection import ShuffleSplit, KFold
+from sklearn.model_selection import GroupShuffleSplit, GroupKFold
+from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 
 SEED = None
 t_start = time()
@@ -56,12 +56,12 @@ from callbacks import *
 
 # File path
 # file_path = os.path.dirname(os.path.realpath(__file__))
-file_path = pathlib.Path(__file__).resolve().parent
+file_path = Path(__file__).resolve().parent
 
 
 # Path - create dir to dump results (AP)
-PRJ_NAME = 'candle_challenge_prb'
-PHASE = 'baseline'
+PRJ_NAME = 'candle_accl_trn'
+PHASE = 'ref'
 OUTDIR = file_path / '../../models' / PRJ_NAME / PHASE
 os.makedirs(OUTDIR, exist_ok=True)
 
@@ -74,12 +74,15 @@ psr = argparse.ArgumentParser(description='input agg csv file')
 psr.add_argument('--batch', type=int, default=32)
 psr.add_argument('-dr', '--dr_rate',type=float, default=0.2)
 psr.add_argument('--attn',  type=int, default=0, choices=[0, 1]) # (AP)
-# psr.add_argument('--n_jobs',  type=int, default=4) # (AP)
 psr.add_argument('-ml', '--model_name',  type=str, default='nn_reg') # (AP)
 psr.add_argument('--ep', type=int, default=250, help='Total number epochs')
 # psr.add_argument('--lr',  type=float, default=0.0005, help='Learning rate')
-psr.add_argument('--split_method', type=str, choices=['rnd', 'hrd'], default='hrd')
-psr.add_argument('--skip_ep', type=int, default=3, help='Number of epochs to skip when plotting training curves.')
+# psr.add_argument('--split_method', type=str, choices=['rnd', 'hrd'], default='hrd')
+psr.add_argument('--split_by', type=str, choices=['cell', 'drug', 'both', 'none'], default='cell',
+                 help='Specify what datasets to load in terms of disjoint partition: `cell`, `drug`, `both`, `none` (random split).')
+psr.add_argument('--skip_ep', type=int, default=10, help='Number of epochs to skip when plotting training curves.')
+psr.add_argument('--base_clr', type=float, default=1e-4, help='Base learning rate for cyclical learning rate.')
+psr.add_argument('--max_clr', type=float, default=1e-3, help='Max learning rate for cyclical learning rate.')
 
 args = vars(psr.parse_args())
 pprint(args)
@@ -92,19 +95,27 @@ DR = args['dr_rate']
 # LR = args['lr']
 attn = bool(args['attn'])
 model_name = args['model_name']
-split_method = args['split_method']
+# split_method = args['split_method']
+split_by = args['split_by']
 skip_epochs = args['skip_ep']
+base_clr = args['base_clr']
+max_clr = args['max_clr']
 
 
 # Data path
-if split_method == 'rnd':
-    data_path = DATADIR / 'rnd' / 'df_cnt.parquet'
-    outdir = OUTDIR / 'rnd'
-    wrmdir = WRMDIR / 'rnd'
-elif split_method == 'hrd':
-    data_path = DATADIR / 'hrd' / 'df_cnt.parquet'
-    outdir = OUTDIR / 'hrd'
-    wrmdir = WRMDIR / 'hrd'
+# if split_method == 'rnd':
+#     data_path = DATADIR / 'rnd' / 'df_cnt.parquet'
+#     outdir = OUTDIR / 'rnd'
+#     wrmdir = WRMDIR / 'rnd'
+# elif split_method == 'hrd':
+#     data_path = DATADIR / 'hrd' / 'df_cnt.parquet'
+#     outdir = OUTDIR / 'hrd'
+#     wrmdir = WRMDIR / 'hrd'
+# os.makedirs(outdir, exist_ok=True)
+
+data_path = DATADIR / ('split_by_' + split_by) / 'df_wrm.parquet'    
+outdir = OUTDIR / ('split_by_' + split_by)
+wrmdir = WRMDIR / ('split_by_' + split_by)
 os.makedirs(outdir, exist_ok=True)
 
 
@@ -117,11 +128,11 @@ logfilename = outdir / 'logfile.log'
 lg = classlogger.Logger(logfilename=logfilename) 
 
 
-# Custom metrics
-def r2(y_true, y_pred):
-    SS_res =  K.sum(K.square(y_true - y_pred))
-    SS_tot = K.sum(K.square(y_true - K.mean(y_true)))
-    return (1 - SS_res/(SS_tot + K.epsilon()))
+# # Custom metrics
+# def r2(y_true, y_pred):
+#     SS_res =  K.sum(K.square(y_true - y_pred))
+#     SS_tot = K.sum(K.square(y_true - K.mean(y_true)))
+#     return (1 - SS_res/(SS_tot + K.epsilon()))
 
     
 # ---------
@@ -130,8 +141,8 @@ def r2(y_true, y_pred):
 lg.logger.info(f'Loading data ... {data_path}')
 t0 = time()
 df = pd.read_parquet(data_path, engine='auto', columns=None)
-df = df.sample(frac=1.0, axis=0, random_state=SEED)
-lg.logger.info('Done ({:.2f} mins).\n'.format((time()-t0)/60))
+df = df.sample(frac=1.0, axis=0, random_state=SEED).reset_index(drop=True)
+lg.logger.info('Done ({:.2f} mins)\n'.format((time()-t0)/60))
 
 
 # ---------------------------
@@ -163,25 +174,26 @@ xtr = pd.DataFrame( scaler.transform(xtr) ).astype(np.float32)
 xte = pd.DataFrame( scaler.transform(xte) ).astype(np.float32)
 
 
-# ----------------------
-# Train 'baseline' model
-# ----------------------
-tag = 'baseline'
+# -----------------------
+# Train 'reference' model
+# -----------------------
+tag = 'ref'
 
 # Callbacks (custom)
-clr_triangular = CyclicLR(base_lr=0.0001, max_lr=0.001, mode='triangular')
+tr_iters = xtr.shape[0] / BATCH
+clr = CyclicLR(base_lr=base_clr, max_lr=max_clr, mode='triangular')
 
 # Keras callbacks
 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
                               min_delta=0.0001, cooldown=3, min_lr=0.000000001)
 early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1, mode='auto')
-checkpointer = ModelCheckpoint(str(outdir / 'model.baseline.ep_{epoch:d}-val_loss_{val_loss:.5f}.h5'), verbose=0, save_weights_only=False, save_best_only=False)
+checkpointer = ModelCheckpoint(str(outdir / 'model.ref.ep_{epoch:d}-val_loss_{val_loss:.5f}.h5'), verbose=0, save_weights_only=False, save_best_only=False)
 csv_logger = CSVLogger(outdir / f'model.{tag}.log')
 callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
 
 # Callbacks list
 callback_list = [checkpointer, csv_logger, early_stop, reduce_lr,  # keras callbacks
-                 clr_triangular]  # custom callbacks
+                 clr]  # custom callbacks
 
 # fit_params
 fit_params = {'batch_size': BATCH, 'epochs': EPOCH, 'verbose': 1}
@@ -193,7 +205,7 @@ init_params = {'input_dim': dfx.shape[1], 'dr_rate': DR, 'attn': attn}
 # init_params = {'input_dim': dfx.shape[1], 'dr_rate': DR, 'attn': attn, 'lr': LR}
 model = ml_models.get_model(model_name=model_name, init_params=init_params)
 
-# Train model - baseline phase
+# Train model - reference phase
 t0 = time()
 history = model.model.fit(xtr, ytr, **fit_params)
 fit_runtime = time() - t0
@@ -206,14 +218,12 @@ lg.logger.info('val_loss: {:.5f}'.format(score[0]))
 # Print plots
 model_plts_path = outdir / f'model_{tag}_plts'
 os.makedirs(model_plts_path, exist_ok=True)
-ml_models.plot_prfrm_metrics(history=history,
-                             title=f'Baseline training',  # LR: {LR}
-                             skip_epochs=skip_epochs,
-                             add_lr=True,
+ml_models.plot_prfrm_metrics(history=history, title=f'Reference training',  # LR: {LR}
+                             skip_epochs=skip_epochs, add_lr=True,
                              outdir=model_plts_path)
 
-# Dump history
-pd.DataFrame(history.history).to_csv(outdir/'keras_history.csv', index=False)
+# Dump keras history
+ml_models.dump_keras_history(history, outdir)
 
 # Define path to dump model and weights
 model_path = outdir / f'model.{tag}.json'

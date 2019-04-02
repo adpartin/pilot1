@@ -136,7 +136,7 @@ def run(args):
     # ========================================================================
     run_outdir = utils.create_outdir(outdir=outdir, args=args)
     # logfilename = os.path.join(run_outdir, 'logfile.log')
-    logfilename = run_outdir / 'logfile.log'
+    logfilename = run_outdir/'logfile.log'
     lg = classlogger.Logger(logfilename=logfilename)
 
     lg.logger.info(f'File path: {file_path}')
@@ -148,7 +148,7 @@ def run(args):
 
     # Create outdir for figs
     # figpath = os.path.join(run_outdir, 'figs')
-    figpath = run_outdir / 'figs'
+    figpath = run_outdir/'figs'
     os.makedirs(figpath, exist_ok=True)
 
 
@@ -156,7 +156,7 @@ def run(args):
     #       Load data and pre-proc
     # ========================================================================
     # datapath = os.path.join(DATADIR, DATAFILENAME)
-    datapath = DATADIR / DATAFILENAME
+    datapath = DATADIR/DATAFILENAME
     data, te_data = utils_tidy.load_data(datapath=datapath, fea_prfx_dict=fea_prfx_dict,
                                          args=args, logger=lg.logger, random_state=SEED)
 
@@ -201,6 +201,7 @@ def run(args):
             else:
                 cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
             groups = None
+            
         elif cv_method == 'stratify':
             if cv_folds == 1:
                 cv = StratifiedShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
@@ -216,6 +217,7 @@ def run(args):
             else:
                 cv = GroupKFold(n_splits=cv_folds)
             groups = data['CELL'].copy()
+            
         elif cv_method == 'simple':
             if cv_folds == 1:
                 cv = ShuffleSplit(n_splits=cv_folds, test_size=0.2, random_state=SEED)
@@ -428,8 +430,8 @@ def run(args):
     csv_all = csv_all.reset_index().rename(columns={'index': 'metric'})
     # csv_all = csv_all.round(decimals=3)
 
-    lg.logger.info('\ncsv_scores\n{}'.format(csv_all))
-    csv_all.to_csv(run_outdir / 'csv_scores_' + train_sources_name + '.csv', index=False)
+    lg.logger.info('\ncsv_scores\n{}'.format( csv_all ))
+    csv_all.to_csv(run_outdir/('csv_scores_'+train_sources_name+'.csv'), index=False)
 
     # Kill logger
     lg.kill_logger()

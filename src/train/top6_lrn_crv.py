@@ -1,3 +1,6 @@
+"""
+Learning curves.
+"""
 from __future__ import print_function, division
 
 import warnings
@@ -55,7 +58,6 @@ import ml_models
 import lrn_curve
 import classlogger
 import utils
-SEED = None
 
 
 # Import custom callbacks
@@ -72,7 +74,7 @@ file_path = pathlib.Path(__file__).resolve().parent
 
 
 # Create dir to dump results (AP)
-PRJ_NAME = pathlib.Path('top6_lrn_crv_cyclr')
+PRJ_NAME = 'top6_lrn_crv_cyclr'
 OUTDIR = file_path / '../../models' / PRJ_NAME
 os.makedirs(OUTDIR, exist_ok=True)
 
@@ -133,7 +135,7 @@ elif ('nn' in model_name) and (attn is False):
     outdir_name = 'lrn_crv_' + model_name + '_fc_' + t
 else:
     outdir_name = 'lrn_crv_' + model_name
-outdir = OUTDIR / outdir_name
+outdir = OUTDIR/outdir_name
 os.makedirs(outdir, exist_ok=True)
 
 
@@ -142,7 +144,7 @@ utils.dump_args(args, outdir=outdir)
 
 
 # Create logger
-logfilename = outdir / 'logfile.log'
+logfilename = outdir/'logfile.log'
 lg = classlogger.Logger(logfilename=logfilename) 
     
 
@@ -163,7 +165,7 @@ if 'csv' in data_path:
     df = pd.read_csv(data_path, skiprows=1, dtype='float32', nrows=args['nrows']).values # (AP)
 elif 'parquet' in data_path:
     df = pd.read_parquet(data_path, engine='auto', columns=None) # (AP)
-    df = df.sample(frac=1.0, axis=0, random_state=SEED).values # shuffle values
+    df = df.sample(frac=1.0, axis=0, random_state=SEED).reset_index(drop=True).values # shuffle values
 print('Done ({:.3f} mins).\n'.format( (time()-t0)/60 ))
     
 if mltype == 'cls':
@@ -225,7 +227,7 @@ if mltype == 'cls':
 elif mltype == 'reg':
     # Regression
     if cv_folds == 1:
-        cv = ShuffleSplit(n_splits=cv_folds, test_size=0.2, random_state=SEED)
+        cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
     else:
         cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
 
@@ -243,7 +245,7 @@ if model_name == 'nn_reg':
     fit_prms = {'batch_size': BATCH, 'epochs': EPOCH, 'verbose': 1}
 
 print(f'\nLearning curve ({model_name}) ...')
-outdir_ = outdir / model_name
+outdir_ = outdir/model_name
 os.makedirs(outdir_, exist_ok=True)
 
 # Run learning curve
