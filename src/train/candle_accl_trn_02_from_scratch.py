@@ -71,13 +71,15 @@ psr.add_argument('--batch', type=int, default=32)
 psr.add_argument('--dr_rate', type=float, default=0.2)
 psr.add_argument('--attn', type=int, default=0, choices=[0, 1])
 psr.add_argument('-ml', '--model_name', type=str, default='nn_reg')
-psr.add_argument('--ep', type=int, default=250, help='Total number epochs')
+psr.add_argument('--ep', type=int, default=250, help='Total number of epochs.')
 psr.add_argument('--split_by', type=str, choices=['cell', 'drug', 'both', 'none'], default='cell',
-                 help='Specify what datasets to load in terms of disjoint partition: `cell`, `drug`, `both`, `none` (random split).')
-psr.add_argument('--skip_ep', type=int, default=10, help='Number of epochs to skip when plotting training curves.')
+                 help='Specify how to disjointly partition the dataset: \
+                 `cell` (disjoint on cell), `drug` (disjoint on drug), \
+                 `both` (disjoint on cell and drug), `none` (random split).')
+psr.add_argument('--skp_ep', type=int, default=10, help='Number of epochs to skip when plotting training curves.')
 psr.add_argument('--base_clr', type=float, default=1e-4, help='Base learning rate for cyclical learning rate.')
 psr.add_argument('--max_clr', type=float, default=1e-3, help='Max learning rate for cyclical learning rate.')
-psr.add_argument('--tr_phase',  type=str, choices=['wrm', 'ref'], default='wrm') # (AP)
+psr.add_argument('--tr_phase',  type=str, choices=['wrm', 'ref'], default='wrm')
 
 
 args = vars(psr.parse_args())
@@ -91,7 +93,7 @@ DR = args['dr_rate']
 attn = bool(args['attn'])
 model_name = args['model_name']
 split_by = args['split_by']
-skip_epochs = args['skip_ep']
+skp_ep = args['skp_ep']
 base_clr = args['base_clr']
 max_clr = args['max_clr']
 tr_phase = args['tr_phase']
@@ -108,7 +110,7 @@ utils.dump_args(args, outdir=outdir)
 
 
 # Logger
-logfilename = outdir / 'logfile.log'
+logfilename = outdir/'logfile.log'
 lg = classlogger.Logger(logfilename=logfilename)
 
 
@@ -153,7 +155,7 @@ yte, xte = df_te.iloc[:, 0], df_te.iloc[:, 1:];  del df_te
 scaler = StandardScaler()
 xtr = pd.DataFrame( scaler.fit_transform(xtr) ).astype(np.float32)
 xte = pd.DataFrame( scaler.transform(xte) ).astype(np.float32)
-joblib.dump(scaler, outdir / 'scaler.pkl')
+joblib.dump(scaler, outdir/'scaler.pkl')
 
 
 # -----------------
@@ -168,8 +170,9 @@ clr = CyclicLR(base_lr=base_clr, max_lr=max_clr, mode='triangular')
 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
                               min_delta=0.0001, cooldown=3, min_lr=1e-9)
 early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1, mode='auto')
-csv_logger = CSVLogger(outdir / f'model.{tr_phase}.log')
-checkpointer = ModelCheckpoint(str(outdir / 'model.ep_{epoch:d}-val_loss_{val_loss:.5f}.h5'), verbose=0, save_weights_only=False, save_best_only=False)
+csv_logger = CSVLogger(outdir/f'model.{tr_phase}.log')
+checkpointer = ModelCheckpoint(str(outdir/'model.ep_{epoch:d}-val_loss_{val_loss:.5f}.h5'),
+                               verbose=0, save_weights_only=False, save_best_only=False)
 
 # Callbacks list
 callback_list = [checkpointer, csv_logger, early_stop, reduce_lr,  # keras callbacks
@@ -203,11 +206,10 @@ lg.logger.info('val_loss: {:.5f}'.format(score[0]))
 # Summarize results
 # -----------------
 # Plots
-model_plts_path = outdir / f'model_{tr_phase}_plts'
+model_plts_path = outdir/f'model_{tr_phase}_plts'
 os.makedirs(model_plts_path, exist_ok=True)
 ml_models.plot_prfrm_metrics(history=history, title=f'{tr_phase} training',  # LR: {LR}
-                             skip_epochs=skip_epochs, add_lr=True,
-                             outdir=model_plts_path)
+                             skp_ep=skp_ep, add_lr=True, outdir=model_plts_path)
 
 # Dump keras history
 ml_models.dump_keras_history(history, outdir)
@@ -217,8 +219,8 @@ ml_models.dump_keras_history(history, outdir)
 # Save model
 # ----------
 # Define path to dump model and weights
-model_path = outdir / f'model.{tr_phase}.json'
-weights_path = outdir / f'weights.{tr_phase}.h5'
+model_path = outdir/f'model.{tr_phase}.json'
+weights_path = outdir/f'weights.{tr_phase}.h5'
 
 # Save model
 model_json = model.model.to_json()

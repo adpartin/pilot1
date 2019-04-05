@@ -80,25 +80,25 @@ def get_keras_prfrm_metrics(history):
     return pr_metrics
 
 
-def plot_prfrm_metrics(history, title=None, skip_epochs=0, outdir='.', add_lr=False):
+def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
     """ Plots keras training curves.
     Args:
-        skip_epochs: number of epochs to skip when plotting metrics 
+        skp_ep: number of epochs to skip when plotting metrics 
         add_lr: add curve of learning rate progression over epochs
     """
     pr_metrics = get_keras_prfrm_metrics(history)
     epochs = np.asarray(history.epoch) + 1
-    if len(epochs) <= skip_epochs:
-        skip_epochs = 0
-    eps = epochs[skip_epochs:]
+    if len(epochs) <= skp_ep:
+        skp_ep = 0
+    eps = epochs[skp_ep:]
     hh = history.history
     
     for p, m in enumerate(pr_metrics):
         metric_name = m
         metric_name_val = 'val_' + m
 
-        y_tr = hh[metric_name][skip_epochs:]
-        y_vl = hh[metric_name_val][skip_epochs:]
+        y_tr = hh[metric_name][skp_ep:]
+        y_vl = hh[metric_name_val][skp_ep:]
         
         ymin = min(set(y_tr).union(y_vl))
         ymax = max(set(y_tr).union(y_vl))
@@ -123,7 +123,7 @@ def plot_prfrm_metrics(history, title=None, skip_epochs=0, outdir='.', add_lr=Fa
         # Add learning rate
         if (add_lr is True) and ('lr' in hh):            
             ax2 = ax1.twinx()
-            ax2.plot(eps, hh['lr'][skip_epochs:], color='g', marker='.', linestyle=':',
+            ax2.plot(eps, hh['lr'][skp_ep:], color='g', marker='.', linestyle=':',
                      alpha=0.6, markersize=5, label='learning rate')
             ax2.set_ylabel('learning rate', color='g', fontsize=12)
             
@@ -301,7 +301,7 @@ class KERAS_REGRESSOR(BaseMLModel):
         self.model = model
 
 
-    def dump_model(self, outdir='./'):
+    def dump_model(self, outdir='.'):
         """ Dump trained model. """
         # Serialize model to JSON
         model_json = self.model.to_json()
@@ -366,7 +366,7 @@ class LGBM_REGRESSOR(BaseMLModel):
     #         self.logger.info('Train time: {:.2f} mins'.format(self.train_runtime/60))
 
 
-    def dump_model(self, outdir='./'):
+    def dump_model(self, outdir='.'):
         # lgb_reg.save_model(os.path.join(run_outdir, 'lgb_'+ml_type+'_model.txt'))
         joblib.dump(self.model, filename=os.path.join(outdir, 'model.' + LGBM_REGRESSOR.model_name + '.pkl'))
         # lgb_reg_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
@@ -417,7 +417,7 @@ class RF_REGRESSOR(BaseMLModel):
         pass # TODO
 
 
-    def dump_model(self, outdir='./'):
+    def dump_model(self, outdir='.'):
         joblib.dump(self.model, filename=os.path.join(outdir, 'model.' + RF_REGRESSOR.model_name + '.pkl'))
         # model_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
 

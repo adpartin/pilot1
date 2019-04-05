@@ -46,10 +46,12 @@ os.makedirs(OUTDIR, exist_ok=True)
 
 # Arg parser
 psr = argparse.ArgumentParser(description='input agg csv file')
-psr.add_argument('--in', default=None)
+psr.add_argument('--in', default=None, help='Specify the input dataset.')
 # psr.add_argument('--split_method', type=str, choices=['rnd', 'hrd'], default='hrd')
 psr.add_argument('--split_by', type=str, choices=['cell', 'drug', 'both', 'none'], default='cell',
-                 help='Specify how to use disjoint partition to split the dataset: `cell`, `drug`, `both`, `none` (random split).')
+                 help='Specify how to disjointly partition the dataset: \
+                 `cell` (disjoint on cell), `drug` (disjoint on drug), \
+                 `both` (disjoint on cell and drug), `none` (random split).')
 psr.add_argument('--ratio', type=int, default=0.5)
 
 args = vars(psr.parse_args())
