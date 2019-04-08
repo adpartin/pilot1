@@ -208,7 +208,7 @@ lg.logger.info('val_loss: {:.5f}'.format(score[0]))
 # Plots
 model_plts_path = outdir/f'model_{tr_phase}_plts'
 os.makedirs(model_plts_path, exist_ok=True)
-ml_models.plot_prfrm_metrics(history=history, title=f'{tr_phase} training',  # LR: {LR}
+ml_models.plot_prfrm_metrics(history=history, title=f'{tr_phase} training',
                              skp_ep=skp_ep, add_lr=True, outdir=model_plts_path)
 
 # Dump keras history
@@ -218,17 +218,20 @@ ml_models.dump_keras_history(history, outdir)
 # ----------
 # Save model
 # ----------
-# Define path to dump model and weights
-model_path = outdir/f'model.{tr_phase}.json'
-weights_path = outdir/f'weights.{tr_phase}.h5'
+model.dump_model(outpath=outdir/f'model.{tr_phase}.h5')  # TODO: try this 
 
-# Save model
-model_json = model.model.to_json()
-with open(model_path, 'w') as json_file:
-    json_file.write(model_json)
+# # Define path to dump model and weights
+# model_path = outdir/f'model.{tr_phase}.json'
+# weights_path = outdir/f'weights.{tr_phase}.h5'
 
-# Save weights
-model.model.save_weights(weights_path)
+# # Save model
+# model_json = model.model.to_json()
+# with open(model_path, 'w') as json_file:
+#     json_file.write(model_json)
+
+# # Save weights
+# model.model.save_weights(weights_path)
+
 
 lg.logger.info('\nProgram runtime: {:.2f} mins'.format( (time() - t_start)/60 ))
 lg.logger.info('Done.')

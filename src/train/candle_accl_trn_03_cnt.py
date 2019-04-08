@@ -73,7 +73,7 @@ DATADIR = PRJ_DIR / 'data'
 psr = argparse.ArgumentParser(description='input agg csv file')
 psr.add_argument('--batch', type=int, default=32)
 psr.add_argument('--dr', type=float, default=0.2)
-psr.add_argument('--ep', type=int, default=300, help='Total number of epochs.')
+psr.add_argument('--ep', type=int, default=500, help='Total number of epochs.')
 psr.add_argument('--ref_ep', type=int, default=300, help='Reference epoch.')
 psr.add_argument('--ref_met', type=str, choices=['val_loss', 'val_mean_absolute_error'],
                  default='val_mean_absolute_error', help='Reference metric.')
@@ -164,9 +164,15 @@ xte = pd.DataFrame( scaler.transform(xte) ).astype(np.float32)
 # -----------------
 # Get the ref score
 # -----------------
-aa = pd.read_csv(refdir/'model.ref.log')
-ref_value = aa.loc[ref_ep-1, ref_metric]
-lg.logger.info(f'\n{ref_metric} at ref epoch {ref_ep}: {ref_value}')
+# aa = pd.read_csv(refdir/'model.ref.log')
+# score_ref = aa.loc[ref_ep-1, ref_metric]
+# score_ref = aa[ref_metric].min()
+# lg.logger.info(f'\n{ref_metric} at ref epoch {ref_ep}: {score_ref}')
+x = h_ref[ref_metric].min()
+lg.logger.info(f'\n{ref_metric} (min): {x.min()}')
+prct_diff = 2
+score_ref = x + x * prct_diff/100
+lg.logger.info(f'{ref_metric} ({prct_diff}% from min): {score_ref}')
 
 
 # ----------------------
@@ -193,20 +199,21 @@ class EarlyStoppingByMetric(Callback):
             warnings.warn("Early stopping requires %s available!" % self.monitor, RuntimeWarning)
         
         if self.stop_when_below:
-            if current < self.value:
+            if current <= self.value:
                 if self.verbose > 0:
                     print(f'Epoch {epoch:4d}: Early stopping, {self.monitor} threshold of {self.value}.')
                 self.model.stop_training = True
                 self.stopped_epoch = epoch
         else:
-            if current > self.value:
+            if current >= self.value:
                 if self.verbose > 0:
                     print(f'Epoch {epoch:4d}: Early stopping, {self.monitor} threshold of {self.value}.')
                 self.model.stop_training = True
                 self.stopped_epoch = epoch
 
+                
 summary = {}
-lg.logger.info('\n___ Start iterate over weps ___')
+lg.logger.info('\n___ Iterate over weps ___')
 for i, weps in enumerate(ep_vec):
     
     # Load warm model
@@ -218,7 +225,7 @@ for i, weps in enumerate(ep_vec):
     # lg.logger.info('Learning rate (wrm): {}'.format( K.eval(model.optimizer.lr)) )
     score_wrm = model.evaluate(xte, yte, verbose=0)
     score_wrm = score_wrm[ int(np.argwhere(h_ref.columns == ref_metric)) ]
-    lg.logger.info('{} (wrm): {:.5f}'.format(ref_metric, score_wrm))
+    lg.logger.info('{} (wrm): {}'.format(ref_metric, score_wrm))
     
     # Reset learning rate to a new value
     lr_new = 0.0005
@@ -234,13 +241,15 @@ for i, weps in enumerate(ep_vec):
     # Callbacks (custom)
     tr_iters = xtr.shape[0]/BATCH
     clr = CyclicLR(base_lr=base_clr, max_lr=max_clr, mode='triangular')
-    early_stop_custom = EarlyStoppingByMetric(monitor=ref_metric, value=ref_value,
+    early_stop_custom = EarlyStoppingByMetric(monitor=ref_metric, value=score_ref,
                                               stop_when_below=True, verbose=True)
     
     # Keras callbacks
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=5, verbose=1, mode='auto',
-                                  min_delta=0.0001, min_lr=1e-9)  # patience=20, cooldown=3
-    early_stop = EarlyStopping(monitor=ref_metric, patience=60, verbose=1, mode='auto')
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=15, verbose=1, mode='auto',
+                                  min_delta=0.0001, min_lr=1e-9)
+#     reduce_lr = ReduceLROnPlateau(monitor=ref_metric, factor=0.75, patience=10, verbose=1, mode='auto',
+#                                   min_delta=0.0001, min_lr=1e-9)
+    early_stop = EarlyStopping(monitor=ref_metric, patience=50, verbose=1, mode='auto')
     checkpointer = ModelCheckpoint(str(ep_dir/'model.cnt.h5'), verbose=0, save_weights_only=False, save_best_only=True)
     csv_logger = CSVLogger(ep_dir/f'model.{tr_phase}.log')
     
@@ -256,7 +265,7 @@ for i, weps in enumerate(ep_vec):
     fit_params['validation_data'] = (xte, yte)
     fit_params['callbacks'] = callback_list
     
-    # Train model - continue phase
+    # Train model (continue phase)
     t0 = time()
     history = model.fit(xtr, ytr, **fit_params)
     runtime_ceps = time() - t0  
@@ -273,14 +282,20 @@ for i, weps in enumerate(ep_vec):
     
     # Compute ref_metric of cnt model
     score_cnt = kh.loc[len(kh)-1, ref_metric]
-    lg.logger.info('{} (cnt): {:.5f}'.format( ref_metric, score_cnt ))
+    lg.logger.info('{} (cnt): {}'.format( ref_metric, score_cnt ))
     #score_cnt = model.evaluate(xte, yte, verbose=0)
     #score_cnt = score_cnt[ int(np.argwhere(h_ref.columns == ref_metric)) ]    
     
+    # Bool that indicates if wrm model was converged to score_ref
+    # TODO: this is correct for error (not R^2)
+    converge = True if score_cnt <= score_ref else False
+        
     # Update summary table
-    summary[i] = (weps, ceps, score_wrm, score_cnt, runtime_ceps)
+    summary[i] = (weps, ceps, score_wrm, score_cnt, runtime_ceps, converge)
     
-    lg.logger.info('(ceps, runtime): ({}, {:.2f} mins)'.format( ceps, runtime_ceps/60 ))
+    lg.logger.info('converge: {}'.format(converge))
+    lg.logger.info('ceps: {} ({:.2f} mins)'.format( ceps, runtime_ceps/60 ))
+    
     
     # ----------
     # Make plots
@@ -291,20 +306,22 @@ for i, weps in enumerate(ep_vec):
     ml_models.plot_prfrm_metrics(history=history, title=f'Continue training',
                                  skp_ep=skp_ep, add_lr=True, outdir=model_plts_path)  
     
-    
     # Plot reference training with continue training
     for c in val_cols_names:
         fig, ax = plt.subplots(figsize=(8, 6))
 
         x1 = list(h_ref['epoch'])
-        x2 = list(kh['epoch'] + weps)       
+        x2 = list(kh['epoch'] + weps)
         
         ax.plot(x1, h_ref[c], 'b-', alpha=0.7, label='ref')
-        ax.plot(x2, kh[c], 'ro-', markersize=1.5, alpha=0.7, label=f'weps_{weps}')        
+        ax.plot(x2, kh[c], 'ro-', markersize=2, alpha=0.7, label=f'weps_{weps}')        
         
-        x = np.array(range(skp_ep, max(x1+x2)))
-        y = np.ones(len(x)) * min(h_ref[c])        
-        ax.plot(x, y, 'g--', alpha=0.6) 
+        if c == ref_metric:
+            x = range(0, max(x1+x2))
+            ymin = np.ones(len(x)) * min(h_ref[c])
+            yref = np.ones(len(x)) * score_ref
+            ax.plot(x, ymin, 'c--', linewidth=1, alpha=0.7, label='ref_min')
+            ax.plot(x, yref, 'g--', linewidth=1, alpha=0.7, label=f'ref_min_{prct_diff}%')
         
         ax.set_xlabel('epoch')
         ax.set_ylabel(c)
@@ -313,28 +330,10 @@ for i, weps in enumerate(ep_vec):
         plt.grid(True)
         plt.savefig(ep_dir/f'ref_vs_cnt_({c}).png', bbox_inches='tight')
         del fig, ax
-    
-    
-    # ----------
-    # Save model
-    # ----------
-    # model.dump_model(outdir=outdir)  # TODO: try this 
-    
-    # Define path to dump model and weights
-    model_path = outdir/f'model.{tr_phase}.json'
-    weights_path = outdir/f'weights.{tr_phase}.h5'
-
-    # Save model
-    model_json = model.to_json()
-    with open(model_path, 'w') as json_file:
-        json_file.write(model_json)
-
-    # Save weights
-    model.save_weights(weights_path)    
 
 
-lg.logger.info('_________________________________')
-columns = ['weps', 'ceps', f'{ref_metric}_wrm', f'{ref_metric}_cnt', 'runtime_sec']
+lg.logger.info('\n' + '_'*70)
+columns = ['weps', 'ceps', f'{ref_metric}_wrm', f'{ref_metric}_cnt', 'runtime_sec', 'converge']
 summary = pd.DataFrame.from_dict(summary, orient='index', columns=columns)
 summary.to_csv(outdir/'summary.csv', index=False)
 lg.logger.info(summary)
@@ -342,24 +341,28 @@ lg.logger.info(summary)
 
 # Final plot
 fig, ax1 = plt.subplots()
-ax1.plot(summary['weps'], summary['ceps'], '-or')
+
+# Add ceps plot
+ax1.plot(summary['weps'], summary['ceps'], '-ob')
 ax1.set_xlabel('weps')
-ax1.set_ylabel('ceps', color='r')
-ax1.tick_params('y', colors='r')
+ax1.set_ylabel('ceps', color='b')
+ax1.tick_params('y', colors='b')
 ax1.grid(True)
 
-ax2 = ax1.twinx()
-ax2.plot(summary['weps'], summary['runtime_sec'], '-ob')
-ax2.set_ylabel('runtime', color='b')
-ax2.tick_params('y', colors='b')
+# Add runtime plot
+# ax2 = ax1.twinx()
+# ax2.plot(summary['weps'], summary['runtime_sec'], '-om')
+# ax2.set_ylabel('runtime', color='m')
+# ax2.tick_params('y', colors='m')
 
 fig.tight_layout()
-plt.title('Reference {} at {} epoch'.format(ref_metric, ref_ep))
+# plt.title('Reference {} at {} epoch'.format(ref_metric, ref_ep))
+plt.title(f'Ref epochs: {ref_ep};  Diff from min score: {prct_diff}%')
 plt.savefig(outdir/'summary_plot.png', bbox_inches='tight')
 
 
-lg.logger.info('\nMaximum speed-up of {}/{}={}'.format( ref_ep, summary['ceps'].min(), ref_ep/summary['ceps'].min()) )
-lg.logger.info('Epochs reduced: {}-{}={}'.format( ref_ep, summary['ceps'].min(), ref_ep-summary['ceps'].min()) )
+lg.logger.info('\nMax speed-up: {}/{}={}'.format( ref_ep, summary['ceps'].min(), ref_ep/summary['ceps'].min()) )
+lg.logger.info('Max epochs reduced: {}-{}={}'.format( ref_ep, summary['ceps'].min(), ref_ep-summary['ceps'].min()) )
 
 lg.logger.info('\nProgram runtime: {:.2f} mins'.format( (time() - t_start)/60 ))
 lg.logger.info('Done.')

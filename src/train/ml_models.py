@@ -301,23 +301,19 @@ class KERAS_REGRESSOR(BaseMLModel):
         self.model = model
 
 
-    def dump_model(self, outdir='.'):
-        """ Dump trained model. """
-        # Serialize model to JSON
-        model_json = self.model.to_json()
-        modelpath = os.path.join(outdir, 'model.' + KERAS_REGRESSOR.model_name + '.json')
-        with open(modelpath, 'w') as mfile:
-            mfile.write(model_json)
+    def dump_model(self, outpath='model.h5'):
+        """ Dump trained model. """        
+        self.model.save(outpath)
+        
+#         # Serialize model to JSON
+#         model_json = self.model.to_json()
+#         modelpath = os.path.join(outdir, 'model.' + KERAS_REGRESSOR.model_name + '.json')
+#         with open(modelpath, 'w') as mfile:
+#             mfile.write(model_json)
 
-        # Serialize model to YAML
-        # model_yaml = self.model.to_yaml()
-        # modelpath = os.path.join(outdir, KERAS_REGRESSOR.model_name + '.model.yaml')
-        # with open(modelpath, 'w') as mfile:
-        #         mfile.write(model_yaml)
-
-        # serialize weights to HDF5
-        weightpath = os.path.join(outdir, 'weights.' + KERAS_REGRESSOR.model_name + '.h5')
-        self.model.save_weights(weightpath)
+#         # serialize weights to HDF5
+#         weightpath = os.path.join(outdir, 'weights.' + KERAS_REGRESSOR.model_name + '.h5')
+#         self.model.save_weights(weightpath)
 
 
 

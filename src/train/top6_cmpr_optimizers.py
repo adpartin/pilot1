@@ -55,6 +55,7 @@ t_start = time()
 
 # Utils
 import ml_models
+from ml_models import r2_krs
 import lrn_curve
 import classlogger
 import utils
@@ -135,13 +136,6 @@ logfilename = outdir / 'logfile.log'
 lg = classlogger.Logger(logfilename=logfilename) 
     
 
-# Custom metrics
-def r2(y_true, y_pred):
-    SS_res =  K.sum(K.square(y_true - y_pred))
-    SS_tot = K.sum(K.square(y_true - K.mean(y_true)))
-    return (1 - SS_res/(SS_tot + K.epsilon()))
-
-    
 # ---------
 # Load data
 # ---------
@@ -239,7 +233,7 @@ reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verb
 early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1, mode='auto')
 
 data_to_plot = {}
-metric_to_plot = 'val_r2'
+metric_to_plot = 'val_r2_krs'
 
 
 # Iterate over optimizers
@@ -292,17 +286,20 @@ for opt_name, optimizer in opts:
     pp.to_csv(outdir/f'{opt_name}_keras_history.csv', index=False)
     
 
+    # Dump model
+    model.dump_model(outpath=opt_outdir/f'model.{opt_name}.h5')
+    
     # Define path to dump model and weights
-    model_path = opt_outdir / f'{opt_name}.model.json'
-    weights_path = opt_outdir / f'{opt_name}.weights.h5'
+#     model_path = opt_outdir / f'{opt_name}.model.json'
+#     weights_path = opt_outdir / f'{opt_name}.weights.h5'
 
-    # Save model
-    model_json = model.model.to_json()
-    with open(model_path, 'w') as json_file:
-        json_file.write(model_json)
+#     # Save model
+#     model_json = model.model.to_json()
+#     with open(model_path, 'w') as json_file:
+#         json_file.write(model_json)
 
-    # Save weights
-    model.model.save_weights(weights_path)
+#     # Save weights
+#     model.model.save_weights(weights_path)
     
     del model, init_params, fit_params
 
