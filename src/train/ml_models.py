@@ -59,8 +59,8 @@ def get_model(model_name, init_params=None):
     return estimator
 
 
-def dump_keras_history(history, outdir='.'):
-    fname = 'keras_history.csv'
+def save_krs_history(history, outdir='.'):
+    fname = 'krs_history.csv'
     h = pd.DataFrame(history.history)
     h['epoch'] = np.asarray(history.epoch) + 1
     h.to_csv(outdir/fname, index=False)
@@ -109,8 +109,8 @@ def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
         fig, ax1 = plt.subplots()
         
         # Plot metrics
-        ax1.plot(eps, y_tr, color='b', marker='.', linestyle='-', alpha=0.6, label=metric_name)
-        ax1.plot(eps, y_vl, color='r', marker='.', linestyle='-', alpha=0.6, label=metric_name_val)
+        ax1.plot(eps, y_tr, color='b', marker='.', linestyle='-', linewidth=1, alpha=0.6, label=metric_name)
+        ax1.plot(eps, y_vl, color='r', marker='.', linestyle='-', linewidth=1, alpha=0.6, label=metric_name_val)
         ax1.set_xlabel('epoch')
         ax1.set_ylabel(metric_name)
         ax1.set_xlim([min(eps)-1, max(eps)+1])
@@ -123,7 +123,7 @@ def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
         # Add learning rate
         if (add_lr is True) and ('lr' in hh):            
             ax2 = ax1.twinx()
-            ax2.plot(eps, hh['lr'][skp_ep:], color='g', marker='.', linestyle=':',
+            ax2.plot(eps, hh['lr'][skp_ep:], color='g', marker='.', linestyle=':', linewidth=1,
                      alpha=0.6, markersize=5, label='learning rate')
             ax2.set_ylabel('learning rate', color='g', fontsize=12)
             

@@ -47,7 +47,6 @@ os.makedirs(OUTDIR, exist_ok=True)
 # Arg parser
 psr = argparse.ArgumentParser(description='input agg csv file')
 psr.add_argument('--in', default=None, help='Specify the input dataset.')
-# psr.add_argument('--split_method', type=str, choices=['rnd', 'hrd'], default='hrd')
 psr.add_argument('--split_by', type=str, choices=['cell', 'drug', 'both', 'none'], default='cell',
                  help='Specify how to disjointly partition the dataset: \
                  `cell` (disjoint on cell), `drug` (disjoint on drug), \
@@ -64,12 +63,6 @@ wrm_ratio = args['ratio']
 test_size = 1 - wrm_ratio
 
 # Outdir
-# if split_method == 'rnd':
-#     outdir = OUTDIR / 'rnd'
-# elif split_method == 'hrd':
-#     outdir = OUTDIR / 'hrd'
-# os.makedirs(outdir, exist_ok=True)
-
 outdir = OUTDIR / ('split_by_' + split_by)
 os.makedirs(outdir, exist_ok=True)
 
@@ -77,7 +70,7 @@ os.makedirs(outdir, exist_ok=True)
 utils.dump_args(args, outdir=outdir)
 
 # Logger
-logfilename = outdir / 'logging.log'
+logfilename = outdir/'logfile.log'
 lg = classlogger.Logger(logfilename=logfilename)
 
 
@@ -208,7 +201,7 @@ else:
         
 
 # Split
-lg.logger.info('\nSplit ...')
+lg.logger.info('\nSplit to df1 and df2...')
 df = pd.concat([clb, dlb, df], axis=1)
 df1 = df.loc[id_grp1, :]
 df2 = df.loc[id_grp2, :]
@@ -234,48 +227,25 @@ df2 = df2[cols].reset_index(drop=True)
 lg.logger.info('df1.shape {}'.format( df1.shape ))
 lg.logger.info('df2.shape {}'.format( df2.shape ))
 
-
-# # Define split indices
-# if split_method == 'rnd':
-#     cv = ShuffleSplit(n_splits=2, test_size=test_size, random_state=0)
-#     id_grp1, id_grp2 = next(cv.split(df))
-    
-# elif split_method == 'hrd':
-#     df_dd, df_ge = split_cell_drug(dff=df)
-#     # print('df_dd memory_usage {:.3f} GB'.format(df_dd.memory_usage().sum()/1e9))
-#     # print('df_ge memory_usage {:.3f} GB'.format(df_ge.memory_usage().sum()/1e9))
-
-#     # Get drug label vector
-#     label_name = 'dlb'
-#     # df_dd = add_lbl_dup(df_dd, label_name='dlb', prffx='d')
-#     dlb = add_lbl_dup(df_dd, label_name=label_name, prffx='d')[label_name]
-
-#     # Get cell label vector
-#     label_name = 'clb'
-#     # df_ge = add_lbl_dup(df_ge, label_name='clb', prffx='c')
-#     clb = add_lbl_dup(df_ge, label_name=label_name, prffx='c')[label_name]
-
-#     del df_dd, df_ge    
-    
-#     cv = GroupShuffleSplit(n_splits=2, test_size=test_size, random_state=0)
-#     if split_by == 'c':
-#         # id_grp1, id_grp2 = next(cv.split(df, groups=df_ge[label_name]))  # hard split by cell
-#         id_grp1, id_grp2 = next(cv.split(df, groups=clb))  # hard split by cell
-#     elif split_by == 'd':
-#         # id_grp1, id_grp2 = next(cv.split(df, groups=df_dd[label_name]))  # hard split by drug
-#         id_grp1, id_grp2 = next(cv.split(df, groups=dlb))  # hard split by drug
-
-
-# # Split
-# df1 = df.loc[id_grp1, :]
-# df2 = df.loc[id_grp2, :]
-# del df
-
-
 # Dump dfs
-lg.logger.info('\nDump dfs ...')
 df1.to_parquet(outdir/'df_wrm.parquet', engine='auto', compression='snappy')
 df2.to_parquet(outdir/'df_ref.parquet', engine='auto', compression='snappy')
+
+# ------- NEW: split to train and val -------
+lg.logger.info('\nSplit df1 and df2 to (df1_tr, df1_te) and (df2_tr, df2_te)...')
+
+df1_tr, df1_te = train_test_split(df1);
+df1_tr.to_parquet(outdir/'df_wrm_tr.parquet', engine='auto', compression='snappy')
+df1_te.to_parquet(outdir/'df_wrm_te.parquet', engine='auto', compression='snappy')
+lg.logger.info('df1_tr.shape {}'.format( df1_tr.shape ))
+lg.logger.info('df1_te.shape {}'.format( df1_te.shape ))
+
+df2_tr, df2_te = train_test_split(df2);
+df2_tr.to_parquet(outdir/'df_ref_tr.parquet', engine='auto', compression='snappy')
+df2_te.to_parquet(outdir/'df_ref_te.parquet', engine='auto', compression='snappy')
+lg.logger.info('df2_tr.shape {}'.format( df2_tr.shape ))
+lg.logger.info('df2_te.shape {}'.format( df2_te.shape ))
+# -------------------------------------------
 
 lg.logger.info('\nProgram runtime: {:.2f} mins'.format( (time() - t_start)/60 ))
 lg.logger.info('Done.')

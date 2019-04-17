@@ -70,7 +70,9 @@ def get_cli_args(args=None):
         choices=['AUC', 'AUC1', 'IC50'],
         help='Column name of the target variable.') # target_name = 'AUC1'
     parser.add_argument('-tt', '--target_transform',
-        type=str2bool,
+        # type=str2bool,
+        action='store_true',
+        default=False,
         help="'t': transform target, 'f': do not transform target.")
 
     # Select train and test (inference) sources
@@ -133,7 +135,9 @@ def get_cli_args(args=None):
 
     # Re-train model
     parser.add_argument('--retrain',
-        type=str2bool,
+        # type=str2bool,
+        action='store_true',
+        default=False,
         help='Whether to re-train final model using the entire dataset.')        
 
     # Learning curve
@@ -170,8 +174,10 @@ def get_cli_args(args=None):
         type=float,
         help='Dropout ratefor the neural network.')
     parser.add_argument('--attn',
-        type=str2bool,
-        help='Whether to use attention layer to the neural network.')
+        # type=str2bool,
+        action='store_true',
+        default=False,
+        help='Whether to use attention layer.')
     parser.add_argument('-sc', '--scaler',
         # default=0.2,
         type=str,
@@ -226,15 +232,6 @@ def override_dflt_with_config(dflt_args, config_params):
 #     for arg in args_dict.keys():
 #         params[arg] = args_dict[arg]
 #     return params
-
-
-# def str_to_bool(v):
-#     """ Convert string to bool (in argparse context).
-#     https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
-#     """
-#     if v.lower() not in ['t', 'f']:
-#         raise ValueError("Need 't' or 'f'; got %r" % v)
-#     return {'t': True, 'f': False}[v.lower()]
 
 
 def str2bool(v):

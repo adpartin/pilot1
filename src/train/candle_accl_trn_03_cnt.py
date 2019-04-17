@@ -55,7 +55,9 @@ from callbacks import *
 
 
 # ep_vec = [int(x) for x in np.linspace(25, 175, 7)]
-ep_vec = [280, 240, 200, 160, 120, 80, 40]
+# ep_vec = [280, 240, 200, 160, 120, 80, 40]
+# ep_vec = [300, 250, 200, 150, 100, 50]
+ep_vec = [300, 200, 100]
 
 
 # File path
@@ -71,17 +73,19 @@ DATADIR = PRJ_DIR / 'data'
 
 # Arg parser
 psr = argparse.ArgumentParser(description='input agg csv file')
-psr.add_argument('--batch', type=int, default=32)
-psr.add_argument('--dr', type=float, default=0.2)
-psr.add_argument('--ep', type=int, default=500, help='Total number of epochs.')
-psr.add_argument('--ref_ep', type=int, default=300, help='Reference epoch.')
-psr.add_argument('--ref_met', type=str, choices=['val_loss', 'val_mean_absolute_error'],
-                 default='val_mean_absolute_error', help='Reference metric.')
+psr.add_argument('--ep', type=int, default=350, help='Total number of epochs.')
+psr.add_argument('--attn', action='store_true', default=False, help='Whether to use attention layer.')
 psr.add_argument('--split_by', type=str, choices=['cell', 'drug', 'both', 'none'],
                  default='cell',
                  help='Specify how to disjointly partition the dataset: \
                  `cell` (disjoint on cell), `drug` (disjoint on drug), \
                  `both` (disjoint on cell and drug), `none` (random split).')
+# psr.add_argument('--ref_ep', type=int, default=350, help='Reference epoch.')
+psr.add_argument('--ref_met', type=str, choices=['val_loss', 'val_mean_absolute_error'],
+                 default='val_mean_absolute_error', help='Reference metric.')
+
+psr.add_argument('--batch', type=int, default=32)
+psr.add_argument('--dr', type=float, default=0.2)
 psr.add_argument('--skp_ep', type=int, default=10, help='Number of epochs to skip when plotting training curves.')
 psr.add_argument('--base_clr', type=float, default=1e-4, help='Base learning rate for cyclical learning rate.')
 psr.add_argument('--max_clr', type=float, default=1e-3, help='Max learning rate for cyclical learning rate.')
@@ -94,8 +98,9 @@ pprint(args)
 EPOCH = args['ep']
 BATCH = args['batch']
 DR = args['dr']
+attn = args['attn'] # bool(args['attn'])
 split_by = args['split_by']
-ref_ep = args['ref_ep']
+# ref_ep = args['ref_ep']
 ref_metric = args['ref_met']
 skp_ep = args['skp_ep']
 base_clr = args['base_clr']
@@ -103,12 +108,21 @@ max_clr = args['max_clr']
 tr_phase = 'cnt'
 
 
+if attn is True:
+    nn_type = 'attn'
+else:
+    nn_type = 'fc'
+
+
 # Path and outdir
-wrmdir = PRJ_DIR / 'wrm' / ('split_by_' + split_by)
-refdir = PRJ_DIR / 'ref' / ('split_by_' + split_by)
-data_path_tr = refdir / 'df_tr.parquet'
-data_path_te = refdir / 'df_te.parquet' 
-outdir = PRJ_DIR / ( tr_phase + '_' + ref_metric + '_at_' + str(ref_ep) ) / ('split_by_' + split_by)
+wrmdir = PRJ_DIR / ('wrm' + '_' + nn_type) / ('split_by_' + split_by)
+refdir = PRJ_DIR / ('ref' + '_' + nn_type) / ('split_by_' + split_by)
+# data_path_tr = refdir / 'df_tr.parquet'
+# data_path_te = refdir / 'df_te.parquet'
+data_path_tr = DATADIR / ('split_by_' + split_by) / 'df_ref_tr.parquet'
+data_path_te = DATADIR / ('split_by_' + split_by) / 'df_ref_te.parquet'
+# outdir = PRJ_DIR / (tr_phase + '_' + nn_type + '_' + ref_metric) / ('split_by_' + split_by)
+outdir = PRJ_DIR / (tr_phase + '_' + nn_type) / ('split_by_' + split_by)
 os.makedirs(outdir, exist_ok=True)  
 
 
@@ -117,8 +131,8 @@ utils.dump_args(args, outdir=outdir)
 
 
 # Plot WRM vd REF curves
-h_wrm = pd.read_csv(wrmdir/'keras_history.csv')
-h_ref = pd.read_csv(refdir/'keras_history.csv')
+h_wrm = pd.read_csv(wrmdir/'krs_history.csv')
+h_ref = pd.read_csv(refdir/'krs_history.csv')
 val_cols_names = [c for c in h_ref.columns if 'val_' in c]
 for c in val_cols_names:
     fig, ax = plt.subplots()
@@ -131,6 +145,10 @@ for c in val_cols_names:
     plt.savefig(outdir/f'ref_vs_wrm_{c}.png', bbox_inches='tight')
 
 
+# Number of training epochs of ref model
+ref_ep = h_ref.shape[0]
+
+    
 # Create logger
 logfilename = outdir/'logfile.log'
 lg = classlogger.Logger(logfilename=logfilename) 
@@ -218,7 +236,7 @@ for i, weps in enumerate(ep_vec):
     
     # Load warm model
     lg.logger.info(f'\nLoad warmed-up model with {weps} weps')
-    modelpath = glob(str(wrmdir/f'*ep_{weps}-*.h5'))[0]
+    modelpath = glob(str(wrmdir/'models'/f'*ep_{weps}-*.h5'))[0]
     model = load_model(modelpath, custom_objects={'r2_krs': r2_krs})  # https://github.com/keras-team/keras/issues/5916
     
     # Compute ref_metric of wrm model
@@ -246,16 +264,16 @@ for i, weps in enumerate(ep_vec):
     
     # Keras callbacks
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=15, verbose=1, mode='auto',
-                                  min_delta=0.0001, min_lr=1e-9)
+                                  min_delta=0.0001, cooldown=3, min_lr=1e-9)
 #     reduce_lr = ReduceLROnPlateau(monitor=ref_metric, factor=0.75, patience=10, verbose=1, mode='auto',
 #                                   min_delta=0.0001, min_lr=1e-9)
     early_stop = EarlyStopping(monitor=ref_metric, patience=50, verbose=1, mode='auto')
-    checkpointer = ModelCheckpoint(str(ep_dir/'model.cnt.h5'), verbose=0, save_weights_only=False, save_best_only=True)
-    csv_logger = CSVLogger(ep_dir/f'model.{tr_phase}.log')
+    checkpointer = ModelCheckpoint(str(ep_dir/'model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
+    csv_logger = CSVLogger(ep_dir/f'krs_logger.log')
     
     # Callbacks list
-    callback_list = [checkpointer, csv_logger, early_stop, reduce_lr,  # keras callbacks
-                     clr, early_stop_custom]  # custom callbacks
+    callback_list = [checkpointer, csv_logger, early_stop, reduce_lr,
+                     clr]  # early_stop_custom
     
     # -----
     # Train
@@ -270,8 +288,8 @@ for i, weps in enumerate(ep_vec):
     history = model.fit(xtr, ytr, **fit_params)
     runtime_ceps = time() - t0  
     
-    # Dump keras history
-    kh = ml_models.dump_keras_history(history, ep_dir) 
+    # Save keras history
+    kh = ml_models.save_krs_history(history, ep_dir) 
 
 
     # ----------------------------------
@@ -301,10 +319,10 @@ for i, weps in enumerate(ep_vec):
     # Make plots
     # ----------
     # Plots
-    model_plts_path = ep_dir/'model_cnt_plts'
-    os.makedirs(model_plts_path, exist_ok=True)
-    ml_models.plot_prfrm_metrics(history=history, title=f'Continue training',
-                                 skp_ep=skp_ep, add_lr=True, outdir=model_plts_path)  
+    plts_path = ep_dir/'plts'
+    os.makedirs(plts_path, exist_ok=True)
+    ml_models.plot_prfrm_metrics(history=history, title='Continue training',
+                                 skp_ep=skp_ep, add_lr=True, outdir=plts_path)  
     
     # Plot reference training with continue training
     for c in val_cols_names:
@@ -313,15 +331,18 @@ for i, weps in enumerate(ep_vec):
         x1 = list(h_ref['epoch'])
         x2 = list(kh['epoch'] + weps)
         
-        ax.plot(x1, h_ref[c], 'b-', alpha=0.7, label='ref')
-        ax.plot(x2, kh[c], 'ro-', markersize=2, alpha=0.7, label=f'weps_{weps}')        
+        ax.plot(x1, h_ref[c], 'b-', linewidth=1.5, alpha=0.7, label='ref')
+        # ax.plot(x2, kh[c], 'ro-', markersize=2, alpha=0.7, label=f'weps_{weps}')
+        ax.plot(x2, kh[c], 'r-', linewidth=1.5, alpha=0.7, label=f'weps_{weps}')
         
         if c == ref_metric:
-            x = range(0, max(x1+x2))
-            ymin = np.ones(len(x)) * min(h_ref[c])
-            yref = np.ones(len(x)) * score_ref
-            ax.plot(x, ymin, 'c--', linewidth=1, alpha=0.7, label='ref_min')
-            ax.plot(x, yref, 'g--', linewidth=1, alpha=0.7, label=f'ref_min_{prct_diff}%')
+            # x = range(0, max(x1+x2))
+            # ymin = np.ones(len(x)) * min(h_ref[c])
+            # yref = np.ones(len(x)) * score_ref
+            # ax.plot(x, ymin, 'k--', linewidth=1, alpha=0.7, label='ref_min')
+            # ax.plot(x, yref, 'g--', linewidth=1, alpha=0.7, label=f'ref_min_{prct_diff}%')
+            ax.axhline(min(h_ref[c]), 'k--', linewidth=1, alpha=0.7, label='ref_min')
+            ax.axhline(score_ref, 'g--', linewidth=1, alpha=0.7, label=f'ref_min_{prct_diff}%')
         
         ax.set_xlabel('epoch')
         ax.set_ylabel(c)
@@ -357,11 +378,12 @@ ax1.grid(True)
 
 fig.tight_layout()
 # plt.title('Reference {} at {} epoch'.format(ref_metric, ref_ep))
-plt.title(f'Ref epochs: {ref_ep};  Diff from min score: {prct_diff}%')
+# plt.title(f'Ref epochs: {ref_ep};  Diff from min score: {prct_diff}%')
+plt.title(f'Diff from min score: {prct_diff}%')
 plt.savefig(outdir/'summary_plot.png', bbox_inches='tight')
 
 
-lg.logger.info('\nMax speed-up: {}/{}={}'.format( ref_ep, summary['ceps'].min(), ref_ep/summary['ceps'].min()) )
+lg.logger.info('\nMax speed-up: {}/{}={:.2f}'.format( ref_ep, summary['ceps'].min(), ref_ep/summary['ceps'].min()) )
 lg.logger.info('Max epochs reduced: {}-{}={}'.format( ref_ep, summary['ceps'].min(), ref_ep-summary['ceps'].min()) )
 
 lg.logger.info('\nProgram runtime: {:.2f} mins'.format( (time() - t_start)/60 ))
