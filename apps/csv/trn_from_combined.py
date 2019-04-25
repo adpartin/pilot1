@@ -54,7 +54,7 @@ from classlogger import Logger
 import lrn_crv
 import ml_models
 from cvrun import my_cross_validate
-from cvsplitter import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
+from cv_splitter import cv_splitter, plot_ytr_yvl_dist
 
 
 # Path
@@ -86,7 +86,7 @@ def run(args):
     cell_features = args['cell_features']
     drug_features = args['drug_features']
     other_features = args['other_features']
-    mltype = args['mltype']
+    # mltype = args['mltype']
     model_name = args['model_name']
     cv_method = args['cv_method']
     cv_folds = args['cv_folds']
@@ -98,12 +98,16 @@ def run(args):
     dr_rate = args['dr_rate']
     attn = args['attn']
 
+    # Extract ml type ('reg' or 'cls')
+    mltype = args['model_name'].split('_')[-1]
+    assert mltype in ['reg', 'cls'], "mltype should be either 'reg' or 'cls'."    
+    
     # Feature list
     feature_list = cell_features + drug_features + other_features
 
     # Define names
     train_sources_name = '_'.join(train_sources)
-    
+        
     # Define custom metric to calc auroc from regression
     # scikit-learn.org/stable/modules/model_evaluation.html#scoring
     def reg_auroc(y_true, y_pred):
@@ -183,42 +187,43 @@ def run(args):
     # ========================================================================
     #       Define CV split
     # ========================================================================
-    # TODO: Put this into utils.py or cvsplitter.py
-    # def cv_splitter(cv_method: str='simple', cv_folds: int=1, test_size: float=0.2, random_state=None,
-    #         shuffle: bool=True, groups=None, ml_type: str='reg'):
-    test_size = 0.2
-    if mltype == 'cls':
-        # Classification
-        if cv_method == 'simple':
-            if cv_folds == 1:
-                cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
-            else:
-                cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-            groups = None
-            
-        elif cv_method == 'stratify':
-            if cv_folds == 1:
-                cv = StratifiedShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
-            else:
-                cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-            groups = None
+    cv = cv_splitter(cv_method=cv_method, cv_folds=cv_folds, test_size=0.2,
+                     mltype=mltype, shuffle=True, random_state=SEED)
+    groups = data['CELL'].copy()
 
-    elif mltype == 'reg':
-        # Regression
-        if cv_method == 'group':
-            if cv_folds == 1:
-                cv = GroupShuffleSplit(n_splits=cv_folds, random_state=SEED)
-            else:
-                cv = GroupKFold(n_splits=cv_folds)
-            groups = data['CELL'].copy()
-            
-        elif cv_method == 'simple':
-            if cv_folds == 1:
-                cv = ShuffleSplit(n_splits=cv_folds, test_size=0.2, random_state=SEED)
-            else:
-                cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-            groups = None
-
+#    test_size = 0.2
+#    if mltype == 'cls':
+#        # Classification
+#        if cv_method == 'simple':
+#            if cv_folds == 1:
+#                cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
+#            else:
+#                cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
+#            groups = None
+#            
+#        elif cv_method == 'stratify':
+#            if cv_folds == 1:
+#                cv = StratifiedShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
+#            else:
+#                cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
+#            groups = None
+#
+#    elif mltype == 'reg':
+#        # Regression
+#        if cv_method == 'group':
+#            if cv_folds == 1:
+#                cv = GroupShuffleSplit(n_splits=cv_folds, random_state=SEED)
+#            else:
+#                cv = GroupKFold(n_splits=cv_folds)
+#            groups = data['CELL'].copy()
+#            
+#        elif cv_method == 'simple':
+#            if cv_folds == 1:
+#                cv = ShuffleSplit(n_splits=cv_folds, test_size=0.2, random_state=SEED)
+#            else:
+#                cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
+#            groups = None
+#
 
     # ========================================================================
     #       ML Model

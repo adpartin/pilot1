@@ -86,7 +86,7 @@ def run(args):
     cell_features = args['cell_features']
     drug_features = args['drug_features']
     other_features = args['other_features']
-    mltype = args['mltype']
+    # mltype = args['mltype']
     model_name = args['model_name']
     cv_method = args['cv_method']
     cv_folds = args['cv_folds']
@@ -98,6 +98,10 @@ def run(args):
     dr_rate = args['dr_rate']
     attn = args['attn']
 
+    # Extract ml type ('reg' or 'cls')
+    mltype = args['model_name'].split('_')[-1]
+    assert mltype in ['reg', 'cls'], "mltype should be either 'reg' or 'cls'."    
+    
     # Feature list
     feature_list = cell_features + drug_features + other_features
 

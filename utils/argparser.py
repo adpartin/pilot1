@@ -16,7 +16,7 @@ dflt_args = {
     'cell_features': ['rna'], 
     'drug_features': ['dsc'],
     'other_features': [] ,
-    'mltype': 'reg',
+    # 'mltype': 'reg',
     'model_name': 'lgb_reg',
     'cv_method': 'simple',
     'cv_folds': 1,
@@ -111,10 +111,10 @@ def get_cli_args(args=None):
         help='Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).') # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
 
     # Select ML models
-    parser.add_argument('--mltype',
-        # default=["lgb_reg"],
-        choices=['reg', 'cls'],
-        help='Type to ML problem: `reg` or `cls`.')
+    # parser.add_argument('--mltype',
+    #     # default=["lgb_reg"],
+    #     choices=['reg', 'cls'],
+    #     help='Type to ML problem: `reg` or `cls`.')
 
     # Select ML models
     parser.add_argument('-ml', '--model_name',
@@ -160,7 +160,7 @@ def get_cli_args(args=None):
         help='Output dir.')    
 
     # Select NN hyper_params
-    parser.add_argument('-e', '--epochs',
+    parser.add_argument('-ep', '--epochs',
         # default=100,
         type=int,
         help='Number of epochs to train the neural network.')
