@@ -23,6 +23,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from scipy import stats
+np.set_printoptions(precision=3)
 
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import learning_curve
@@ -51,9 +52,9 @@ import utils
 import utils_tidy
 import argparser
 from classlogger import Logger
-import lrn_crv
 import ml_models
-from cvsplitter import GroupSplit, SimpleSplit, plot_ytr_yvl_dist
+from cv_splitter import cv_splitter, plot_ytr_yvl_dist
+from lrn_crv import my_learning_curve
 
 
 # Path
@@ -71,7 +72,6 @@ fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.',
                  'dsc': 'drug_dsc.', 'fng': 'drug_fng.',
                  'clb': 'cell_lbl.', 'dlb': 'drug_lbl.'}
 
-np.set_printoptions(precision=3)
 
 
 def run(args):
@@ -86,7 +86,6 @@ def run(args):
     cell_features = args['cell_features']
     drug_features = args['drug_features']
     other_features = args['other_features']
-    # mltype = args['mltype']
     model_name = args['model_name']
     cv_method = args['cv_method']
     cv_folds = args['cv_folds']
@@ -140,15 +139,11 @@ def run(args):
     # Dump args to file
     utils.dump_args(args, outdir=run_outdir)
 
-    # Create outdir for figs
-    # figpath = os.path.join(run_outdir, 'figs')
-    # os.makedirs(figpath, exist_ok=True)
-
-
+    
     # ========================================================================
     #       Comet
     # ========================================================================
-    # www.comet.ml/docs/python-sdk/Experiment
+    # comet.ml/docs/python-sdk/Experiment
     COMET_API_KEY = os.environ.get('COMET_API_KEY')
     if COMET_API_KEY is not None:
         # args['comet_prj_name'] = COMET_PRJ_NAME
@@ -172,6 +167,7 @@ def run(args):
     datapath = DATADIR / DATAFILENAME
     data, te_data = utils_tidy.load_data(datapath=datapath, fea_prfx_dict=fea_prfx_dict,
                                          args=args, logger=lg.logger, random_state=SEED)
+    del te_data  # te_data is not used
 
 
     # ========================================================================
@@ -186,38 +182,9 @@ def run(args):
     # ========================================================================
     #       Define CV split
     # ========================================================================
-    test_size = 0.2
-    if mltype == 'cls':
-        # Classification
-        if cv_method == 'simple':
-            if cv_folds == 1:
-                cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
-            else:
-                cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-            groups = None
-
-        elif cv_method == 'stratify':
-            if cv_folds == 1:
-                cv = StratifiedShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
-            else:
-                cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-            groups = None
-
-    elif mltype == 'reg':
-        # Regression
-        if cv_method == 'group':
-            if cv_folds == 1:
-                cv = GroupShuffleSplit(n_splits=cv_folds, random_state=SEED)
-            else:
-                cv = GroupKFold(n_splits=cv_folds)
-            groups = data['CELL'].copy()
-        
-        elif cv_method == 'simple':
-            if cv_folds == 1:
-                cv = ShuffleSplit(n_splits=cv_folds, test_size=0.2, random_state=SEED)
-            else:
-                cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-            groups = None
+    cv = cv_splitter(cv_method=cv_method, cv_folds=cv_folds, test_size=0.2,
+                     mltype=mltype, shuffle=True, random_state=SEED)
+    groups = data['CELL'].copy()
 
 
     # ========================================================================
@@ -249,24 +216,25 @@ def run(args):
 
     # Run learning curve
     t0 = time()
-    lrn_crv_scores = lrn_crv.my_learning_curve(
+    lrn_crv_scores = my_learning_curve(
         X=xdata,
         Y=ydata,
+        lr_curve_ticks=lr_curve_ticks,
+        data_sizes_frac=None,
         mltype=mltype,
         model_name=model_name,
         fit_params=fit_prms,
         init_params=init_prms,
         args=args,
-        lr_curve_ticks=lr_curve_ticks,
-        data_sizes_frac=None,
         metrics=metrics,
         cv=cv,
         groups=groups,
         n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
-    lg.logger.info('Runtime: {:.3f} mins'.format((time()-t0)/60))
+    lg.logger.info('Runtime: {:.1f} mins'.format( (time()-t0)/60) )
 
     # Dump results
-    lrn_crv_scores.to_csv(run_outdir/'lrn_crv_scores.csv', index=False) 
+    lrn_crv_scores.to_csv( run_outdir/('lrn_crv_scores_' + train_sources_name + '.csv'), index=False) 
+    lg.logger.info(f'\nlrn_crv_scores\n{lrn_crv_scores}')
 
 
     # -----------------------------------------------
@@ -357,7 +325,7 @@ def main(args):
     
 
 if __name__ == '__main__':
-    # python -m pdb apps/lrn_crv/trn_lrn_crv.py -te ccle gcsi -tr gcsi
+    # python -m pdb apps/lrn_crv/trn_lrn_crv.py -tr gcsi
     """ __name__ == '__main__' explained:
     www.youtube.com/watch?v=sugvnHA7ElY
     """

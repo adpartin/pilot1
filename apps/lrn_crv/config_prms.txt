@@ -11,6 +11,6 @@ n_jobs = 4
 other_features = []
 target_name = 'AUC'
 target_transform = False
-test_sources = ['gcsi', 'ccle']
+test_sources = None 
 tissue_type = None
 train_sources = ['gcsi']

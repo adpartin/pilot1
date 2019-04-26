@@ -81,7 +81,7 @@ def main(args):
         dfs.append(lrn_crv_scores)
 
     df = pd.concat(dfs, axis=0, sort=False)
-    df.to_csv('lrn_crv_all.csv', index=False)
+    df.to_csv(outdir/'lrn_crv_all.csv', index=False)
 
     # # Create csv table for each available metric 
     # df = pd.concat(dfs, axis=0, sort=False)

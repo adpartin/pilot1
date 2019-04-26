@@ -23,6 +23,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from scipy import stats
+np.set_printoptions(precision=3)
 
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import learning_curve
@@ -51,10 +52,9 @@ import utils
 import utils_tidy
 import argparser
 from classlogger import Logger
-import lrn_crv
 import ml_models
-from cvrun import my_cross_validate
 from cv_splitter import cv_splitter, plot_ytr_yvl_dist
+from cvrun import my_cross_validate
 
 
 # Path
@@ -71,8 +71,6 @@ fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.',
                  'dsc': 'drug_dsc.', 'fng': 'drug_fng.',
                  'clb': 'cell_lbl.', 'dlb': 'drug_lbl.'}
 
-np.set_printoptions(precision=3)
-
 
 def run(args):
     outdir = args['outdir']
@@ -86,7 +84,6 @@ def run(args):
     cell_features = args['cell_features']
     drug_features = args['drug_features']
     other_features = args['other_features']
-    # mltype = args['mltype']
     model_name = args['model_name']
     cv_method = args['cv_method']
     cv_folds = args['cv_folds']
@@ -140,11 +137,7 @@ def run(args):
 
     # Dump args to file
     utils.dump_args(args, outdir=run_outdir)
-
-    # Create outdir for figs
-    figpath = run_outdir/'figs'
-    os.makedirs(figpath, exist_ok=True)
-
+    
 
     # ========================================================================
     #       Load data and pre-proc
@@ -157,6 +150,9 @@ def run(args):
     # ========================================================================
     #       Save plots
     # ========================================================================
+    figpath = run_outdir/'figs'
+    os.makedirs(figpath, exist_ok=True)
+    
     utils.boxplot_rsp_per_drug(df=data, target_name=target_name,
         path=figpath / f'{target_name}_per_drug_boxplot.png')
 
@@ -215,6 +211,7 @@ def run(args):
     # Get data
     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
     ydata = utils_tidy.extract_target(data=data, target_name=target_name)
+    utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
 
     # ML model params
     if model_name == 'lgb_reg':

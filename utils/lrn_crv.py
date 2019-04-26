@@ -273,7 +273,7 @@ def my_learning_curve(X, Y,
 
             if 'nn' in model_name:
                 ml_models.plot_prfrm_metrics(history=history, title=f'Train size: {tr_sz}',
-                                             skip_epochs=3, add_lr=True, outdir=out_nn_model)
+                                             skp_ep=3, add_lr=True, outdir=out_nn_model)
 
             # Add info
             tr_scores['tr_set'] = True

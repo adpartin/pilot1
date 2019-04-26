@@ -82,7 +82,7 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
     else:
         te_data = None
         if logger:
-            logger.infp('No test data.')
+            logger.info('No test data.')
 
 
     # Extract train sources
@@ -112,11 +112,12 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
         tr_data = pd.concat([other_data, non_num_data, fea_data], axis=1)
 
         # Scale test data
-        fea_data, other_data = split_features_and_other_cols(te_data, fea_prfx_dict=fea_prfx_dict)
-        fea_data, non_num_data = get_num_and_non_num_cols(fea_data)
-        colnames = fea_data.columns
-        fea_data = pd.DataFrame( scaler.transform(fea_data), columns=colnames ).astype(np.float32)
-        te_data = pd.concat([other_data, non_num_data, fea_data], axis=1)
+        if te_data is not None:
+            fea_data, other_data = split_features_and_other_cols(te_data, fea_prfx_dict=fea_prfx_dict)
+            fea_data, non_num_data = get_num_and_non_num_cols(fea_data)
+            colnames = fea_data.columns
+            fea_data = pd.DataFrame( scaler.transform(fea_data), columns=colnames ).astype(np.float32)
+            te_data = pd.concat([other_data, non_num_data, fea_data], axis=1)
 
 
     # Assign type to categoricals
@@ -145,10 +146,11 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
         y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
         data[args['target_name']] = y
         # ydata = pd.DataFrame(y)
-
-        y = te_data[args['target_name']].copy()
-        y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
-        te_data[args['target_name']] = y
+        
+        if te_data is not None:
+            y = te_data[args['target_name']].copy()
+            y, lmbda = stats.boxcox(y+1); # utils.plot_hist(x=y, var_name=target_name+'_boxcox', path=)
+            te_data[args['target_name']] = y
 
 
     # if 'dlb' in args['other_features']:
