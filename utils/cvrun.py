@@ -165,7 +165,7 @@ def my_cross_validate(X, Y,
         # Plot training curves
         if 'nn' in model_name:
             ml_models.plot_prfrm_metrics(history=history, title=f'cv fold: {fold_id+1}',
-                                         skip_epochs=1, add_lr=True, outdir=out_nn_model)
+                                         skp_ep=1, add_lr=True, outdir=out_nn_model)
 
         # Add info
         tr_scores['tr_set'] = True

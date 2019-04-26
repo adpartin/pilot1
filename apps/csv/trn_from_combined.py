@@ -191,39 +191,6 @@ def run(args):
                      mltype=mltype, shuffle=True, random_state=SEED)
     groups = data['CELL'].copy()
 
-#    test_size = 0.2
-#    if mltype == 'cls':
-#        # Classification
-#        if cv_method == 'simple':
-#            if cv_folds == 1:
-#                cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
-#            else:
-#                cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-#            groups = None
-#            
-#        elif cv_method == 'stratify':
-#            if cv_folds == 1:
-#                cv = StratifiedShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
-#            else:
-#                cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-#            groups = None
-#
-#    elif mltype == 'reg':
-#        # Regression
-#        if cv_method == 'group':
-#            if cv_folds == 1:
-#                cv = GroupShuffleSplit(n_splits=cv_folds, random_state=SEED)
-#            else:
-#                cv = GroupKFold(n_splits=cv_folds)
-#            groups = data['CELL'].copy()
-#            
-#        elif cv_method == 'simple':
-#            if cv_folds == 1:
-#                cv = ShuffleSplit(n_splits=cv_folds, test_size=0.2, random_state=SEED)
-#            else:
-#                cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-#            groups = None
-#
 
     # ========================================================================
     #       ML Model
@@ -308,7 +275,7 @@ def run(args):
 
 
     # ========================================================================
-    #       Train final model (entire dataset)
+    #       Train final model (entire dataset) TODO: test this!
     # ========================================================================
     if retrain:
         lg.logger.info('\n{}'.format('='*50))
@@ -334,7 +301,7 @@ def run(args):
 
             # Use early stopping
             init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'n_estimators': 2000, 'logger': lg.logger}
-            X_train, X_test, y_train, y_test = train_test_split(xdata, ydata, test_size=0.2, random_state=SEED)
+            X_train, X_test, y_train, y_test = train_test_split(xdata, ydata, test_size=0.1, random_state=SEED)
             xdata, ydata = X_train, y_train
             eval_set = (X_test, y_test)
             fit_prms = {'verbose': False, 'eval_set': eval_set, 'early_stopping_rounds': 10}  # 'sample_weight': sample_weight

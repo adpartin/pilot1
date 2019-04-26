@@ -303,9 +303,9 @@ class KERAS_REGRESSOR(BaseMLModel):
         self.model = model
 
 
-    def dump_model(self, outpath='model.h5'):
+    def dump_model(self, outdir='.'):
         """ Dump trained model. """        
-        self.model.save(outpath)
+        self.model.save( str(Path(outdir)/'model.h5') )
         
 #         # Serialize model to JSON
 #         model_json = self.model.to_json()

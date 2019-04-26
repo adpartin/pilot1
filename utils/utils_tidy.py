@@ -106,18 +106,17 @@ def load_data(datapath, fea_prfx_dict, args, logger=None, random_state=None):
 
         # Scale train data
         fea_data, other_data = split_features_and_other_cols(tr_data, fea_prfx_dict=fea_prfx_dict)
+        fea_data, non_num_data = get_num_and_non_num_cols(fea_data)
         colnames = fea_data.columns
-        fea_data = scaler.fit_transform(fea_data)
-        fea_data = pd.DataFrame(fea_data, columns=colnames)
-        tr_data = pd.concat([other_data, fea_data], axis=1)
+        fea_data = pd.DataFrame( scaler.fit_transform(fea_data), columns=colnames ).astype(np.float32)
+        tr_data = pd.concat([other_data, non_num_data, fea_data], axis=1)
 
         # Scale test data
         fea_data, other_data = split_features_and_other_cols(te_data, fea_prfx_dict=fea_prfx_dict)
+        fea_data, non_num_data = get_num_and_non_num_cols(fea_data)
         colnames = fea_data.columns
-        fea_data = scaler.transform(fea_data)
-        fea_data = pd.DataFrame(fea_data, columns=colnames)
-        te_data = pd.concat([other_data, fea_data], axis=1)
-
+        fea_data = pd.DataFrame( scaler.transform(fea_data), columns=colnames ).astype(np.float32)
+        te_data = pd.concat([other_data, non_num_data, fea_data], axis=1)
 
 
     # Assign type to categoricals
@@ -253,10 +252,8 @@ def impute_values(data, fea_prfx_dict, logger=None):
     if tot_miss_feas > 0:
         # Split numerical from other features (only numerical will be imputed;
         # The other features can be cell and drug labels)
-        non_num_cols = [x for x in fea_data.columns if is_string_dtype(fea_data[x]) is True]
-        non_num_data = fea_data[non_num_cols]
-        fea_data = fea_data.drop(columns=non_num_cols)
-        
+        fea_data, non_num_data = get_num_and_non_num_cols(fea_data)
+
         # Proceed with numerical featues
         colnames = fea_data.columns
 
@@ -274,6 +271,14 @@ def impute_values(data, fea_prfx_dict, logger=None):
         data = pd.concat([other_data, non_num_data, fea_data_imputed], axis=1)
         
     return data
+
+
+def get_num_and_non_num_cols(df):
+    """ Returns 2 dataframes. One with numerical cols and the other with non-numerical cols. """
+    non_num_cols = [x for x in df.columns if is_string_dtype(df[x]) is True]
+    non_num_df = df[non_num_cols]
+    num_df = df.drop(columns=non_num_cols)
+    return num_df, non_num_df
 
 
 def extract_target(data, target_name):

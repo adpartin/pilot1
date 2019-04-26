@@ -32,7 +32,7 @@ dflt_args = {
     'batch_size': 32,
     'dr_rate': 0.2,
     'attn': False,
-    'scaler': None,
+    'scaler': 'stnd',
 }
 
 

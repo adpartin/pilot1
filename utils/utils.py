@@ -247,6 +247,15 @@ def dump_preds(model, df_data, xdata, target_name, path, model_name=None):
     df_preds = pd.concat([df1, df2], axis=1).reset_index(drop=True)
     df_preds.to_csv(path)
 
+    
+    def get_scaler(scaler):
+        if scaler == 'stnd':
+            scaler = sklearn.preprocessing.StandardScaler()
+        elif scaler == 'minmax':
+            scaler = sklearn.preprocessing.MinMaxScaler()
+        elif scaler == 'rbst':
+            scaler = sklearn.preprocessing.RobustScaler()
+        return scaler
 
 
 # ==============================================================================
