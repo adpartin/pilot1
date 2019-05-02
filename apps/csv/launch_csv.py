@@ -32,7 +32,7 @@ file_path = Path(__file__).resolve().parent
 # Utils
 utils_path = file_path / '../../utils'
 sys.path.append(str(utils_path))
-import trn_from_combined
+import trn_combined
 from classlogger import Logger
 
 
@@ -106,7 +106,7 @@ def main(args):
 
     # Single run
     # idx = 2
-    # df_csv_scores, prms = trn_from_combined.main(
+    # df_csv_scores, prms = trn_combined.main(
     #     ['-tr', *cross_study_sets[idx]['tr_src'],
     #     '-te', *cross_study_sets[idx]['te_src'],
     #     *args])
@@ -117,7 +117,7 @@ def main(args):
     dfs = []
     for run_id in range(len(cross_study_sets)):
         print('{} Run {} {}'.format('-'*40, run_id+1, '-'*40))
-        csv_scores, prms = trn_from_combined.main(
+        csv_scores, prms = trn_combined.main(
             ['-tr', *cross_study_sets[run_id]['tr_src'],
              '-te', *cross_study_sets[run_id]['te_src'],
              '--outdir', str(outdir),

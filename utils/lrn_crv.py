@@ -99,7 +99,7 @@ def my_learning_curve(X, Y,
                       mltype,
                       model_name='lgb_reg',
                       cv=5, groups=None,
-                      lr_curve_ticks=5, data_sizes_frac=None,
+                      lrn_crv_ticks=5, data_sizes_frac=None,
                       args=None, fit_params=None, init_params=None,
                       metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'neg_mean_squared_error'],
                       n_jobs=1, random_state=None, logger=None, outdir='.'):
@@ -112,7 +112,7 @@ def my_learning_curve(X, Y,
         mltype : type to ML problem (`reg` or `cls`)
         cv : number cv folds or sklearn's cv splitter --> scikit-learn.org/stable/glossary.html#term-cv-splitter
         groups : groups for the cv splits (used for strict cv partitions --> non-overlapping cell lines)
-        lr_curve_ticks : number of ticks in the learning curve (used if data_sizes_frac is None)
+        lrn_crv_ticks : number of ticks in the learning curve (used if data_sizes_frac is None)
         data_sizes_frac : relative numbers of training samples that will be used to generate learning curves
         fit_params : dict of parameters to the estimator's "fit" method
 
@@ -121,7 +121,7 @@ def my_learning_curve(X, Y,
 
     Examples:
         cv = sklearn.model_selection.KFold(n_splits=5, shuffle=False, random_state=0)
-        lrn_curve.my_learning_curve(X=xdata, Y=ydata, mltype='reg', cv=cv, lr_curve_ticks=5)
+        lrn_curve.my_learning_curve(X=xdata, Y=ydata, mltype='reg', cv=cv, lrn_crv_ticks=5)
     """  
     X = pd.DataFrame(X).values
     Y = pd.DataFrame(Y).values
@@ -138,17 +138,17 @@ def my_learning_curve(X, Y,
 
     # Define training set sizes
     if data_sizes_frac is None:
-        #data_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
+        #data_sizes_frac = np.linspace(0.1, 1.0, lrn_crv_ticks)
         base = 10
-        data_sizes_frac = np.logspace(0.0, 1.0, lr_curve_ticks, endpoint=True, base=base)/base
+        data_sizes_frac = np.logspace(0.0, 1.0, lrn_crv_ticks, endpoint=True, base=base)/base
 
     if cv_folds == 1:
-        train_sizes = [int(n) for n in (1-cv.test_size) * X.shape[0] * data_sizes_frac]
+        tr_sizes = [int(n) for n in (1-cv.test_size) * X.shape[0] * data_sizes_frac]
     elif cv_folds > 1:
-        train_sizes = [int(n) for n in (cv_folds-1)/cv_folds * X.shape[0] * data_sizes_frac]
+        tr_sizes = [int(n) for n in (cv_folds-1)/cv_folds * X.shape[0] * data_sizes_frac]
 
     if logger is not None:
-        logger.info('Train sizes: {}'.format(train_sizes))
+        logger.info('Train sizes: {}'.format(tr_sizes))
 
     # Define comet experiments dict
     if (args is not None) and ('comet' in set(args)):
@@ -174,6 +174,7 @@ def my_learning_curve(X, Y,
     elif mltype == 'reg':
         splitter = cv.split(X, Y, groups=groups)
 
+    # CV loop
     for fold_id, (tr_idx, vl_idx) in enumerate(splitter):
         if logger is not None:
             logger.info(f'Fold {fold_id+1}/{cv_folds}')
@@ -201,9 +202,9 @@ def my_learning_curve(X, Y,
 
         # Start run across data sizes
         idx = np.random.permutation(len(xtr))
-        for i, tr_sz in enumerate(train_sizes):
+        for i, tr_sz in enumerate(tr_sizes):
             if logger:
-                logger.info(f'    Train size: {tr_sz} ({i+1}/{len(train_sizes)})')   
+                logger.info(f'    Train size: {tr_sz} ({i+1}/{len(tr_sizes)})')   
 
             # Comet
             # if (args is not None) and set(('comet_prj_name', 'comet_set_name')).issubset(set(args)):
@@ -222,7 +223,6 @@ def my_learning_curve(X, Y,
 #                 comet_exp.add_tag(f'trn size {tr_sz}')
 #                 comet_exp_dict[tr_sz] = comet_exp
                 
-
                                 
             # Sequentially get subset of samples (the input dataset X must be shuffled)
             xtr_sub = xtr[idx[:tr_sz], :]
@@ -230,7 +230,7 @@ def my_learning_curve(X, Y,
             #sub_grps = groups[idx[:tr_sz]]
 
             # Get the estimator
-            estimator = ml_models.get_model(model_name=model_name, init_params=init_params)
+            estimator = ml_models.get_model(model_name, init_params=init_params)
 
             if 'nn' in model_name:
                 from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
@@ -242,7 +242,7 @@ def my_learning_curve(X, Y,
                 os.makedirs(out_nn_model, exist_ok=False)
                 
                 # Callbacks (custom)
-                clr_triangular = CyclicLR(base_lr=0.0001, max_lr=0.001, mode='triangular')
+                clr = CyclicLR(base_lr=0.0001, max_lr=0.001, mode='triangular')
                 
                 # Keras callbacks
                 checkpointer = ModelCheckpoint(str(out_nn_model/'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
@@ -252,12 +252,15 @@ def my_learning_curve(X, Y,
                 early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1, mode='auto')
                 
                 # Callbacks list
-                callback_list = [checkpointer, csv_logger, early_stop, reduce_lr,  # keras callbacks
-                                 clr_triangular]  # custom callbacks
+                if (args is not None) and (args['opt']=='clr'):
+                    callback_list = [checkpointer, csv_logger, early_stop, reduce_lr, clr]
+                else:
+                    callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
 
                 # Fit params
+                # TODO: which val set should be used??
                 # fit_params['validation_data'] = (xvl, yvl)
-                fit_params['validation_split'] = 0.2
+                # fit_params['validation_split'] = 0.1
                 fit_params['callbacks'] = callback_list
 
             # Train model
@@ -273,7 +276,7 @@ def my_learning_curve(X, Y,
 
             if 'nn' in model_name:
                 ml_models.plot_prfrm_metrics(history=history, title=f'Train size: {tr_sz}',
-                                             skp_ep=3, add_lr=True, outdir=out_nn_model)
+                                             skp_ep=7, add_lr=True, outdir=out_nn_model)
 
             # Add info
             tr_scores['tr_set'] = True
@@ -306,7 +309,7 @@ def my_learning_curve(X, Y,
     # ---------------------------------------------------------------
     #  # Define training set sizes
     # if data_sizes_frac is None:
-    #     data_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
+    #     data_sizes_frac = np.linspace(0.1, 1.0, lrn_crv_ticks)
     # data_sizes = [int(n) for n in X.shape[0]*data_sizes_frac]
 
     # if logger is not None:

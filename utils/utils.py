@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 import logging
-import pathlib
 import datetime
 from collections import OrderedDict
 
@@ -29,7 +28,7 @@ def create_outdir(outdir='.', args=None):
     t = [t.year, '-', t.month, '-', t.day, '-', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
     if args is not None:
-        name_sffx = '.'.join(args['train_sources'] + [args['model_name']] + [args['cv_method']] + args['cell_features'] + args['drug_features'] + [args['target_name']])
+        name_sffx = '.'.join(args['train_sources'] + [args['model_name']] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']])
     else:
         name_sffx = 'out'
     run_outdir = Path(outdir) / (name_sffx + '_' + t)

@@ -33,6 +33,7 @@ dflt_args = {
     'dr_rate': 0.2,
     'attn': False,
     'scaler': 'stnd',
+    'opt': 'sgd',
 }
 
 
@@ -182,6 +183,11 @@ def get_cli_args(args=None):
         type=str,
         choices=['stnd', 'minmax', 'rbst'],
         help='Feature scaler (primarily for neural networks).')                                       
+    parser.add_argument('--opt',
+        # default=["lgb_reg"],
+        type=str,
+        choices=['sgd', 'adam', 'clr'],
+        help='Optimizer name.')    
 
     return parser
 

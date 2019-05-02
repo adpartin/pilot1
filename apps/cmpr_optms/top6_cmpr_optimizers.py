@@ -10,7 +10,7 @@ warnings.filterwarnings('ignore')
 import os
 
 import sys
-import pathlib
+from pathlib import Path
 import itertools
 import gzip
 import argparse
@@ -69,7 +69,7 @@ from callbacks import *
 
 # File path
 # file_path = os.path.dirname(os.path.realpath(__file__))
-file_path = pathlib.Path(__file__).resolve().parent
+file_path = Path(__file__).resolve().parent
 
 
 # Create dir to dump results (AP)

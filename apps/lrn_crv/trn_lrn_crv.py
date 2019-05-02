@@ -49,7 +49,7 @@ file_path = Path(__file__).resolve().parent
 utils_path = file_path / '../../utils'
 sys.path.append(str(utils_path))
 import utils
-import utils_tidy
+from utils_tidy import load_tidy_combined, get_data_by_src, break_src_data 
 import argparser
 from classlogger import Logger
 import ml_models
@@ -67,34 +67,28 @@ COMET_PRJ_NAME = 'trn_lrn_curves'
 os.makedirs(OUTDIR, exist_ok=True)
 
 
-# Feature prefix (some already present in the tidy dataframe)
-fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.',
-                 'dsc': 'drug_dsc.', 'fng': 'drug_fng.',
-                 'clb': 'cell_lbl.', 'dlb': 'drug_lbl.'}
-
-
-
 def run(args):
     outdir = args['outdir']
     target_name = args['target_name']
     target_transform = args['target_transform']    
-    train_sources = args['train_sources']
-    test_sources = args['test_sources']
+    tr_sources = args['train_sources']
+    te_sources = args['test_sources']
     row_sample = args['row_sample']
     col_sample = args['col_sample']
     tissue_type = args['tissue_type']
-    cell_features = args['cell_features']
-    drug_features = args['drug_features']
-    other_features = args['other_features']
+    cell_fea = args['cell_features']
+    drug_fea = args['drug_features']
+    other_fea = args['other_features']
     model_name = args['model_name']
     cv_method = args['cv_method']
     cv_folds = args['cv_folds']
-    lr_curve_ticks = args['lc_ticks']
+    lrn_crv_ticks = args['lc_ticks']
     n_jobs = args['n_jobs']
 
     epochs = args['epochs']
     batch_size = args['batch_size']
     dr_rate = args['dr_rate']
+    opt_name = args['opt']
     attn = args['attn']
 
     # Extract ml type ('reg' or 'cls')
@@ -102,10 +96,10 @@ def run(args):
     assert mltype in ['reg', 'cls'], "mltype should be either 'reg' or 'cls'."    
     
     # Feature list
-    feature_list = cell_features + drug_features + other_features
+    fea_list = cell_fea + drug_fea + other_fea
 
     # Define names
-    train_sources_name = '_'.join(train_sources)
+    tr_sources_name = '_'.join(tr_sources)
     
     # Define custom metric to calc auroc from regression
     # scikit-learn.org/stable/modules/model_evaluation.html#scoring
@@ -128,16 +122,16 @@ def run(args):
     # ========================================================================
     #       Logger
     # ========================================================================
-    run_outdir = utils.create_outdir(outdir=outdir, args=args)
+    run_outdir = utils.create_outdir(outdir, args=args)
     logfilename = run_outdir/'logfile.log'
-    lg = Logger(logfilename=logfilename)
+    lg = Logger(logfilename)
 
     lg.logger.info(f'File path: {file_path}')
     lg.logger.info(f'System CPUs: {psutil.cpu_count(logical=True)}')
     lg.logger.info(f'n_jobs: {n_jobs}')
 
     # Dump args to file
-    utils.dump_args(args, outdir=run_outdir)
+    utils.dump_args(args, run_outdir)
 
     
     # ========================================================================
@@ -147,9 +141,9 @@ def run(args):
     COMET_API_KEY = os.environ.get('COMET_API_KEY')
     if COMET_API_KEY is not None:
         # args['comet_prj_name'] = COMET_PRJ_NAME
-        # args['comet_set_name'] = train_sources_name # model_name
+        # args['comet_set_name'] = tr_sources_name # model_name
         comet_dict = {'comet_prj_name': COMET_PRJ_NAME,
-                      'comet_set_name': train_sources_name}
+                      'comet_set_name': tr_sources_name}
         args['comet'] = comet_dict
 #         lg.logger.info('\ncomet_api_key:        {}'.format(COMET_API_KEY))
 #         # lg.logger.info('comet_workspace_name: {}'.format(PRJ_NAME))
@@ -165,18 +159,16 @@ def run(args):
     #       Load data and pre-proc
     # ========================================================================
     datapath = DATADIR / DATAFILENAME
-    data, te_data = utils_tidy.load_data(datapath=datapath, fea_prfx_dict=fea_prfx_dict,
-                                         args=args, logger=lg.logger, random_state=SEED)
-    del te_data  # te_data is not used
 
+    dataset = load_tidy_combined(
+            datapath, fea_list=fea_list, logger=lg.logger, random_state=SEED)
 
-    # ========================================================================
-    #       Keep a subset of training features
-    # ========================================================================
-    data = utils_tidy.extract_subset_features(
-            data=data,
-            feature_list=feature_list,
-            fea_prfx_dict=fea_prfx_dict)
+    tr_data = get_data_by_src(
+            dataset, src_names=tr_sources, logger=lg.logger)
+    
+    xdata, ydata, _, _ = break_src_data(
+            tr_data, target=args['target_name'],
+            scaler_method=args['scaler'], logger=lg.logger)
 
 
     # ========================================================================
@@ -184,33 +176,30 @@ def run(args):
     # ========================================================================
     cv = cv_splitter(cv_method=cv_method, cv_folds=cv_folds, test_size=0.2,
                      mltype=mltype, shuffle=True, random_state=SEED)
-    groups = data['CELL'].copy()
+    if cv_method=='simple':
+        groups = None
+    elif cv_method=='group':
+        groups = tr_data['CELL'].copy()
 
 
     # ========================================================================
     #       Learning curves
     # ========================================================================
     lg.logger.info('\n\n{}'.format('='*50))
-    lg.logger.info(f'Learning curves ... {train_sources}')
+    lg.logger.info(f'Learning curves ... {tr_sources}')
     lg.logger.info('='*50)
-
-    # Get data
-    xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-    ydata = utils_tidy.extract_target(data=data, target_name=target_name)
-    utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
 
     # ML model params
     if model_name == 'lgb_reg':
         init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
         fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
     elif model_name == 'nn_reg':
-        init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': 0.2} 
-
+        init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'attn': attn, 'logger': lg.logger}
+        #fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': 0.2} 
+        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1} 
 
     # -----------------------------------------------
-    # Generate learning curve - semi automatic method
-    # (*) uses cross_validate from sklearn.
+    # Generate learning curve 
     # -----------------------------------------------
     lg.logger.info('\nStart learning curve (my method) ...')
 
@@ -219,7 +208,7 @@ def run(args):
     lrn_crv_scores = my_learning_curve(
         X=xdata,
         Y=ydata,
-        lr_curve_ticks=lr_curve_ticks,
+        lrn_crv_ticks=lrn_crv_ticks,
         data_sizes_frac=None,
         mltype=mltype,
         model_name=model_name,
@@ -233,83 +222,42 @@ def run(args):
     lg.logger.info('Runtime: {:.1f} mins'.format( (time()-t0)/60) )
 
     # Dump results
-    lrn_crv_scores.to_csv( run_outdir/('lrn_crv_scores_' + train_sources_name + '.csv'), index=False) 
+    lrn_crv_scores.to_csv( run_outdir/('lrn_crv_scores_' + tr_sources_name + '.csv'), index=False) 
     lg.logger.info(f'\nlrn_crv_scores\n{lrn_crv_scores}')
-
-
-    # -----------------------------------------------
-    # Generate learning curve - my method
-    # (*) ...
-    # -----------------------------------------------
-    # from cvrun import my_cv_run
-    # df_tr = []
-    # df_vl = []
-    # data_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
-    # data_sizes = [int(n) for n in data.shape[0]*data_sizes_frac]
-    
-    # for d_size in data_sizes:
-    #     lg.logger.info(f'Data size: {d_size}')
-    #     data_sample = data.sample(n=d_size)
-
-    #     tr_cv_scores, vl_cv_scores = my_cv_run(
-    #         data=data_sample,
-    #         target_name=target_name,
-    #         fea_prfx_dict=fea_prfx_dict,
-    #         model=model.model, #mlmodel=mlmodel,
-    #         cv_method=cv_method, cv_folds=cv_folds,
-    #         logger=lg.logger, random_state=SEED, outdir=run_outdir)
-
-    #     # Add col that indicates d_size
-    #     tr_cv_scores.insert(loc=1, column='data_size', value=data_sample.shape[0])
-    #     vl_cv_scores.insert(loc=1, column='data_size', value=data_sample.shape[0])
-        
-    #     # Append results to master dfs
-    #     df_tr.append(tr_cv_scores)
-    #     df_vl.append(vl_cv_scores)
-
-    # # Concat the results for all the data_sizes
-    # df_tr = pd.concat(df_tr, axis=0)
-    # df_vl = pd.concat(df_vl, axis=0)
-
-    # lrn_curve.plt_learning_curve_multi_metric(df_tr=df_tr, df_vl=df_vl,
-    #                                           cv_folds=cv_folds, target_name=target_name,
-    #                                           outdir=run_outdir)
-
 
     # -------------------------------------------------
     # Generate learning curve - complete sklearn method
     # (*) Problem: can't generate multiple metrics.
     # -------------------------------------------------
-    # lg.logger.info("\nStart learning_curve (sklearn) ...")
+    """
+    # Define params
+    metric_name = 'neg_mean_absolute_error'
+    base = 10
+    train_sizes_frac = np.logspace(0.0, 1.0, lrn_crv_ticks, endpoint=True, base=base)/base
 
-    # # Define params
-    # metric_name = 'neg_mean_absolute_error'
-    # # train_sizes_frac = np.linspace(0.1, 1.0, lr_curve_ticks)
-    # base = 10
-    # train_sizes_frac = np.logspace(0.0, 1.0, lr_curve_ticks, endpoint=True, base=base)/base
+    # Run learning curve
+    t0 = time()
+    lrn_curve_scores = learning_curve(
+        estimator=model.model, X=xdata, y=ydata,
+        train_sizes=train_sizes_frac, cv=cv, groups=groups,
+        scoring=metric_name,
+        n_jobs=n_jobs, exploit_incremental_learning=False,
+        random_state=SEED, verbose=1, shuffle=False)
+    lg.logger.info('Runtime: {:.1f} mins'.format( (time()-t0)/60) )
 
-    # # Run learning curve
-    # t0 = time.time()
-    # lrn_curve_scores = learning_curve(
-    #     estimator=model.model, X=xdata, y=ydata,
-    #     train_sizes=train_sizes_frac, cv=cv, groups=groups,
-    #     scoring=metric_name,
-    #     n_jobs=n_jobs, exploit_incremental_learning=False,
-    #     random_state=SEED, verbose=1, shuffle=False)
-    # lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-
-    # # Dump results
-    # # lrn_curve_scores = utils.cv_scores_to_df(lrn_curve_scores, decimals=3, calc_stats=False) # this func won't work
-    # # lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores_auto.csv'), index=False)
+    # Dump results
+    # lrn_curve_scores = utils.cv_scores_to_df(lrn_curve_scores, decimals=3, calc_stats=False) # this func won't work
+    # lrn_curve_scores.to_csv(os.path.join(run_outdir, 'lrn_curve_scores_auto.csv'), index=False)
     
-    # # Plot learning curves
-    # lrn_curve.plt_learning_curve(rslt=lrn_curve_scores, metric_name=metric_name,
-    #     title='Learning curve (target: {}, data: {})'.format(target_name, train_sources_name),
-    #     path=os.path.join(run_outdir, 'auto_learning_curve_' + target_name + '_' + metric_name + '.png'))
+    # Plot learning curves
+    lrn_crv.plt_learning_curve(rslt=lrn_curve_scores, metric_name=metric_name,
+        title='Learning curve (target: {}, data: {})'.format(target_name, tr_sources_name),
+        path=os.path.join(run_outdir, 'auto_learning_curve_' + target_name + '_' + metric_name + '.png'))
+    """
 
     # Kill logger
     lg.kill_logger()
-    del data, xdata, ydata
+    del tr_data, xdata, ydata
     return lrn_crv_scores
    
 
@@ -330,7 +278,7 @@ if __name__ == '__main__':
     www.youtube.com/watch?v=sugvnHA7ElY
     """
     """
-    https://stackoverflow.com/questions/14500183/in-python-can-i-call-the-main-of-an-imported-module
+    stackoverflow.com/questions/14500183/in-python-can-i-call-the-main-of-an-imported-module
     How to run code with input args from another code?
     This will be used with multiple train and test sources.
     For example: in launch_model_transfer.py

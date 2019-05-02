@@ -1,5 +1,5 @@
 """
-This script contains various ML models.
+This script contains various ML models and some utility functions.
 """
 import warnings
 warnings.filterwarnings('ignore')
@@ -250,7 +250,7 @@ class KERAS_REGRESSOR(BaseMLModel):
     """ Neural network regressor. """
     model_name = 'nn_reg'
 
-    def __init__(self, input_dim, attn=False, dr_rate=0.2, optimizer=None,
+    def __init__(self, input_dim, attn=False, dr_rate=0.2, opt_name='sgd',
                  logger=None):
         # Load keras modules only if keras model is invoked
         # TODO: there should be a better way to make this code compatible on machine with and w/o GPU!
@@ -294,11 +294,13 @@ class KERAS_REGRESSOR(BaseMLModel):
         model = Model(inputs=inputs, outputs=outputs)
         model.summary()
         
-        if optimizer is None:
-            optimizer = SGD(lr=0.0001, momentum=0.9)
-            
+        if opt_name == 'sgd':
+            opt = SGD(lr=1e-4, momentum=0.9)
+        elif opt_name == 'adam':
+            opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+
         model.compile(loss='mean_squared_error',
-                      optimizer=optimizer,
+                      optimizer=opt,
                       metrics=['mae', r2_krs])
         self.model = model
 

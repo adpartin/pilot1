@@ -37,14 +37,12 @@ def cv_splitter(cv_method: str='simple', cv_folds: int=1, test_size: float=0.2,
                 cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=random_state)
             else:
                 cv = KFold(n_splits=cv_folds, shuffle=shuffle, random_state=random_state)
-            # groups = None
             
         elif cv_method == 'stratify':
             if cv_folds == 1:
                 cv = StratifiedShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=random_state)
             else:
                 cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
-            # groups = None
 
     # Regression
     elif mltype == 'reg':
@@ -54,15 +52,12 @@ def cv_splitter(cv_method: str='simple', cv_folds: int=1, test_size: float=0.2,
                 cv = GroupShuffleSplit(n_splits=cv_folds, random_state=random_state)
             else:
                 cv = GroupKFold(n_splits=cv_folds)
-            # groups = groups # data['CELL'].copy()
             
         elif cv_method == 'simple':
             if cv_folds == 1:
                 cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=random_state)
             else:
                 cv = KFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
-            # groups = None
-    
     return cv
 
 

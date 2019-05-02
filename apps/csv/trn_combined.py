@@ -49,7 +49,7 @@ file_path = Path(__file__).resolve().parent
 utils_path = file_path / '../../utils'
 sys.path.append(str(utils_path))
 import utils
-import utils_tidy
+from utils_tidy import load_tidy_combined, get_data_by_src, break_src_data 
 import argparser
 from classlogger import Logger
 import ml_models
@@ -66,24 +66,18 @@ CONFIGFILENAME = 'config_prms.txt'
 os.makedirs(OUTDIR, exist_ok=True)
 
 
-# Feature prefix (some already present in the tidy dataframe)
-fea_prfx_dict = {'rna': 'cell_rna.', 'cnv': 'cell_cnv.',
-                 'dsc': 'drug_dsc.', 'fng': 'drug_fng.',
-                 'clb': 'cell_lbl.', 'dlb': 'drug_lbl.'}
-
-
 def run(args):
     outdir = args['outdir']
     target_name = args['target_name']
     target_transform = args['target_transform']    
-    train_sources = args['train_sources']
-    test_sources = args['test_sources']
+    tr_sources = args['train_sources']
+    te_sources = args['test_sources']
     row_sample = args['row_sample']
     col_sample = args['col_sample']
     tissue_type = args['tissue_type']
-    cell_features = args['cell_features']
-    drug_features = args['drug_features']
-    other_features = args['other_features']
+    cell_fea = args['cell_features']
+    drug_fea = args['drug_features']
+    other_fea = args['other_features']
     model_name = args['model_name']
     cv_method = args['cv_method']
     cv_folds = args['cv_folds']
@@ -93,6 +87,7 @@ def run(args):
     epochs = args['epochs']
     batch_size = args['batch_size']
     dr_rate = args['dr_rate']
+    opt_name = args['opt']
     attn = args['attn']
 
     # Extract ml type ('reg' or 'cls')
@@ -100,10 +95,10 @@ def run(args):
     assert mltype in ['reg', 'cls'], "mltype should be either 'reg' or 'cls'."    
     
     # Feature list
-    feature_list = cell_features + drug_features + other_features
+    fea_list = cell_fea + drug_fea + other_fea
 
     # Define names
-    train_sources_name = '_'.join(train_sources)
+    tr_sources_name = '_'.join(tr_sources)
         
     # Define custom metric to calc auroc from regression
     # scikit-learn.org/stable/modules/model_evaluation.html#scoring
@@ -127,57 +122,50 @@ def run(args):
     # ========================================================================
     #       Logger
     # ========================================================================
-    run_outdir = utils.create_outdir(outdir=outdir, args=args)
+    run_outdir = utils.create_outdir(outdir, args=args)
     logfilename = run_outdir/'logfile.log'
-    lg = Logger(logfilename=logfilename)
+    lg = Logger(logfilename)
 
     lg.logger.info(f'File path: {file_path}')
     lg.logger.info(f'System CPUs: {psutil.cpu_count(logical=True)}')
     lg.logger.info(f'n_jobs: {n_jobs}')
 
     # Dump args to file
-    utils.dump_args(args, outdir=run_outdir)
+    utils.dump_args(args, run_outdir)
     
 
     # ========================================================================
-    #       Load data and pre-proc
+    #       Load data
     # ========================================================================
     datapath = DATADIR / DATAFILENAME
-    data, te_data = utils_tidy.load_data(datapath=datapath, fea_prfx_dict=fea_prfx_dict,
-                                         args=args, logger=lg.logger, random_state=SEED)
+
+    dataset = load_tidy_combined(
+            datapath, fea_list=fea_list, logger=lg.logger, random_state=SEED)
+
+    tr_data = get_data_by_src(
+            dataset, src_names=tr_sources, logger=lg.logger)
+    
+    xdata, ydata, meta, tr_scaler = break_src_data(
+            tr_data, target=args['target_name'],
+            scaler_method=args['scaler'], logger=lg.logger)
 
 
     # ========================================================================
-    #       Save plots
+    #       Plots
     # ========================================================================
     figpath = run_outdir/'figs'
     os.makedirs(figpath, exist_ok=True)
-    
-    utils.boxplot_rsp_per_drug(df=data, target_name=target_name,
+   
+    utils.boxplot_rsp_per_drug(tr_data, target_name=target_name,
         path=figpath / f'{target_name}_per_drug_boxplot.png')
 
-    utils.plot_hist(x=data[target_name], var_name=target_name,
+    utils.plot_hist(ydata, var_name=target_name,
         path=figpath / (target_name+'_hist.png') )
     
-    utils.plot_qq(x=data[target_name], var_name=target_name,
+    utils.plot_qq(ydata, var_name=target_name,
         path=figpath / (target_name+'_qqplot.png') )
     
-    utils.plot_hist_drugs(x=data['DRUG'], path=figpath / 'drugs_hist.png')
-
-
-    # ========================================================================
-    #       TODO: outlier removal (move this to data preparation step)
-    # ========================================================================
-    pass
-
-
-    # ========================================================================
-    #       Keep a subset of training features
-    # ========================================================================
-    data = utils_tidy.extract_subset_features(
-            data = data,
-            feature_list = feature_list,
-            fea_prfx_dict = fea_prfx_dict)
+    utils.plot_hist_drugs(tr_data['DRUG'], path=figpath/'drugs_hist.png')
 
 
     # ========================================================================
@@ -185,71 +173,56 @@ def run(args):
     # ========================================================================
     cv = cv_splitter(cv_method=cv_method, cv_folds=cv_folds, test_size=0.2,
                      mltype=mltype, shuffle=True, random_state=SEED)
-    groups = data['CELL'].copy()
-
-
-    # ========================================================================
-    #       ML Model
-    # ========================================================================
-    # # ML model params
-    # if model_name == 'lgb_reg':
-    #     init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-    #     fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
-    # elif model_name == 'nn_reg':
-    #     xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-    #     init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
-    #     fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
+    if cv_method=='simple':
+        groups = None
+    elif cv_method=='group':
+        groups = tr_data['CELL'].copy()
 
 
     # ========================================================================
     #       CV training
     # ========================================================================
     lg.logger.info('\n{}'.format('='*50))
-    lg.logger.info(f'CV training ... {train_sources}')
+    lg.logger.info(f'CV training ... {tr_sources}')
     lg.logger.info('='*50)
-
-    # Get data
-    xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-    ydata = utils_tidy.extract_target(data=data, target_name=target_name)
-    utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
 
     # ML model params
     if model_name == 'lgb_reg':
         init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
         fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
     elif model_name == 'nn_reg':
-        init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
+        init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'attn': attn, 'logger': lg.logger}
         fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
 
+    # -----------------
+    # sklearn CV method - (doesn't work with keras)
+    # ----------------- 
+    """
+    # Define ML model
+    model = ml_models.get_model(model_name=model_name, init_params=init_prms)  
 
-    # # -----------------
-    # # sklearn CV method - (doesn't work with keras)
-    # # ----------------- 
-    # # Define ML model
-    # model = ml_models.get_model(model_name=model_name, init_params=init_prms)  
+    # Run CV
+    t0 = time.time()
+    cv_scores = cross_validate(
+        estimator=model.model,
+        X=xdata, y=ydata,
+        scoring=metrics,
+        cv=cv, groups=groups,
+        n_jobs=n_jobs, fit_params=fit_prms)
+    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
 
-    # # Run CV
-    # t0 = time.time()
-    # cv_scores = cross_validate(
-    #     estimator=model.model,
-    #     X=xdata, y=ydata,
-    #     scoring=metrics,
-    #     cv=cv, groups=groups,
-    #     n_jobs=n_jobs, fit_params=fit_prms)
-    # lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-
-    # # Dump results
-    # cv_scores = utils.update_cross_validate_scores( cv_scores )
-    # cv_scores = cv_scores.reset_index(drop=True)
-    # cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='mean', value=cv_scores.iloc[:, -cv_folds:].values.mean(axis=1) )
-    # cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='std',  value=cv_scores.iloc[:, -cv_folds:].values.std(axis=1) )
-    # cv_scores = cv_scores.round(3)
-    # cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
-    # lg.logger.info(f'cv_scores\n{cv_scores}')
-
+    # Dump results
+    cv_scores = utils.update_cross_validate_scores( cv_scores )
+    cv_scores = cv_scores.reset_index(drop=True)
+    cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='mean', value=cv_scores.iloc[:, -cv_folds:].values.mean(axis=1) )
+    cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='std',  value=cv_scores.iloc[:, -cv_folds:].values.std(axis=1) )
+    cv_scores = cv_scores.round(3)
+    cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
+    lg.logger.info(f'cv_scores\n{cv_scores}')
+    """
 
     # ------------
-    # My CV method - (works with keras models)
+    # My CV method - (works with keras)
     # ------------
     t0 = time()
     cv_scores, best_model = my_cross_validate(
@@ -267,7 +240,7 @@ def run(args):
     
     # Dump results
     # cv_scores = cv_scores.round(3)
-    cv_scores.to_csv( run_outdir/('cv_scores_' + train_sources_name + '.csv'), index=False )
+    cv_scores.to_csv( run_outdir/('cv_scores_' + tr_sources_name + '.csv'), index=False )
     lg.logger.info(f'\ncv_scores\n{cv_scores}')
 
 
@@ -276,13 +249,13 @@ def run(args):
     # ========================================================================
     if retrain:
         lg.logger.info('\n{}'.format('='*50))
-        lg.logger.info(f'Train final model (use entire dataset) ... {train_sources}')
+        lg.logger.info(f'Train final model (use entire dataset) ... {tr_sources}')
         lg.logger.info('='*50)
 
         # Get the data
-        xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-        ydata = utils_tidy.extract_target(data=data, target_name=target_name)
-        utils_tidy.print_feature_shapes(df=xdata, logger=lg.logger)
+        xdata, ydata, _, _ = break_src_data(
+                tr_data, target=args['target_name'],
+                scaler_method=args['scaler'], logger=lg.logger)
 
         # Define sample weight
         # From lightgbm docs: n_samples / (n_classes * np.bincount(y))
@@ -293,9 +266,6 @@ def run(args):
 
         # ML model params
         if model_name == 'lgb_reg':
-            # init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-            # fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
-
             # Use early stopping
             init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'n_estimators': 2000, 'logger': lg.logger}
             X_train, X_test, y_train, y_test = train_test_split(xdata, ydata, test_size=0.1, random_state=SEED)
@@ -305,13 +275,12 @@ def run(args):
             
         elif model_name == 'nn_reg':
             val_split = 0.1
-            xdata, _ = utils_tidy.split_features_and_other_cols(data, fea_prfx_dict=fea_prfx_dict)
-            init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'attn': attn, 'logger': lg.logger}
+            init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'attn': attn, 'logger': lg.logger}
             fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': val_split}
             args['final_model_val_split'] = val_split
 
         # Define ML model
-        model_final = ml_models.get_model(model_name=model_name, init_params=init_prms)   
+        model_final = ml_models.get_model(model_name, init_params=init_prms)   
 
         # Train
         t0 = time()
@@ -333,36 +302,41 @@ def run(args):
         plot_model(model_final.model, to_file=figpath/'nn_model.png')
 
 
-
     # ========================================================================
     #       Infer
     # ========================================================================
     lg.logger.info('\n{}'.format('='*50))
-    lg.logger.info(f'Inference ... {test_sources}')
+    lg.logger.info(f'Inference ... {te_sources}')
     lg.logger.info('='*50)
-
+    
     csv = []  # cross-study-validation scores
-    for i, te_src in enumerate(test_sources):
+    for i, te_src in enumerate(te_sources):
         lg.logger.info(f'\nTest source {i+1}:  _____ {te_src} _____')
         t0 = time()
 
-        if train_sources == [te_src]:
+        if tr_sources == [te_src]:  # te_src in tr_sources: 
             lg.logger.info("That is the train set (take preds from cv run).")
             continue
-
-        te_src_data = te_data[te_data['SOURCE'].isin([te_src])].reset_index(drop=True)
+        
+        # Extract test data
+        te_src_data = get_data_by_src(
+            dataset, src_names=[te_src], logger=lg.logger)
+        
         if te_src_data.shape[0] == 0:
             continue  # continue if there are no data samples available for this source
+        
+        # Extract features and target
+        xte, yte, _, _ = break_src_data(
+            te_src_data, target=args['target_name'],
+            scaler_method=None, logger=lg.logger)
 
+        # Scale test data
+        colnames = xte.columns
+        xte = pd.DataFrame( tr_scaler.transform(xte), columns=colnames ).astype(np.float32)
+        
         # Plot dist of response
-        utils.plot_hist(x=te_src_data[target_name], var_name=target_name,
+        utils.plot_hist(yte, var_name=target_name,
                         path=figpath / (target_name + '_hist_' + te_src + '.png') )
-
-        # Prep test data for preds
-        te_src_data = utils_tidy.extract_subset_features(data=te_src_data, feature_list=feature_list, fea_prfx_dict=fea_prfx_dict)
-        xte, _ = utils_tidy.split_features_and_other_cols(te_src_data, fea_prfx_dict=fea_prfx_dict)
-        yte = utils_tidy.extract_target(data=te_src_data, target_name=target_name)
-        utils_tidy.print_feature_shapes(df=xte, logger=lg.logger)
 
         # Calc scores
         # scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
@@ -384,23 +358,23 @@ def run(args):
     # Adjust cv_scores in order to combine with test set preds
     # (take the mean cv score for val set)
     cv_scores = cv_scores[cv_scores['tr_set']==False].drop(columns='tr_set')
-    cv_scores[train_sources_name] = cv_scores.iloc[:, -cv_folds:].mean(axis=1)
-    cv_scores = cv_scores[['metric', train_sources_name]]
+    cv_scores[tr_sources_name] = cv_scores.iloc[:, -cv_folds:].mean(axis=1)
+    cv_scores = cv_scores[['metric', tr_sources_name]]
     cv_scores = cv_scores.set_index('metric')
     cv_scores.index.name = None
 
     # Combine scores from val set cross-validation and test set
     csv_all = pd.concat([cv_scores, csv], axis=1)
-    csv_all.insert(loc=0, column='train_src', value=train_sources_name)
+    csv_all.insert(loc=0, column='train_src', value=tr_sources_name)
     csv_all = csv_all.reset_index().rename(columns={'index': 'metric'})
     # csv_all = csv_all.round(decimals=3)
 
     lg.logger.info(f'\ncsv_scores\n{csv_all}')
-    csv_all.to_csv( run_outdir/('csv_scores_' + train_sources_name + '.csv'), index=False )
+    csv_all.to_csv( run_outdir/('csv_scores_' + tr_sources_name + '.csv'), index=False )
 
     # Kill logger
     lg.kill_logger()
-    del data, xdata, ydata, model_final
+    del tr_data, te_src_data, xdata, ydata, xte, yte, model_final
     return csv_all
 
 
@@ -421,12 +395,12 @@ if __name__ == '__main__':
     www.youtube.com/watch?v=sugvnHA7ElY
     """
     """
-    https://stackoverflow.com/questions/14500183/in-python-can-i-call-the-main-of-an-imported-module
+    stackoverflow.com/questions/14500183/in-python-can-i-call-the-main-of-an-imported-module
     How to run code with input args from another code?
     This will be used with multiple train and test sources.
-    For example: in launch_model_transfer.py
-        import train_from_combined.py
-        train_from_combined.main([tr_src, tst_src])
+    For example: in launch_csv.py
+        import train_combined.py
+        train_combined.main([tr_src, tst_src])
     """
     # python -m pdb apps/csv/trn_from_combined.py -te ccle gcsi -tr gcsi
     main(sys.argv[1:])

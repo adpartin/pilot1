@@ -114,7 +114,7 @@ def my_cross_validate(X, Y,
         # print('A few intersections : ', list(tr_grps_unq.intersection(vl_grps_unq))[:3])
 
         # Get the estimator
-        estimator = ml_models.get_model(model_name=model_name, init_params=init_params)
+        estimator = ml_models.get_model(model_name, init_params)
 
         if 'nn' in model_name:
             from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
@@ -124,18 +124,20 @@ def my_cross_validate(X, Y,
             os.makedirs(out_nn_model, exist_ok=False)
             
             # Callbacks (custom)
-            clr_triangular = CyclicLR(base_lr=0.0001, max_lr=0.001, mode='triangular')
+            clr = CyclicLR(base_lr=0.0001, max_lr=0.001, mode='triangular')
                 
             # Keras callbacks
-            checkpointer = ModelCheckpoint(str(out_nn_model / 'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
-            csv_logger = CSVLogger(out_nn_model / 'training.log')
+            checkpointer = ModelCheckpoint(str(out_nn_model/'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
+            csv_logger = CSVLogger(out_nn_model/'training.log')
             reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
                                           min_delta=0.0001, cooldown=3, min_lr=0.000000001)
             early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1, mode='auto')
                 
             # Callbacks list
-            callback_list = [checkpointer, csv_logger, early_stop, reduce_lr,  # keras callbacks
-                             clr_triangular]  # custom callbacks
+            if (args is not None) and (args['opt']=='clr'):
+                callback_list = [checkpointer, csv_logger, early_stop, reduce_lr, clr]
+            else:
+                callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
 
             # Fit params
             fit_params['validation_data'] = (xvl, yvl)
@@ -165,7 +167,7 @@ def my_cross_validate(X, Y,
         # Plot training curves
         if 'nn' in model_name:
             ml_models.plot_prfrm_metrics(history=history, title=f'cv fold: {fold_id+1}',
-                                         skp_ep=1, add_lr=True, outdir=out_nn_model)
+                                         skp_ep=7, add_lr=True, outdir=out_nn_model)
 
         # Add info
         tr_scores['tr_set'] = True

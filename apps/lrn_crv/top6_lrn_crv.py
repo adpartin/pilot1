@@ -55,7 +55,7 @@ t_start = time()
 
 # Utils
 import ml_models
-import lrn_curve
+import lrn_crv
 from classlogger import Logger
 import utils
 
@@ -101,7 +101,6 @@ psr.add_argument('--cv_folds', type=int, default=1) # (AP)
 psr.add_argument('--cv_method', type=str, default='simple') # (AP)
 psr.add_argument('--attn', type=int, default=0, choices=[0, 1]) # (AP)
 psr.add_argument('--n_jobs', type=int, default=4) # (AP)
-psr.add_argument('--mltype', type=str, default='reg', choices=['reg', 'cls']) # (AP)
 psr.add_argument('--ticks', type=int, default=5) # (AP)
 psr.add_argument('-ml', '--model_name', type=str, default='nn_reg') # (AP)
 psr.add_argument('-sc', '--scaler', type=str,  choices=['raw', 'stnd'], default='stnd') 
@@ -116,7 +115,6 @@ attn = bool(args['attn'])
 cv_folds = args['cv_folds']
 cv_method = args['cv_method']
 n_jobs = args['n_jobs']
-mltype = args['mltype']
 ticks = args['ticks']
 model_name = args['model_name']
 scaler = args['scaler']
@@ -128,6 +126,10 @@ EPOCH = args['ep']
 BATCH = args['batch']
 # LR = args['lr']
 nb_classes = 2
+
+# Extract ml type ('reg' or 'cls')
+mltype = args['model_name'].split('_')[-1]
+assert mltype in ['reg', 'cls'], "mltype should be either 'reg' or 'cls'."    
 
 
 # Set output dir
@@ -152,12 +154,6 @@ utils.dump_args(args, outdir=outdir)
 logfilename = outdir/'logfile.log'
 lg = Logger(logfilename=logfilename) 
     
-
-# Custom metrics
-def r2(y_true, y_pred):
-    SS_res =  K.sum(K.square(y_true - y_pred))
-    SS_tot = K.sum(K.square(y_true - K.mean(y_true)))
-    return (1 - SS_res/(SS_tot + K.epsilon()))
 
     
 # ---------
@@ -215,26 +211,9 @@ else:
 # ---------
 # CV scheme
 # ---------
-test_size = 0.2
-if mltype == 'cls':
-    # Classification
-    if cv_method == 'simple':
-        if cv_folds == 1:
-            cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
-        else:
-            cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-    elif cv_method == 'stratify':
-        if cv_folds == 1:
-            cv = StratifiedShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
-        else:
-            cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
-
-elif mltype == 'reg':
-    # Regression
-    if cv_folds == 1:
-        cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=SEED)
-    else:
-        cv = KFold(n_splits=cv_folds, shuffle=True, random_state=SEED)
+cv = cv_splitter(cv_method=cv_method, cv_folds=cv_folds, test_size=0.2,
+                 mltype=mltype, shuffle=True, random_state=SEED)
+# groups = data['CELL'].copy()
 
 
 # -------------------------
@@ -256,7 +235,8 @@ os.makedirs(outdir_, exist_ok=True)
 # Run learning curve
 t0 = time()
 lrn_curve_scores = lrn_curve.my_learning_curve(
-    X=df_x, Y=df_y,
+    X=df_x,
+    Y=df_y,
     mltype=mltype,
     model_name=model_name,
     fit_params=fit_prms,
@@ -268,10 +248,10 @@ lrn_curve_scores = lrn_curve.my_learning_curve(
     cv=cv,
     groups=None,
     n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=outdir_)
-print('Runtime: {:.3f} mins'.format( (time()-t0)/60 ))
+print('Runtime: {:.1f} mins'.format( (time()-t0)/60) )
 
 # Dump results
 lrn_curve_scores.to_csv(outdir / (model_name + '_lrn_crv_scores.csv'), index=False)
 
-lg.logger.info('\nProgram runtime: {:.2f} mins'.format( (time() - t_start)/60 ))
+lg.logger.info('\nProgram runtime: {:.1f} mins'.format( (time()-t_start)/60) )
 lg.logger.info('Done.')
