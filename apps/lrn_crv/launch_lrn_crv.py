@@ -45,7 +45,7 @@ OUTDIR = file_path / '../../out/' / PRJ_NAME
 
 
 def plot_agg_lrn_crv(df, outdir='.'):
-    """ Generates learning curve plots for each metric across all cell line source. """
+    """ Generates learning curve plots for each metric across all cell line sources. """
     # Get the number of cv_folds
     cvf = len([c for c in df.columns.tolist() if c[0]=='f'])
 
@@ -138,23 +138,6 @@ def main(args):
 
     df = pd.concat(dfs, axis=0, sort=False)
     df.to_csv(outdir/'lrn_crv_all.csv', index=False)
-
-    # # Create csv table for each available metric 
-    # df = pd.concat(dfs, axis=0, sort=False)
-    # for m in df['metric'].unique():
-    #     csv = df[df['metric']==m].reset_index(drop=True)
-    #     csv.drop(columns=['metric'], inplace=True)
-
-    #     # Sort rows and cols
-    #     tr_src = csv['train_src']
-    #     csv.drop(columns='train_src', inplace=True)
-    #     csv = csv[sorted(csv.columns)]
-    #     csv = pd.concat([tr_src, csv], axis=1, sort=False)
-    #     csv = csv.sort_values('train_src')
-
-    #     # save table
-    #     csv = csv.round(2)
-    #     csv.to_csv(os.path.join(csv_outdir, f'cross-study-val-{m}.csv'), index=False)
 
     plot_agg_lrn_crv(df, outdir)
 

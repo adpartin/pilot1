@@ -65,7 +65,7 @@ def save_krs_history(history, outdir='.'):
     fname = 'krs_history.csv'
     h = pd.DataFrame(history.history)
     h['epoch'] = np.asarray(history.epoch) + 1
-    h.to_csv(outdir/fname, index=False)
+    h.to_csv( Path(outdir)/fname, index=False )
     return h
 
 
@@ -143,7 +143,7 @@ def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
             plt.title(title)
         
         # fig.tight_layout()
-        figpath = outdir / (metric_name+'_curve.png')
+        figpath = Path(outdir) / (metric_name+'_curve.png')
         plt.savefig(figpath, bbox_inches='tight')
         plt.close()
         

@@ -24,6 +24,8 @@ dflt_args = {
     'n_jobs': 4,
     'outdir': None,
 
+    'dname': 'combined',
+
     # Learning curve
     'lc_ticks': 5,
 
@@ -159,6 +161,10 @@ def get_cli_args(args=None):
         # default=["lgb_reg"],
         type=str,
         help='Output dir.')    
+
+    parser.add_argument('--dname',
+        type=str,
+        help='Data name (combined (default) or top6).')
 
     # Select NN hyper_params
     parser.add_argument('-ep', '--epochs',

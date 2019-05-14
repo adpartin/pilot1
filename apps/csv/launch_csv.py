@@ -58,7 +58,7 @@ def create_csv(df, outdir='.'):
 
         # save table
         csv = csv.round(3)
-        csv.to_csv(outdir/f'csv_{m}.csv', index=False)
+        csv.to_csv(Path(outdir)/f'csv_{m}.csv', index=False)
 
 
 def main(args):

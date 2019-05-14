@@ -256,11 +256,11 @@ def my_learning_curve(X, Y,
                     callback_list = [checkpointer, csv_logger, early_stop, reduce_lr, clr]
                 else:
                     callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
+                    # TODO: which val set should be used??
+                    # fit_params['validation_data'] = (xvl, yvl)
+                    fit_params['validation_split'] = 0.2
 
                 # Fit params
-                # TODO: which val set should be used??
-                # fit_params['validation_data'] = (xvl, yvl)
-                # fit_params['validation_split'] = 0.1
                 fit_params['callbacks'] = callback_list
 
             # Train model

@@ -34,6 +34,8 @@ from sklearn.model_selection import ShuffleSplit, KFold
 from sklearn.model_selection import GroupShuffleSplit, GroupKFold
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+
 SEED = None
 t_start = time()
 
@@ -59,15 +61,22 @@ from lrn_crv import my_learning_curve
 
 # Path
 PRJ_NAME = file_path.name
-DATADIR = file_path / '../../data/processed/from_combined/tidy_drop_fibro'
 OUTDIR = file_path / '../../out/' / PRJ_NAME
-DATAFILENAME = 'tidy_data.parquet'
+# DATADIR = file_path / '../../data/processed/from_combined/tidy_drop_fibro'
+# DATAFILENAME = 'tidy_data.parquet'
 CONFIGFILENAME = 'config_prms.txt'
 COMET_PRJ_NAME = 'trn_lrn_curves'
 os.makedirs(OUTDIR, exist_ok=True)
 
 
 def run(args):
+    # Data name
+    dname = args['dname']
+    if dname == 'top6':
+        args['train_sources'] = ['top6']
+        args['test_sources'] = ['top6']
+        args['target_name'] = 'AUC1'
+
     outdir = args['outdir']
     target_name = args['target_name']
     target_transform = args['target_transform']    
@@ -100,6 +109,9 @@ def run(args):
 
     # Define names
     tr_sources_name = '_'.join(tr_sources)
+   
+    # Print args
+    pprint(args)
     
     # Define custom metric to calc auroc from regression
     # scikit-learn.org/stable/modules/model_evaluation.html#scoring
@@ -158,17 +170,42 @@ def run(args):
     # ========================================================================
     #       Load data and pre-proc
     # ========================================================================
-    datapath = DATADIR / DATAFILENAME
-
-    dataset = load_tidy_combined(
-            datapath, fea_list=fea_list, logger=lg.logger, random_state=SEED)
-
-    tr_data = get_data_by_src(
-            dataset, src_names=tr_sources, logger=lg.logger)
+    if dname == 'combined':
+        DATADIR = file_path / '../../data/processed/from_combined/tidy_drop_fibro'
+        DATAFILENAME = 'tidy_data.parquet'
+        datapath = DATADIR / DATAFILENAME
     
-    xdata, ydata, _, _ = break_src_data(
-            tr_data, target=args['target_name'],
-            scaler_method=args['scaler'], logger=lg.logger)
+        dataset = load_tidy_combined(
+                datapath, fea_list=fea_list, logger=lg.logger, random_state=SEED)
+
+        tr_data = get_data_by_src(
+                dataset, src_names=tr_sources, logger=lg.logger)
+    
+        xdata, ydata, _, _ = break_src_data(
+                tr_data, target=args['target_name'],
+                scaler_method=args['scaler'], logger=lg.logger)
+        del tr_data
+
+    elif dname == 'top6':
+        DATADIR = file_path / '../../data/raw/'
+        DATAFILENAME = 'uniq.top6.reg.parquet'
+        datapath = DATADIR / DATAFILENAME
+        
+        df = pd.read_parquet(datapath, engine='auto', columns=None)
+        df = df.sample(frac=1.0, axis=0, random_state=SEED).reset_index(drop=True)
+
+        scaler_method = args['scaler']
+        if  scaler_method is not None:
+            if scaler_method == 'stnd':
+                scaler = StandardScaler()
+            elif scaler_method == 'minmax':
+                scaler = MinMaxScaler()
+            elif scaler_method == 'rbst':
+                scaler = RobustScaler()
+
+        xdata = df.iloc[:, 1:]
+        ydata = df.iloc[:, 0]
+        xdata = scaler.fit_transform(xdata).astype(np.float32)
 
 
     # ========================================================================
@@ -186,7 +223,10 @@ def run(args):
     #       Learning curves
     # ========================================================================
     lg.logger.info('\n\n{}'.format('='*50))
-    lg.logger.info(f'Learning curves ... {tr_sources}')
+    if dname == 'combined':
+        lg.logger.info(f'Learning curves ... {tr_sources}')
+    elif dname == 'top6':
+        lg.logger.info('Learning curves ... (Top6)')
     lg.logger.info('='*50)
 
     # ML model params
@@ -257,14 +297,14 @@ def run(args):
 
     # Kill logger
     lg.kill_logger()
-    del tr_data, xdata, ydata
+    del xdata, ydata
     return lrn_crv_scores
    
 
 def main(args):
     config_fname = file_path / CONFIGFILENAME
     args = argparser.get_args(args=args, config_fname=config_fname)
-    pprint(vars(args))
+    # pprint(vars(args))
     args = vars(args)
     if args['outdir'] is None:
         args['outdir'] = OUTDIR

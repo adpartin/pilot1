@@ -235,8 +235,8 @@ def my_learning_curve(X, Y,
                 early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1, mode='auto')
                 
                 # Callbacks list
-                callback_list = [checkpointer, csv_logger, early_stop, reduce_lr,  # keras callbacks
-                                 clr_triangular]  # custom callbacks
+                #callback_list = [checkpointer, csv_logger, early_stop, reduce_lr, clr_triangular]
+                callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
 
                 # Fit params
                 # fit_params['validation_data'] = (xvl, yvl)
@@ -256,7 +256,7 @@ def my_learning_curve(X, Y,
 
             if 'nn' in model_name:
                 ml_models.plot_prfrm_metrics(history=history, title=f'Train size: {tr_sz}',
-                                             skip_epochs=3, add_lr=True, outdir=out_nn_model)
+                                             skp_ep=3, add_lr=True, outdir=out_nn_model)
 
             # Add info
             tr_scores['tr_set'] = True
