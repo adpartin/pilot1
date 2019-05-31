@@ -298,6 +298,8 @@ class KERAS_REGRESSOR(BaseMLModel):
             opt = SGD(lr=1e-4, momentum=0.9)
         elif opt_name == 'adam':
             opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+        else:
+            opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
         model.compile(loss='mean_squared_error',
                       optimizer=opt,

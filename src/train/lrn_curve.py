@@ -150,6 +150,7 @@ def my_learning_curve(X, Y,
     if logger is not None:
         logger.info('Train sizes: {}'.format(train_sizes))
 
+        
     # ---------------------------------------------------------------
     # Method 1
     # ---------------------------------------------------------------
@@ -169,6 +170,7 @@ def my_learning_curve(X, Y,
     elif mltype == 'reg':
         splitter = cv.split(X, Y, groups=groups)
 
+    # CV loop
     for fold_id, (tr_idx, vl_idx) in enumerate(splitter):
         if logger is not None:
             logger.info(f'Fold {fold_id+1}/{cv_folds}')
@@ -225,7 +227,7 @@ def my_learning_curve(X, Y,
                 os.makedirs(out_nn_model, exist_ok=False)
                 
                 # Callbacks (custom)
-                clr_triangular = CyclicLR(base_lr=0.0001, max_lr=0.001, mode='triangular')
+                clr = CyclicLR(base_lr=0.0001, max_lr=0.001, mode='triangular')
                 
                 # Keras callbacks
                 checkpointer = ModelCheckpoint(str(out_nn_model/'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
@@ -235,8 +237,8 @@ def my_learning_curve(X, Y,
                 early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1, mode='auto')
                 
                 # Callbacks list
-                #callback_list = [checkpointer, csv_logger, early_stop, reduce_lr, clr_triangular]
-                callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
+                callback_list = [checkpointer, csv_logger, early_stop, reduce_lr, clr]
+                #callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
 
                 # Fit params
                 # fit_params['validation_data'] = (xvl, yvl)
@@ -256,7 +258,7 @@ def my_learning_curve(X, Y,
 
             if 'nn' in model_name:
                 ml_models.plot_prfrm_metrics(history=history, title=f'Train size: {tr_sz}',
-                                             skp_ep=3, add_lr=True, outdir=out_nn_model)
+                                             skp_ep=5, add_lr=True, outdir=out_nn_model)
 
             # Add info
             tr_scores['tr_set'] = True
@@ -284,6 +286,7 @@ def my_learning_curve(X, Y,
     scores_all_df = pd.concat([tr_df, vl_df], axis=0)
     # ---------------------------------------------------------------
 
+    
     # ---------------------------------------------------------------
     # Method 2
     # ---------------------------------------------------------------

@@ -1,6 +1,8 @@
 """ 
 This script generates multiple learning curves for different training sets.
-It launches a script (e.g. trn_lrn_curves.py) that train ML model(s) on various training set sizes.
+It launches a script (e.g. trn_lrn_crv.py) that train ML model(s) on various training set sizes.
+
+TODO: update the function trn_lrn_crv.py so that it will accept a df instead of the source names!
 """
 # python -m pdb apps/lrn_crv/launch_lrn_crv.py
 from __future__ import print_function, division
@@ -36,6 +38,7 @@ file_path = Path(__file__).resolve().parent
 utils_path = file_path / '../../utils'
 sys.path.append(str(utils_path))
 import trn_lrn_crv
+import argparser
 
 
 # Path
@@ -103,11 +106,36 @@ def main(args):
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
     dirname = 'lrn_crv_' + t
-    outdir = OUTDIR/dirname
-    os.makedirs(outdir, exist_ok=True)
-
+    #outdir = OUTDIR/dirname
+    #os.makedirs(outdir, exist_ok=True)
+    
+    # new
+    CONFIGFILENAME = 'config_prms.txt'
+    config_fname = file_path / CONFIGFILENAME
+    tmp_args = argparser.get_args(args=args, config_fname=config_fname)    
+    tmp_args = vars(tmp_args)
+    
+    if ('nn' in tmp_args['model_name']) and (tmp_args['attn'] is True): 
+        name_sffx = '.'.join( [tmp_args['model_name']] + ['attn'] + \
+                             [tmp_args['cv_method']] + [('cvf'+str(tmp_args['cv_folds']))] + tmp_args['cell_features'] + \
+                             tmp_args['drug_features'] + [tmp_args['target_name']] )
+            
+    elif ('nn' in tmp_args['model_name']) and (tmp_args['attn'] is False): 
+        name_sffx = '.'.join( [tmp_args['model_name']] + ['fc'] + \
+                             [tmp_args['cv_method']] + [('cvf'+str(tmp_args['cv_folds']))] + tmp_args['cell_features'] + \
+                             tmp_args['drug_features'] + [tmp_args['target_name']] )
+        
+    else:
+        name_sffx = '.'.join( [tmp_args['model_name']] + \
+                             [tmp_args['cv_method']] + [('cvf'+str(tmp_args['cv_folds']))] + tmp_args['cell_features'] + \
+                             tmp_args['drug_features'] + [tmp_args['target_name']] )
+        
+    run_outdir = Path(outdir) / (name_sffx + '_' + t)
+    os.makedirs(run_outdir)
+    
+    
     # Full set
-    cross_study_sets = [
+    csv_sets = [
         {'tr_src': ['gcsi']},
         {'tr_src': ['ccle']},
         {'tr_src': ['gdsc']},
@@ -119,20 +147,20 @@ def main(args):
     # Single run
     # idx = 2
     # df_csv_scores, prms = trn_from_combined.main(
-    #     ['-tr', *cross_study_sets[idx]['tr_src'],
-    #     '-te', *cross_study_sets[idx]['te_src'],
+    #     ['-tr', *csv_sets[idx]['tr_src'],
+    #     '-te', *csv_sets[idx]['te_src'],
     #     *args])
 
 
     # Multiple runs
     dfs = []
-    for run_id in range(len(cross_study_sets)):
+    for run_id in range(len(csv_sets)):
         print('{} Run {} {}'.format('-'*40, run_id+1, '-'*40))
         lrn_crv_scores, prms = trn_lrn_crv.main(
-            ['-tr', *cross_study_sets[run_id]['tr_src'],
+            ['-tr', *csv_sets[run_id]['tr_src'],
              '--outdir', str(outdir),
              *args])
-        src_name = '_'.join( cross_study_sets[run_id]['tr_src'] )
+        src_name = '_'.join( csv_sets[run_id]['tr_src'] )
         lrn_crv_scores.insert(loc=0, column='src', value=src_name)
         dfs.append(lrn_crv_scores)
 

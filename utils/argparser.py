@@ -30,7 +30,7 @@ dflt_args = {
     'lc_ticks': 5,
 
     # Neural network
-    'epochs': 300,
+    'epochs': 500,
     'batch_size': 32,
     'dr_rate': 0.2,
     'attn': False,

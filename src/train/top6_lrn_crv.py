@@ -43,9 +43,9 @@ from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error, r
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, MaxAbsScaler
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 
-from sklearn.model_selection import ShuffleSplit, KFold # (AP)
-from sklearn.model_selection import GroupShuffleSplit, GroupKFold # (AP)
-from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold # (AP)
+from sklearn.model_selection import ShuffleSplit, KFold
+from sklearn.model_selection import GroupShuffleSplit, GroupKFold
+from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 
 import lightgbm as lgb
 
@@ -74,6 +74,7 @@ file_path = pathlib.Path(__file__).resolve().parent
 
 
 # Create dir to dump results (AP)
+# PRJ_NAME = 'top6_lrn_crv'
 PRJ_NAME = 'top6_lrn_crv_cyclr'
 OUTDIR = file_path / '../../models' / PRJ_NAME
 os.makedirs(OUTDIR, exist_ok=True)

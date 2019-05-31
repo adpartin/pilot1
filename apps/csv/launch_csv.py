@@ -1,9 +1,9 @@
 """ 
 This script generates the cross-study validation (csv) table.
-It launches a script (e.g. trn_from_combined.py) that train ML model(s) using a single source
+It launches a script (e.g. trn_combined.py) that train ML model(s) using a single source
 and makes predictions (inference) on a specified set of other sources.
 """
-# python -m pdb src/models/launch_cross_study_val.py
+# python -m pdb apps/csv/launch_csv.py
 from __future__ import print_function, division
 
 import warnings
@@ -77,7 +77,7 @@ def main(args):
     # lg = Logger(logfilename=logfilename)
 
     # Full set
-    cross_study_sets = [
+    csv_sets = [
         {'tr_src': ['gcsi'],
          'te_src': ['ctrp', 'gdsc', 'ccle', 'gcsi', 'nci60']},
 
@@ -95,7 +95,7 @@ def main(args):
     ]
 
     # Smaller set
-    # cross_study_sets = [
+    # csv_sets = [
     #     {'tr_src': ['gcsi'],
     #      'te_src': ['ccle', 'gcsi', 'gdsc']},
 
@@ -107,19 +107,19 @@ def main(args):
     # Single run
     # idx = 2
     # df_csv_scores, prms = trn_combined.main(
-    #     ['-tr', *cross_study_sets[idx]['tr_src'],
-    #     '-te', *cross_study_sets[idx]['te_src'],
+    #     ['-tr', *csv_sets[idx]['tr_src'],
+    #     '-te', *csv_sets[idx]['te_src'],
     #     *args])
 
 
     # Train using specific data source and predict on others
     # lg.logger.info('Start interrate over training sources ...')
     dfs = []
-    for run_id in range(len(cross_study_sets)):
+    for run_id in range(len(csv_sets)):
         print('{} Run {} {}'.format('-'*40, run_id+1, '-'*40))
         csv_scores, prms = trn_combined.main(
-            ['-tr', *cross_study_sets[run_id]['tr_src'],
-             '-te', *cross_study_sets[run_id]['te_src'],
+            ['-tr', *csv_sets[run_id]['tr_src'],
+             '-te', *csv_sets[run_id]['te_src'],
              '--outdir', str(outdir),
              *args])
         dfs.append(csv_scores)

@@ -12,7 +12,7 @@ import os
 import sys
 from pathlib import Path 
 import psutil
-import datetime
+from datetime import datetime
 from time import time
 from pprint import pprint
 
@@ -72,7 +72,8 @@ COMET_PRJ_NAME = 'trn_lrn_curves'
 os.makedirs(OUTDIR, exist_ok=True)
 
 
-def run(args):
+#def run(args):
+def trn_lrn_crv_new(xdata, ydata, args):
     # Data name
     dname = args['dname']
     if dname == 'top6':
@@ -173,42 +174,42 @@ def run(args):
     # ========================================================================
     #       Load data and pre-proc
     # ========================================================================
-    if dname == 'combined':
-        DATADIR = file_path / '../../data/processed/from_combined/tidy_drop_fibro'
-        DATAFILENAME = 'tidy_data.parquet'
-        datapath = DATADIR / DATAFILENAME
+#     if dname == 'combined':
+#         DATADIR = file_path / '../../data/processed/from_combined/tidy_drop_fibro'
+#         DATAFILENAME = 'tidy_data.parquet'
+#         datapath = DATADIR / DATAFILENAME
     
-        dataset = load_tidy_combined(
-                datapath, fea_list=fea_list, logger=lg.logger, random_state=SEED)
+#         dataset = load_tidy_combined(
+#                 datapath, fea_list=fea_list, logger=lg.logger, random_state=SEED)
 
-        tr_data = get_data_by_src(
-                dataset, src_names=tr_sources, logger=lg.logger)
+#         tr_data = get_data_by_src(
+#                 dataset, src_names=tr_sources, logger=lg.logger)
     
-        xdata, ydata, _, _ = break_src_data(
-                tr_data, target=args['target_name'],
-                scaler_method=args['scaler'], logger=lg.logger)
-        del tr_data
+#         xdata, ydata, _, _ = break_src_data(
+#                 tr_data, target=args['target_name'],
+#                 scaler_method=args['scaler'], logger=lg.logger)
+#         del tr_data
 
-    elif dname == 'top6':
-        DATADIR = file_path / '../../data/raw/'
-        DATAFILENAME = 'uniq.top6.reg.parquet'
-        datapath = DATADIR / DATAFILENAME
+#     elif dname == 'top6':
+#         DATADIR = file_path / '../../data/raw/'
+#         DATAFILENAME = 'uniq.top6.reg.parquet'
+#         datapath = DATADIR / DATAFILENAME
         
-        df = pd.read_parquet(datapath, engine='auto', columns=None)
-        df = df.sample(frac=1.0, axis=0, random_state=SEED).reset_index(drop=True)
+#         df = pd.read_parquet(datapath, engine='auto', columns=None)
+#         df = df.sample(frac=1.0, axis=0, random_state=SEED).reset_index(drop=True)
 
-        scaler_method = args['scaler']
-        if  scaler_method is not None:
-            if scaler_method == 'stnd':
-                scaler = StandardScaler()
-            elif scaler_method == 'minmax':
-                scaler = MinMaxScaler()
-            elif scaler_method == 'rbst':
-                scaler = RobustScaler()
+#         scaler_method = args['scaler']
+#         if  scaler_method is not None:
+#             if scaler_method == 'stnd':
+#                 scaler = StandardScaler()
+#             elif scaler_method == 'minmax':
+#                 scaler = MinMaxScaler()
+#             elif scaler_method == 'rbst':
+#                 scaler = RobustScaler()
 
-        xdata = df.iloc[:, 1:]
-        ydata = df.iloc[:, 0]
-        xdata = scaler.fit_transform(xdata).astype(np.float32)
+#         xdata = df.iloc[:, 1:]
+#         ydata = df.iloc[:, 0]
+#         xdata = scaler.fit_transform(xdata).astype(np.float32)
 
 
     # ========================================================================
@@ -304,29 +305,29 @@ def run(args):
     return lrn_crv_scores
    
 
-def main(args):
-    config_fname = file_path / CONFIGFILENAME
-    args = argparser.get_args(args=args, config_fname=config_fname)
-    # pprint(vars(args))
-    args = vars(args)
-    if args['outdir'] is None:
-        args['outdir'] = OUTDIR
-    lrn_crv_scores = run(args)
-    return lrn_crv_scores, args
+# def main(args):
+#     config_fname = file_path / CONFIGFILENAME
+#     args = argparser.get_args(args=args, config_fname=config_fname)
+#     # pprint(vars(args))
+#     args = vars(args)
+#     if args['outdir'] is None:
+#         args['outdir'] = OUTDIR
+#     lrn_crv_scores = run(args)
+#     return lrn_crv_scores, args
     
 
-if __name__ == '__main__':
-    # python -m pdb apps/lrn_crv/trn_lrn_crv.py -tr gcsi
-    """ __name__ == '__main__' explained:
-    www.youtube.com/watch?v=sugvnHA7ElY
-    """
-    """
-    stackoverflow.com/questions/14500183/in-python-can-i-call-the-main-of-an-imported-module
-    How to run code with input args from another code?
-    This will be used with multiple train and test sources.
-    For example: in launch_model_transfer.py
-        import trn_from_combined.py
-        train_from_combined.main([tr_src, tst_src])
-    """
-    # python -m pdb apps/lrn_crv/trn_lrn_crv.py -te ccle gcsi -tr gcsi
-    main(sys.argv[1:])
+# if __name__ == '__main__':
+#     # python -m pdb apps/lrn_crv/trn_lrn_crv.py -tr gcsi
+#     """ __name__ == '__main__' explained:
+#     www.youtube.com/watch?v=sugvnHA7ElY
+#     """
+#     """
+#     stackoverflow.com/questions/14500183/in-python-can-i-call-the-main-of-an-imported-module
+#     How to run code with input args from another code?
+#     This will be used with multiple train and test sources.
+#     For example: in launch_model_transfer.py
+#         import trn_from_combined.py
+#         train_from_combined.main([tr_src, tst_src])
+#     """
+#     # python -m pdb apps/lrn_crv/trn_lrn_crv.py -te ccle gcsi -tr gcsi
+#     main(sys.argv[1:])

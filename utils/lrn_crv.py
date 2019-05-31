@@ -258,9 +258,10 @@ def my_learning_curve(X, Y,
                     callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
                     # TODO: which val set should be used??
                     # fit_params['validation_data'] = (xvl, yvl)
-                    fit_params['validation_split'] = 0.2
+                    # fit_params['validation_split'] = 0.2
 
                 # Fit params
+                fit_params['validation_split'] = 0.2
                 fit_params['callbacks'] = callback_list
 
             # Train model
@@ -276,7 +277,7 @@ def my_learning_curve(X, Y,
 
             if 'nn' in model_name:
                 ml_models.plot_prfrm_metrics(history=history, title=f'Train size: {tr_sz}',
-                                             skp_ep=7, add_lr=True, outdir=out_nn_model)
+                                             skp_ep=5, add_lr=True, outdir=out_nn_model)
 
             # Add info
             tr_scores['tr_set'] = True
