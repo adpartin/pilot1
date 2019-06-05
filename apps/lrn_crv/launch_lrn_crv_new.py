@@ -30,6 +30,8 @@ import sklearn
 import numpy as np
 import pandas as pd
 
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+
 SEED = None
 
 
@@ -117,17 +119,17 @@ def create_outdir(outdir, args, src):
     
     if ('nn' in args['model_name']) and (args['attn'] is True): 
         name_sffx = '.'.join( [src] + [args['model_name']] + ['attn'] + \
-                             args['opt'] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + \
+                             [args['opt']] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + \
                              args['drug_features'] + [args['target_name']] )
             
     elif ('nn' in args['model_name']) and (args['attn'] is False): 
         name_sffx = '.'.join( [src] + [args['model_name']] + ['fc'] + \
-                             args['opt'] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + \
+                             [args['opt']] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + \
                              args['drug_features'] + [args['target_name']] )
         
     else:
         name_sffx = '.'.join( [src] + [args['model_name']] + \
-                             args['opt'] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + \
+                             [args['opt']] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + \
                              args['drug_features'] + [args['target_name']] )
 
     outdir = Path(outdir) / (name_sffx + '_' + t)
@@ -139,25 +141,7 @@ def create_outdir(outdir, args, src):
 def run(args):
     t0 = time()
 
-    # Create folder to store results
-    #t = datetime.now()
-    #t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
-    #t = ''.join([str(i) for i in t])
-    #dirname = 'lrn_crv_' + t
-    #outdir = OUTDIR/dirname
-    #os.makedirs(outdir, exist_ok=True)
-    
-    
-    # Full set
-#     csv_sets = [
-#         {'tr_src': ['gcsi']},
-#         {'tr_src': ['ccle']},
-#         {'tr_src': ['gdsc']},
-#         {'tr_src': ['ctrp']},
-#         {'tr_src': ['nci60']}
-#     ]
     dname = args['dname']
-
     cell_fea = args['cell_features']
     drug_fea = args['drug_features']
     other_fea = args['other_features']
@@ -252,7 +236,11 @@ def run(args):
         ydata = df.iloc[:, 0]
         xdata = scaler.fit_transform(xdata).astype(np.float32)
         
-    
+        src = 'top6'
+        dfs = {src: (ydata, xdata)}
+
+        del df, xdata, ydata
+        
     
     for src, data in dfs.items():
         #ourdir = create_outdir(OUTDIR, args, src)
