@@ -27,6 +27,15 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from sklearn.model_selection import train_test_split
 
+from pandas.api.types import is_string_dtype
+from sklearn.preprocessing import LabelEncoder
+
+# Import custom callbacks
+keras_contrib = '/vol/ml/apartin/projects/keras-contrib/keras_contrib/callbacks'
+sys.path.append(keras_contrib)
+#from callbacks import *
+from cyclical_learning_rate import CyclicLR
+
 SEED = None
 
 
@@ -60,15 +69,7 @@ def create_outdir(outdir, args, src):
     t = ''.join([str(i) for i in t])
     
     l = [args['opt']] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']]
-
-    if ('nn' in args['model_name']) and (args['attn'] is True): 
-        name_sffx = '.'.join( [src] + [args['model_name']] + ['attn'] + l )
-                             
-    elif ('nn' in args['model_name']) and (args['attn'] is False): 
-        name_sffx = '.'.join( [src] + [args['model_name']] + ['fc'] + l )
-        
-    else:
-        name_sffx = '.'.join( [src] + [args['model_name']] + l )
+    name_sffx = '.'.join( src + [args['model_name']] + l )
 
     outdir = Path(outdir) / (name_sffx + '_' + t)
     os.makedirs(outdir)
@@ -147,6 +148,8 @@ def run(args):
     # ========================================================================
     #       Load data
     # ========================================================================
+    DATADIR = file_path / '../../data/processed/from_combined/tidy_drop_fibro'
+    DATAFILENAME = 'tidy_data.parquet'
     datapath = DATADIR / DATAFILENAME
 
     dataset = load_tidy_combined(
@@ -187,14 +190,6 @@ def run(args):
         init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'attn': attn, 'logger': lg.logger}
         fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
     """
-    if model_name == 'model1':
-        init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'attn': attn, 'logger': lg.logger}
-    elif model_name == 'model2':
-        pass
-    elif model_name == 'model3':
-        pass
-
-
     X = pd.DataFrame(xdata).values
     Y = pd.DataFrame(ydata).values
 
@@ -230,8 +225,8 @@ def run(args):
 
     # Start CV iters
     for fold_id, (tr_idx, vl_idx) in enumerate(splitter):
-        if logger is not None:
-            logger.info(f'Fold {fold_id+1}/{cv_folds}')
+        if lg.logger is not None:
+            lg.logger.info(f'Fold {fold_id+1}/{cv_folds}')
 
         # Samples from this dataset are sampled for training
         xtr = X[tr_idx, :]
@@ -243,13 +238,23 @@ def run(args):
 
         # Get the estimator
         #estimator = ml_models.get_model(model_name, init_params)
-        estimator = 
+        if model_name == 'nn_model1':
+            init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
+            model = nn_model1(**init_prms)
+        elif model_name == 'nn_model2':
+            init_prms = {}
+            model = nn_model2(**init_prms)
+        elif model_name == 'nn_model3':
+            init_prms = {}
+            model = nn_model3(**init_prms)
+        fit_params = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
 
         if 'nn' in model_name:
             from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
 
             # Create output dir
-            out_nn_model = outdir / ('cv'+str(fold_id+1))
+            #out_nn_model = outdir / ('cv'+str(fold_id+1))
+            out_nn_model = run_outdir / ('cv'+str(fold_id+1))
             os.makedirs(out_nn_model, exist_ok=False)
             
             # Callbacks (custom)
@@ -273,14 +278,14 @@ def run(args):
             fit_params['callbacks'] = callback_list
 
         # Train model
-        history = estimator.model.fit(xtr, ytr, **fit_params)
+        history = model.fit(xtr, ytr, **fit_params)
 
         # Calc preds and scores TODO: dump preds
         # ... training set
-        y_preds, y_true = utils.calc_preds(estimator=estimator.model, x=xtr, y=ytr, mltype=mltype)
+        y_preds, y_true = utils.calc_preds(estimator=model, x=xtr, y=ytr, mltype=mltype)
         tr_scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype)
         # ... val set
-        y_preds, y_true = utils.calc_preds(estimator=estimator.model, x=xvl, y=yvl, mltype=mltype)
+        y_preds, y_true = utils.calc_preds(estimator=model, x=xvl, y=yvl, mltype=mltype)
         vl_scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype)
 
         # Save the best model

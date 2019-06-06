@@ -37,15 +37,19 @@ from keras.utils import np_utils, multi_gpu_model
 from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
 
 
+def r2_krs(y_true, y_pred):
+    from keras import backend as K
+    SS_res =  K.sum(K.square(y_true - y_pred))
+    SS_tot = K.sum(K.square(y_true - K.mean(y_true)))
+    return (1 - SS_res/(SS_tot + K.epsilon()))
+
+
 def nn_model1(input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
     """ ... """
     inputs = Input(shape=(input_dim,))
-    if attn:
-        a = Dense(1000, activation='relu')(inputs)
-        b = Dense(1000, activation='softmax')(inputs)
-        x = keras.layers.multiply( [a, b] )
-    else:
-        x = Dense(1000, activation='relu')(inputs)
+    a = Dense(1000, activation='relu')(inputs)
+    b = Dense(1000, activation='softmax')(inputs)
+    x = keras.layers.multiply( [a, b] )
             
     x = Dense(1000, activation='relu')(x)
     x = Dropout(dr_rate)(x)
@@ -56,13 +60,7 @@ def nn_model1(input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
     x = Dense(250, activation='relu')(x)
     x = Dropout(dr_rate)(x)
         
-    x = Dense(125, activation='relu')(x)
-    x = Dropout(dr_rate)(x)
-        
     x = Dense(60, activation='relu')(x)
-    x = Dropout(dr_rate)(x)
-        
-    x = Dense(30, activation='relu')(x)
     x = Dropout(dr_rate)(x)
         
     outputs = Dense(1, activation='relu')(x)
@@ -79,7 +77,7 @@ def nn_model1(input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
     model.compile(loss='mean_squared_error',
                   optimizer=opt,
                   metrics=['mae', r2_krs])
-    self.model = model
+    return model
 
 
 def dump_model(self, outdir='.'):

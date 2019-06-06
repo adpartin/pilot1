@@ -32,9 +32,10 @@ import utils
 import ml_models
 
 # Import custom callbacks
-keras_contrib = '/vol/ml/apartin/projects/keras-contrib/keras_contrib'
+keras_contrib = '/vol/ml/apartin/projects/keras-contrib/keras_contrib/callbacks'
 sys.path.append(keras_contrib)
-from callbacks import *
+#from callbacks import *
+from cyclical_learning_rate import CyclicLR
 
 
 # def reg_auroc(y_true, y_pred):

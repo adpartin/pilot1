@@ -21,6 +21,16 @@ import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.externals import joblib
 
+import tensorflow as tf
+import keras
+from keras import backend as K
+from keras.layers import Input, Dense, Dropout, Activation, BatchNormalization
+from keras import optimizers
+from keras.optimizers import SGD, Adam, RMSprop, Adadelta
+from keras.models import Sequential, Model, model_from_json, model_from_yaml
+from keras.utils import np_utils, multi_gpu_model
+from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
+
 try:
     import lightgbm as lgb
 except ImportError:
@@ -49,16 +59,21 @@ def get_model(model_name, init_params=None):
     """
     if model_name == 'lgb_reg':
         model = LGBM_REGRESSOR(**init_params)
-        estimator = model
     elif model_name == 'rf_reg':
         model = RF_REGRESSOR(**init_params)
-        estimator = model
     elif model_name == 'nn_reg':
         model = KERAS_REGRESSOR(**init_params)
-        estimator = model
+    elif model_name == 'nn_model1':
+        model = NN_MODEL1(**init_params)
+    elif model_name == 'nn_model2':
+        model = NN_MODEL2(**init_params)
+    elif model_name == 'nn_model3':
+        model = NN_MODEL3(**init_params)
+    elif model_name == 'nn_model4':
+        model = NN_MODEL4(**init_params)
     else:
-        pass
-    return estimator
+        raise ValueError('model_name is invalid.')
+    return model
 
 
 def save_krs_history(history, outdir='.'):
@@ -252,18 +267,6 @@ class KERAS_REGRESSOR(BaseMLModel):
 
     def __init__(self, input_dim, attn=False, dr_rate=0.2, opt_name='sgd',
                  logger=None):
-        # Load keras modules only if keras model is invoked
-        # TODO: there should be a better way to make this code compatible on machine with and w/o GPU!
-        import tensorflow as tf
-        import keras
-        from keras import backend as K
-        from keras.layers import Input, Dense, Dropout, Activation, BatchNormalization
-        from keras import optimizers
-        from keras.optimizers import SGD, Adam, RMSprop, Adadelta
-        from keras.models import Sequential, Model, model_from_json, model_from_yaml
-        from keras.utils import np_utils, multi_gpu_model
-        from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
-
         inputs = Input(shape=(input_dim,))
         if attn:
             a = Dense(1000, activation='relu')(inputs)
@@ -320,6 +323,83 @@ class KERAS_REGRESSOR(BaseMLModel):
 #         # serialize weights to HDF5
 #         weightpath = os.path.join(outdir, 'weights.' + KERAS_REGRESSOR.model_name + '.h5')
 #         self.model.save_weights(weightpath)
+
+
+class NN_MODEL1(BaseMLModel):
+    """ Neural network regressor. """
+    model_name = 'nn_model1'
+
+    def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
+        inputs = Input(shape=(input_dim,))
+        attn_probs = Dense(input_dim, activation='softmax', name='attn_probs')(inputs)
+        attn_mul = merge([inputs, attn_probs], output_shape=input_dim, name='attn_mul', mode='mul')
+
+        x = Dense(1000, activation='relu')(attn_mul)
+        x = Dropout(dr_rate)(x)
+        
+        x = Dense(500, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        
+        x = Dense(250, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        
+        x = Dense(60, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        
+        outputs = Dense(1, activation='relu')(x)
+        model = Model(inputs=inputs, outputs=outputs)
+        model.summary()
+        
+        if opt_name == 'sgd':
+            opt = SGD(lr=1e-4, momentum=0.9)
+        elif opt_name == 'adam':
+            opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+        else:
+            opt = SGD(lr=1e-4, momentum=0.9) # for clr
+
+        model.compile(loss='mean_squared_error',
+                      optimizer=opt,
+                      metrics=['mae', r2_krs])
+        self.model = model
+
+
+class NN_MODEL2(BaseMLModel):
+    """ Neural network regressor. """
+    model_name = 'nn_model2'
+
+    def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
+        inputs = Input(shape=(input_dim,))
+        x = Dense(1000, activation='relu')(inputs)
+            
+        x = Dense(1000, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        
+        x = Dense(500, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        
+        # TODO: check this attention implementation
+        attn_probs = Dense(250, activation='softmax', name='attn_probs')(x)
+        attn_mul = merge([x, attn_probs], output_shape=250, name='attn_mul', mode='mul')
+        x = Dropout(dr_rate)(attn_mul)
+        
+        x = Dense(60, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        
+        outputs = Dense(1, activation='relu')(x)
+        model = Model(inputs=inputs, outputs=outputs)
+        model.summary()
+        
+        if opt_name == 'sgd':
+            opt = SGD(lr=1e-4, momentum=0.9)
+        elif opt_name == 'adam':
+            opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+        else:
+            opt = SGD(lr=1e-4, momentum=0.9) # for clr
+
+        model.compile(loss='mean_squared_error',
+                      optimizer=opt,
+                      metrics=['mae', r2_krs])
+        self.model = model
 
 
 
