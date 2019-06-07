@@ -160,8 +160,8 @@ def my_learning_curve(X, Y,
     # Method 1
     # ---------------------------------------------------------------
     if is_string_dtype(groups):
-        group_encoder = LabelEncoder()
-        groups = group_encoder.fit_transform(groups)
+        grp_enc= LabelEncoder()
+        groups = grp_enc.fit_transform(groups)
     
     # Now start nested loop of train size and cv folds
     tr_scores_all = [] # list of dicts

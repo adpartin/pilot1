@@ -117,20 +117,16 @@ def create_outdir(outdir, args, src):
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
     
+    l = [args['opt']] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']] 
+
     if ('nn' in args['model_name']) and (args['attn'] is True): 
-        name_sffx = '.'.join( [src] + [args['model_name']] + ['attn'] + \
-                             [args['opt']] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + \
-                             args['drug_features'] + [args['target_name']] )
+        name_sffx = '.'.join( [src] + [args['model_name']] + ['attn'] + l )
             
     elif ('nn' in args['model_name']) and (args['attn'] is False): 
-        name_sffx = '.'.join( [src] + [args['model_name']] + ['fc'] + \
-                             [args['opt']] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + \
-                             args['drug_features'] + [args['target_name']] )
-        
+        name_sffx = '.'.join( [src] + [args['model_name']] + ['fc'] + l )
+                            
     else:
-        name_sffx = '.'.join( [src] + [args['model_name']] + \
-                             [args['opt']] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + \
-                             args['drug_features'] + [args['target_name']] )
+        name_sffx = '.'.join( [src] + [args['model_name']] + l )
 
     outdir = Path(outdir) / (name_sffx + '_' + t)
     os.makedirs(outdir)
@@ -209,7 +205,7 @@ def run(args):
 
             xdata, ydata, _, _ = break_src_data(
                     tr_data, target=args['target_name'],
-                    scaler_method=args['scaler']) # logger=lg.logger
+                    scaler=args['scaler']) # logger=lg.logger
             
             dfs[src] = (ydata, xdata)
             
@@ -223,13 +219,13 @@ def run(args):
         df = pd.read_parquet(datapath, engine='auto', columns=None)
         df = df.sample(frac=1.0, axis=0, random_state=SEED).reset_index(drop=True)
 
-        scaler_method = args['scaler']
-        if  scaler_method is not None:
-            if scaler_method == 'stnd':
+        scaler = args['scaler']
+        if  scaler is not None:
+            if scaler == 'stnd':
                 scaler = StandardScaler()
-            elif scaler_method == 'minmax':
+            elif scaler == 'minmax':
                 scaler = MinMaxScaler()
-            elif scaler_method == 'rbst':
+            elif scaler == 'rbst':
                 scaler = RobustScaler()
 
         xdata = df.iloc[:, 1:]
@@ -243,9 +239,7 @@ def run(args):
         
     
     for src, data in dfs.items():
-        #ourdir = create_outdir(OUTDIR, args, src)
         ydata, xdata = data[0], data[1]
-        #trn_lrn_crv_new(xdata, ydata, *args)
         
         # -----------------------------------------------
         #       Logger
@@ -269,9 +263,10 @@ def run(args):
         cv = cv_splitter(cv_method=cv_method, cv_folds=cv_folds, test_size=0.2,
                          mltype=mltype, shuffle=True, random_state=SEED)
         if cv_method=='simple':
-            groups = None
+            cv_groups = None
         elif cv_method=='group':
-            groups = tr_data['CELL'].copy()
+            cv_groups = tr_data['CELL'].copy()
+        
         
         # -----------------------------------------------
         #      ML model configurations
@@ -291,6 +286,10 @@ def run(args):
             init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'attn': attn, 'logger': lg.logger}
             #fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': 0.2} 
             fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1} 
+        elif model_name == 'nn_model1' or 'nn_model2':
+            init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
+            fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
+
 
         # -----------------------------------------------
         #      Generate learning curve 
@@ -311,7 +310,7 @@ def run(args):
             args=args,
             metrics=metrics,
             cv=cv,
-            groups=groups,
+            groups=cv_groups,
             n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
         lg.logger.info('Runtime: {:.1f} mins'.format( (time()-t0)/60) )
 
@@ -353,26 +352,6 @@ def run(args):
         lg.kill_logger()
         
     print('Done.')
-
-
-#     # Multiple runs
-#     dfs = []
-#     for run_id in range(len(csv_sets)):
-#         print('{} Run {} {}'.format('-'*40, run_id+1, '-'*40))
-#         lrn_crv_scores, prms = trn_lrn_crv.main(
-#             ['-tr', *csv_sets[run_id]['tr_src'],
-#              '--outdir', str(outdir),
-#              *args])
-#         src_name = '_'.join( csv_sets[run_id]['tr_src'] )
-#         lrn_crv_scores.insert(loc=0, column='src', value=src_name)
-#         dfs.append(lrn_crv_scores)
-
-#     df = pd.concat(dfs, axis=0, sort=False)
-#     df.to_csv(outdir/'lrn_crv_all.csv', index=False)
-
-#     plot_agg_lrn_crv(df, outdir)
-
-#     print('Total runtime {:.1f}\n'.format( (time()-t0)/60) )
 
 
 def main(args):

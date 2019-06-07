@@ -24,7 +24,7 @@ from sklearn.externals import joblib
 import tensorflow as tf
 import keras
 from keras import backend as K
-from keras.layers import Input, Dense, Dropout, Activation, BatchNormalization
+from keras.layers import Input, Dense, Dropout, Activation, BatchNormalization, Lambda, merge
 from keras import optimizers
 from keras.optimizers import SGD, Adam, RMSprop, Adadelta
 from keras.models import Sequential, Model, model_from_json, model_from_yaml
@@ -324,17 +324,16 @@ class KERAS_REGRESSOR(BaseMLModel):
 #         weightpath = os.path.join(outdir, 'weights.' + KERAS_REGRESSOR.model_name + '.h5')
 #         self.model.save_weights(weightpath)
 
-
-class NN_MODEL1(BaseMLModel):
+class NN_MODEL0(BaseMLModel):
     """ Neural network regressor. """
-    model_name = 'nn_model1'
+    model_name = 'nn_model0'
 
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
-        attn_probs = Dense(input_dim, activation='softmax', name='attn_probs')(inputs)
-        attn_mul = merge([inputs, attn_probs], output_shape=input_dim, name='attn_mul', mode='mul')
+        x = Dense(1000, activation='relu')(inputs)
+        x = Dropout(dr_rate)(attn_mul)
 
-        x = Dense(1000, activation='relu')(attn_mul)
+        x = Dense(1000, activation='relu')(x)
         x = Dropout(dr_rate)(x)
         
         x = Dense(500, activation='relu')(x)
@@ -363,6 +362,63 @@ class NN_MODEL1(BaseMLModel):
         self.model = model
 
 
+class NN_MODEL1(BaseMLModel):
+    """ Neural network regressor. """
+    model_name = 'nn_model1'
+
+    def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
+        inputs = Input(shape=(input_dim,))
+        #x = Lambda(lambda x: x, output_shape=(1000,))(inputs)
+        attn_lin = Dense(1000, activation='linear')(inputs)
+        attn_probs = Dense(1000, activation='softmax')(inputs)
+        attn_mul = keras.layers.multiply( [attn_lin, attn_probs], name='attn')
+        x = Dropout(dr_rate)(attn_mul)
+
+        """
+        x = Dense(1000, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        
+        x = Dense(1000, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        
+        x = Dense(1000, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        """
+        x = Dense(1000, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+
+        x = Dense(500, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        
+        x = Dense(250, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        
+        x = Dense(60, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        outputs = Dense(1, activation='relu')(x)
+
+        model = Model(inputs=inputs, outputs=outputs)
+        model.summary()
+        
+        if opt_name == 'sgd':
+            opt = SGD(lr=1e-4, momentum=0.9)
+        elif opt_name == 'adam':
+            opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+        else:
+            opt = SGD(lr=1e-4, momentum=0.9) # for clr
+
+        model.compile(loss='mean_squared_error',
+                      optimizer=opt,
+                      metrics=['mae', r2_krs])
+        self.model = model
+
+
+    def dump_model(self, outdir='.'):
+        """ Dump trained model. """        
+        self.model.save( str(Path(outdir)/'model.h5') )
+        
+
+
 class NN_MODEL2(BaseMLModel):
     """ Neural network regressor. """
     model_name = 'nn_model2'
@@ -370,21 +426,34 @@ class NN_MODEL2(BaseMLModel):
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
         x = Dense(1000, activation='relu')(inputs)
+        x = Dropout(dr_rate)(x)
             
         x = Dense(1000, activation='relu')(x)
         x = Dropout(dr_rate)(x)
+        """
+        x = Dense(1000, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
         
+        attn_lin = Dense(1000, activation='linear')(x)
+        attn_probs = Dense(1000, activation='softmax', name='attn_probs')(x)
+        attn_mul = keras.layers.multiply( [attn_lin, attn_probs], name='attn')
+        x = Dropout(dr_rate)(attn_mul)
+        
+        x = Dense(1000, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        """
+
         x = Dense(500, activation='relu')(x)
         x = Dropout(dr_rate)(x)
         
-        # TODO: check this attention implementation
+        attn_lin = Dense(250, activation='linear')(x)
         attn_probs = Dense(250, activation='softmax', name='attn_probs')(x)
-        attn_mul = merge([x, attn_probs], output_shape=250, name='attn_mul', mode='mul')
+        attn_mul = keras.layers.multiply( [attn_lin, attn_probs] )
         x = Dropout(dr_rate)(attn_mul)
         
         x = Dense(60, activation='relu')(x)
         x = Dropout(dr_rate)(x)
-        
+
         outputs = Dense(1, activation='relu')(x)
         model = Model(inputs=inputs, outputs=outputs)
         model.summary()
@@ -402,17 +471,10 @@ class NN_MODEL2(BaseMLModel):
         self.model = model
 
 
-
-class TORCH_REGRESSOR(BaseMLModel):
-    """ Neural network regressor. """
-    model_name = 'nn_reg'
-    
-    def __init__(self):
-        pass
-
-    def dump_model(self):
-        pass
-
+    def dump_model(self, outdir='.'):
+        """ Dump trained model. """        
+        self.model.save( str(Path(outdir)/'model.h5') )
+        
 
 
 class LGBM_REGRESSOR(BaseMLModel):

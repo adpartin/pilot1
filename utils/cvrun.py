@@ -76,8 +76,8 @@ def my_cross_validate(X, Y,
         cv_folds = cv.get_n_splits()
 
     if is_string_dtype(groups):
-        group_encoder = LabelEncoder()
-        groups = group_encoder.fit_transform(groups)
+        grp_enc = LabelEncoder()
+        groups = grp_enc.fit_transform(groups)
     
     # ... Now start a nested loop of train size and cv folds ...
     tr_scores_all = [] # list dicts
@@ -146,6 +146,9 @@ def my_cross_validate(X, Y,
 
         # Train model
         history = estimator.model.fit(xtr, ytr, **fit_params)
+    
+        # Dump model
+        estimator.dump_model(out_nn_model)
 
         # Calc preds and scores TODO: dump preds
         # ... training set

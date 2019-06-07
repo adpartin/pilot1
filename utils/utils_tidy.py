@@ -410,7 +410,7 @@ def get_data_by_src(dataset:pd.DataFrame, src_names:list, logger=None):
     return data
 
 
-def break_src_data(data:pd.DataFrame, target:str='AUC', scaler_method:str='stnd', target_transform:bool=False, logger=None):
+def break_src_data(data:pd.DataFrame, target:str='AUC', scaler='stnd', target_transform:bool=False, logger=None):
     """ Returns xdata, ydata, and meta from a dataset. Also, returns the scaler
     if the features were scaled.
     """
@@ -436,24 +436,29 @@ def break_src_data(data:pd.DataFrame, target:str='AUC', scaler_method:str='stnd'
         
     # Get xdata and meta 
     xdata, meta = split_fea_and_other_cols(data)
+    
+    # Split fea and cat data
+    fea_data, cat_data = get_num_and_cat_cols( xdata )
+    colnames = fea_data.columns
 
-    if scaler_method is not None:
-        if scaler_method == 'stnd':
+    if scaler is not None and isinstance(scaler, str):
+        if scaler == 'stnd':
             scaler = StandardScaler()
-        elif scaler_method == 'minmax':
+        elif scaler == 'minmax':
             scaler = MinMaxScaler()
-        elif scaler_method == 'rbst':
+        elif scaler == 'rbst':
             scaler = RobustScaler()
 
-        # Scale train data
-        fea_data, cat_data = get_num_and_cat_cols( xdata )
-        colnames = fea_data.columns
+        # Scale data
         fea_data = pd.DataFrame( scaler.fit_transform(fea_data), columns=colnames ).astype(np.float32)
-        fea_data.reset_index(drop=True, inplace=True)
-        cat_data.reset_index(drop=True, inplace=True)
-        xdata = pd.concat([cat_data, fea_data], axis=1)
-    else:
-        scaler = None
+    elif scaler is not None:
+        # Scale data
+        fea_data = pd.DataFrame( scaler.transform(fea_data), columns=colnames ).astype(np.float32)
+
+    # Combine scaled fea and cat data
+    fea_data.reset_index(drop=True, inplace=True)
+    cat_data.reset_index(drop=True, inplace=True)
+    xdata = pd.concat([cat_data, fea_data], axis=1)
 
     print_fea_shapes(xdata, logger)
     return xdata, ydata, meta, scaler

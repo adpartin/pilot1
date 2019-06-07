@@ -29,19 +29,16 @@ def create_outdir(outdir='.', args=None):
     t = ''.join([str(i) for i in t])
     
     if args is not None:
+        l = [args['opt']] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']] 
+
         if ('nn' in args['model_name']) and (args['attn'] is True): 
-            name_sffx = '.'.join( args['train_sources'] + [args['model_name']] + ['attn'] + \
-                                  [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + \
-                                  args['drug_features'] + [args['target_name']] )
+            name_sffx = '.'.join( args['train_sources'] + [args['model_name']] + ['attn'] + l )
 
         elif ('nn' in args['model_name']) and (args['attn'] is False): 
-            name_sffx = '.'.join( args['train_sources'] + [args['model_name']] + ['fc'] + \
-                                  [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + \
-                                  args['drug_features'] + [args['target_name']] )
+            name_sffx = '.'.join( args['train_sources'] + [args['model_name']] + ['fc'] + l )
+
         else:
-            name_sffx = '.'.join( args['train_sources'] + [args['model_name']] + \
-                                  [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + \
-                                  args['drug_features'] + [args['target_name']] )
+            name_sffx = '.'.join( args['train_sources'] + [args['model_name']] + l )
 
     else:
         name_sffx = 'out'

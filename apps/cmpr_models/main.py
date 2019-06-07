@@ -34,6 +34,11 @@ from sklearn.model_selection import ShuffleSplit, KFold
 from sklearn.model_selection import GroupShuffleSplit, GroupKFold
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 
+from pandas.api.types import is_string_dtype
+from sklearn.preprocessing import LabelEncoder
+
+from sklearn.externals import joblib
+
 SEED = None
 t_start = time()
 
@@ -144,30 +149,38 @@ def run(args):
     dataset = load_tidy_combined(
             datapath, fea_list=fea_list, logger=lg.logger, random_state=SEED)
 
-    tr_data = get_data_by_src(
+    data = get_data_by_src(
             dataset, src_names=tr_sources, logger=lg.logger)
     
-    xdata, ydata, meta, tr_scaler = break_src_data(
+    #xdata, ydata, meta, scaler = break_src_data(
+    #        data, target=args['target_name'],
+    #        scaler_method=args['scaler'], logger=lg.logger)
+
+
+    # ========================================================================
+    #       Train-test split
+    # ========================================================================
+    te_split_method = 'group'
+    te_size = 0.2
+    te_splitter = cv_splitter(cv_method=te_split_method, cv_folds=1, test_size=te_size,
+                     mltype=mltype, shuffle=True, random_state=SEED)
+    if te_split_method=='simple':
+        te_groups = None
+    elif te_split_method=='group':
+        te_groups = data['CELL'].copy()
+    
+    if is_string_dtype(te_groups):
+        grp_enc = LabelEncoder()
+        te_groups = grp_enc.fit_transform(te_groups)
+    
+    tr_id, te_id = next(te_splitter.split(data, groups=te_groups))
+    tr_data = data.iloc[tr_id, :]  
+    te_data = data.iloc[te_id, :] 
+
+    xdata, ydata, meta, scaler = break_src_data(
             tr_data, target=args['target_name'],
             scaler=args['scaler'], logger=lg.logger)
-
-
-    # ========================================================================
-    #       Plots
-    # ========================================================================
-    figpath = run_outdir/'figs'
-    os.makedirs(figpath, exist_ok=True)
-   
-    utils.boxplot_rsp_per_drug(tr_data, target_name=target_name,
-        path=figpath / f'{target_name}_per_drug_boxplot.png')
-
-    utils.plot_hist(ydata, var_name=target_name,
-        path=figpath / (target_name+'_hist.png') )
-    
-    utils.plot_qq(ydata, var_name=target_name,
-        path=figpath / (target_name+'_qqplot.png') )
-    
-    utils.plot_hist_drugs(tr_data['DRUG'], path=figpath/'drugs_hist.png')
+    joblib.dump(scaler, run_outdir/'scaler.pkl')
 
 
     # ========================================================================
@@ -176,9 +189,9 @@ def run(args):
     cv = cv_splitter(cv_method=cv_method, cv_folds=cv_folds, test_size=0.2,
                      mltype=mltype, shuffle=True, random_state=SEED)
     if cv_method=='simple':
-        groups = None
+        cv_groups = None
     elif cv_method=='group':
-        groups = tr_data['CELL'].copy()
+        cv_groups = tr_data['CELL'].copy()
 
 
     # ========================================================================
@@ -199,34 +212,6 @@ def run(args):
         init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
         fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
 
-
-    # -----------------
-    # sklearn CV method - (doesn't work with keras)
-    # ----------------- 
-    """
-    # Define ML model
-    model = ml_models.get_model(model_name=model_name, init_params=init_prms)  
-
-    # Run CV
-    t0 = time.time()
-    cv_scores = cross_validate(
-        estimator=model.model,
-        X=xdata, y=ydata,
-        scoring=metrics,
-        cv=cv, groups=groups,
-        n_jobs=n_jobs, fit_params=fit_prms)
-    lg.logger.info('Runtime: {:.3f} mins'.format((time.time()-t0)/60))
-
-    # Dump results
-    cv_scores = utils.update_cross_validate_scores( cv_scores )
-    cv_scores = cv_scores.reset_index(drop=True)
-    cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='mean', value=cv_scores.iloc[:, -cv_folds:].values.mean(axis=1) )
-    cv_scores.insert( loc=cv_scores.shape[1]-cv_folds, column='std',  value=cv_scores.iloc[:, -cv_folds:].values.std(axis=1) )
-    cv_scores = cv_scores.round(3)
-    cv_scores.to_csv(os.path.join(run_outdir, 'cv_scores_' + train_sources_name + '.csv'), index=False)
-    lg.logger.info(f'cv_scores\n{cv_scores}')
-    """
-
     # ------------
     # My CV method - (works with keras)
     # ------------
@@ -240,7 +225,7 @@ def run(args):
         init_params=init_prms,
         args=args,
         cv=cv,
-        groups=groups,
+        groups=cv_groups,
         n_jobs=n_jobs, random_state=SEED, logger=lg.logger, outdir=run_outdir)
     lg.logger.info('Runtime: {:.1f} mins'.format( (time()-t0)/60) )
     
@@ -251,136 +236,26 @@ def run(args):
 
 
     # ========================================================================
-    #       Train final model (entire dataset) TODO: test this!
+    #       Predict on test set
     # ========================================================================
-    if retrain:
-        lg.logger.info('\n{}'.format('='*50))
-        lg.logger.info(f'Train final model (use entire dataset) ... {tr_sources}')
-        lg.logger.info('='*50)
+    xte, yte, meta, _ = break_src_data(
+            te_data, target=args['target_name'],
+            scaler=scaler, logger=lg.logger)
 
-        # Get the data
-        xdata, ydata, _, _ = break_src_data(
-                tr_data, target=args['target_name'],
-                scaler=args['scaler'], logger=lg.logger)
-
-        # Define sample weight
-        # From lightgbm docs: n_samples / (n_classes * np.bincount(y))
-        # thres_target = 0.5
-        # a = np.where(ydata.values < thres_target, 0, 1)
-        # wgt = len(a) / (2 * np.bincount(a))
-        # sample_weight = np.array([wgt[0] if v < 0.5 else wgt[1] for v in a])
-
-        # ML model params
-        if model_name == 'lgb_reg':
-            # Use early stopping
-            init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'n_estimators': 2000, 'logger': lg.logger}
-            X_train, X_test, y_train, y_test = train_test_split(xdata, ydata, test_size=0.1, random_state=SEED)
-            xdata, ydata = X_train, y_train
-            eval_set = (X_test, y_test)
-            fit_prms = {'verbose': False, 'eval_set': eval_set, 'early_stopping_rounds': 10}  # 'sample_weight': sample_weight
-            
-        elif model_name == 'nn_reg':
-            val_split = 0.1
-            init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'attn': attn, 'logger': lg.logger}
-            fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': val_split}
-            args['final_model_val_split'] = val_split
-
-        # Define ML model
-        model_final = ml_models.get_model(model_name, init_params=init_prms)   
-
-        # Train
-        t0 = time()
-        model_final.model.fit(xdata, ydata, **fit_prms) # TODO: there is a problem here with fit_prms (it seems like it reuses them from my_cross_validate)
-        lg.logger.info('Runtime: {:.1f} mins'.format( (time()-t0)/60) )
-
-        # # Save model
-        # model_final.save_model(outdir=run_outdir)
-    
-    else:
-        model_final = best_model
-
-    # Dump model
-    model_final.dump_model(outdir=run_outdir)
-
-    # Save network figure
-    if 'nn' in model_name:
-        from keras.utils import plot_model
-        plot_model(model_final.model, to_file=figpath/'nn_model.png')
+    yte_pred = best_model.model.predict(xte)
+    res = np.hstack( (yte.values.reshape(-1,1), yte_pred.reshape(-1,1)) )
+    res = pd.DataFrame(res, columns=['true', 'pred'])
+    res.to_csv(run_outdir/'preds.csv', index=False)
 
 
     # ========================================================================
-    #       Infer
+    #       Create correlation plot
     # ========================================================================
-    lg.logger.info('\n{}'.format('='*50))
-    lg.logger.info(f'Inference ... {te_sources}')
-    lg.logger.info('='*50)
-    
-    csv = []  # cross-study-validation scores
-    for i, te_src in enumerate(te_sources):
-        lg.logger.info(f'\nTest source {i+1}:  _____ {te_src} _____')
-        t0 = time()
 
-        if tr_sources == [te_src]:  # te_src in tr_sources: 
-            lg.logger.info("That is the train set (take preds from cv run).")
-            continue
-        
-        # Extract test data
-        te_src_data = get_data_by_src(
-            dataset, src_names=[te_src], logger=lg.logger)
-        
-        if te_src_data.shape[0] == 0:
-            continue  # continue if there are no data samples available for this source
-        
-        # Extract features and target
-        xte, yte, _, _ = break_src_data(
-            te_src_data, target=args['target_name'],
-            scaler=None, logger=lg.logger)
-
-        # Scale test data
-        colnames = xte.columns
-        xte = pd.DataFrame( tr_scaler.transform(xte), columns=colnames ).astype(np.float32)
-        
-        # Plot dist of response
-        utils.plot_hist(yte, var_name=target_name,
-                        path=figpath / (target_name + '_hist_' + te_src + '.png') )
-
-        # Calc scores
-        # scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
-        y_preds, y_true = utils.calc_preds(estimator=model_final.model, x=xte, y=yte, mltype=mltype)
-        scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype)
-        csv.append( pd.DataFrame([scores], index=[te_src]).T )
-        
-        # Dump preds --> TODO: error when use keras
-        # preds_fname = 'preds_' + src + '_' + model_name + '.csv'
-        # model_final.dump_preds(df_data=te_src_data, xdata=xte, target_name=target_name,
-        #                        outpath=os.path.join(run_outdir, preds_fname))                 
-
-        lg.logger.info('Runtime: {:.1f} mins'.format( (time()-t0)/60) )
-
-    # Combine test set preds
-    if len(csv) > 0:
-        csv = pd.concat(csv, axis=1)
-
-    # Adjust cv_scores in order to combine with test set preds
-    # (take the mean cv score for val set)
-    cv_scores = cv_scores[cv_scores['tr_set']==False].drop(columns='tr_set')
-    cv_scores[tr_sources_name] = cv_scores.iloc[:, -cv_folds:].mean(axis=1)
-    cv_scores = cv_scores[['metric', tr_sources_name]]
-    cv_scores = cv_scores.set_index('metric')
-    cv_scores.index.name = None
-
-    # Combine scores from val set cross-validation and test set
-    csv_all = pd.concat([cv_scores, csv], axis=1)
-    csv_all.insert(loc=0, column='train_src', value=tr_sources_name)
-    csv_all = csv_all.reset_index().rename(columns={'index': 'metric'})
-    # csv_all = csv_all.round(decimals=3)
-
-    lg.logger.info(f'\ncsv_scores\n{csv_all}')
-    csv_all.to_csv( run_outdir/('csv_scores_' + tr_sources_name + '.csv'), index=False )
 
     # Kill logger
     lg.kill_logger()
-    del tr_data, te_src_data, xdata, ydata, xte, yte, model_final
+    del tr_data, te_data, xdata, ydata, xte, yte
     return csv_all
 
 
@@ -396,17 +271,5 @@ def main(args):
     
 
 if __name__ == '__main__':
-    # python -m pdb apps/csv/trn_from_combined.py -te ccle gcsi -tr gcsi
-    """ __name__ == '__main__' explained:
-    www.youtube.com/watch?v=sugvnHA7ElY
-    """
-    """
-    stackoverflow.com/questions/14500183/in-python-can-i-call-the-main-of-an-imported-module
-    How to run code with input args from another code?
-    This will be used with multiple train and test sources.
-    For example: in launch_csv.py
-        import train_combined.py
-        train_combined.main([tr_src, tst_src])
-    """
-    # python -m pdb apps/csv/trn_from_combined.py -te ccle gcsi -tr gcsi
+    # python -m pdb apps/csv/trn_from_combined.py -te cclediggcsi -tr gcsi
     main(sys.argv[1:])

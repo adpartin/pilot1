@@ -313,7 +313,7 @@ def run(args):
 
         xdata, ydata, meta, tr_scaler = break_src_data(
                 tr_data, target=target_name,
-                scaler_method=scaler) # logger=lg.logger
+                scaler=scaler) # logger=lg.logger
             
         del tr_data
 
@@ -325,13 +325,13 @@ def run(args):
         df = pd.read_parquet(datapath, engine='auto', columns=None)
         df = df.sample(frac=1.0, axis=0, random_state=SEED).reset_index(drop=True)
 
-        scaler_method = args['scaler']
-        if  scaler_method is not None:
-            if scaler_method == 'stnd':
+        scaler = args['scaler']
+        if  scaler is not None:
+            if scaler == 'stnd':
                 scaler = StandardScaler()
-            elif scaler_method == 'minmax':
+            elif scaler == 'minmax':
                 scaler = MinMaxScaler()
-            elif scaler_method == 'rbst':
+            elif scaler == 'rbst':
                 scaler = RobustScaler()
 
         xdata = df.iloc[:, 1:]
