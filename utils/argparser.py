@@ -34,7 +34,7 @@ dflt_args = {
     'batch_size': 32,
     'dr_rate': 0.2,
     'attn': False,
-   'scaler': 'stnd',
+    'scaler': 'stnd',
     'opt': 'sgd',
 }
 
@@ -122,7 +122,7 @@ def get_cli_args(args=None):
     # Select ML models
     parser.add_argument('-ml', '--model_name',
         # default=["lgb_reg"],
-        choices=['lgb_reg', 'rf_reg', 'nn_reg', 'nn_model1', 'nn_model2', 'nn_model3', 'nn_model4'],
+        choices=['lgb_reg', 'rf_reg', 'nn_reg', 'nn_model0', 'nn_model1', 'nn_model2', 'nn_model3', 'nn_model4'],
         help='ML model to use for training.')
 
     # Select CV scheme

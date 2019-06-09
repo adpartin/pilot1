@@ -63,6 +63,8 @@ def get_model(model_name, init_params=None):
         model = RF_REGRESSOR(**init_params)
     elif model_name == 'nn_reg':
         model = KERAS_REGRESSOR(**init_params)
+    elif model_name == 'nn_model0':
+        model = NN_MODEL0(**init_params)
     elif model_name == 'nn_model1':
         model = NN_MODEL1(**init_params)
     elif model_name == 'nn_model2':
@@ -331,7 +333,7 @@ class NN_MODEL0(BaseMLModel):
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
         x = Dense(1000, activation='relu')(inputs)
-        x = Dropout(dr_rate)(attn_mul)
+        x = Dropout(dr_rate)(x)
 
         x = Dense(1000, activation='relu')(x)
         x = Dropout(dr_rate)(x)
@@ -342,6 +344,9 @@ class NN_MODEL0(BaseMLModel):
         x = Dense(250, activation='relu')(x)
         x = Dropout(dr_rate)(x)
         
+        x = Dense(125, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+
         x = Dense(60, activation='relu')(x)
         x = Dropout(dr_rate)(x)
         
@@ -369,21 +374,11 @@ class NN_MODEL1(BaseMLModel):
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
         #x = Lambda(lambda x: x, output_shape=(1000,))(inputs)
-        attn_lin = Dense(1000, activation='linear')(inputs)
-        attn_probs = Dense(1000, activation='softmax')(inputs)
+        attn_lin = Dense(1000, activation='linear', name='attn_lin')(inputs)
+        attn_probs = Dense(1000, activation='softmax', name='attn_probs')(inputs)
         attn_mul = keras.layers.multiply( [attn_lin, attn_probs], name='attn')
         x = Dropout(dr_rate)(attn_mul)
 
-        """
-        x = Dense(1000, activation='relu')(x)
-        x = Dropout(dr_rate)(x)
-        
-        x = Dense(1000, activation='relu')(x)
-        x = Dropout(dr_rate)(x)
-        
-        x = Dense(1000, activation='relu')(x)
-        x = Dropout(dr_rate)(x)
-        """
         x = Dense(1000, activation='relu')(x)
         x = Dropout(dr_rate)(x)
 
@@ -393,10 +388,13 @@ class NN_MODEL1(BaseMLModel):
         x = Dense(250, activation='relu')(x)
         x = Dropout(dr_rate)(x)
         
+        x = Dense(125, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+
         x = Dense(60, activation='relu')(x)
         x = Dropout(dr_rate)(x)
-        outputs = Dense(1, activation='relu')(x)
 
+        outputs = Dense(1, activation='relu')(x)
         model = Model(inputs=inputs, outputs=outputs)
         model.summary()
         
@@ -430,27 +428,18 @@ class NN_MODEL2(BaseMLModel):
             
         x = Dense(1000, activation='relu')(x)
         x = Dropout(dr_rate)(x)
-        """
-        x = Dense(1000, activation='relu')(x)
-        x = Dropout(dr_rate)(x)
-        
-        attn_lin = Dense(1000, activation='linear')(x)
-        attn_probs = Dense(1000, activation='softmax', name='attn_probs')(x)
-        attn_mul = keras.layers.multiply( [attn_lin, attn_probs], name='attn')
-        x = Dropout(dr_rate)(attn_mul)
-        
-        x = Dense(1000, activation='relu')(x)
-        x = Dropout(dr_rate)(x)
-        """
 
         x = Dense(500, activation='relu')(x)
         x = Dropout(dr_rate)(x)
         
-        attn_lin = Dense(250, activation='linear')(x)
+        attn_lin = Dense(250, activation='linear', name='attn_lin')(x)
         attn_probs = Dense(250, activation='softmax', name='attn_probs')(x)
-        attn_mul = keras.layers.multiply( [attn_lin, attn_probs] )
+        attn_mul = keras.layers.multiply( [attn_lin, attn_probs], name='attn' )
         x = Dropout(dr_rate)(attn_mul)
         
+        x = Dense(125, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+
         x = Dense(60, activation='relu')(x)
         x = Dropout(dr_rate)(x)
 

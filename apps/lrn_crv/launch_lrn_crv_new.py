@@ -157,8 +157,10 @@ def run(args):
 
     # Extract ml type ('reg' or 'cls')
     mltype = args['model_name'].split('_')[-1]
-    assert mltype in ['reg', 'cls'], "mltype should be either 'reg' or 'cls'."  
-    
+    #assert mltype in ['reg', 'cls'], "mltype should be either 'reg' or 'cls'."  
+    if mltype not in ['reg', 'cls']:
+        mltype = 'reg'
+
     # Feature list
     fea_list = cell_fea + drug_fea + other_fea    
     
@@ -286,7 +288,7 @@ def run(args):
             init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'attn': attn, 'logger': lg.logger}
             #fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1, 'validation_split': 0.2} 
             fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1} 
-        elif model_name == 'nn_model1' or 'nn_model2':
+        elif model_name == 'nn_model0' or 'nn_model1' or 'nn_model2':
             init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
             fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
 
@@ -350,6 +352,7 @@ def run(args):
         
         # Kill logger
         lg.kill_logger()
+        del xdata, ydata
         
     print('Done.')
 
