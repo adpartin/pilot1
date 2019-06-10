@@ -160,13 +160,14 @@ def run(args):
     # ========================================================================
     #       Train-test split
     # ========================================================================
-    te_split_method = 'group'
-    te_size = 0.2
-    te_splitter = cv_splitter(cv_method=te_split_method, cv_folds=1, test_size=te_size,
-                     mltype=mltype, shuffle=True, random_state=SEED)
-    if te_split_method=='simple':
+    te_method = 'group'
+    te_size = 0.1
+    te_splitter = cv_splitter(cv_method=te_method, cv_folds=1, 
+            test_size=te_size, mltype=mltype, shuffle=True, random_state=SEED)
+
+    if te_method=='simple':
         te_groups = None
-    elif te_split_method=='group':
+    elif te_method=='group':
         te_groups = data['CELL'].copy()
     
     if is_string_dtype(te_groups):

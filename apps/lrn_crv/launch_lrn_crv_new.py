@@ -138,9 +138,6 @@ def run(args):
     t0 = time()
 
     dname = args['dname']
-    cell_fea = args['cell_features']
-    drug_fea = args['drug_features']
-    other_fea = args['other_features']
     tr_sources = args['train_sources']
     
     model_name = args['model_name']
@@ -149,6 +146,12 @@ def run(args):
     lrn_crv_ticks = args['lc_ticks']
     n_jobs = args['n_jobs']
     
+    # Features 
+    cell_fea = args['cell_features']
+    drug_fea = args['drug_features']
+    other_fea = args['other_features']
+
+    # NN params
     epochs = args['epochs']
     batch_size = args['batch_size']
     dr_rate = args['dr_rate']
@@ -157,7 +160,6 @@ def run(args):
 
     # Extract ml type ('reg' or 'cls')
     mltype = args['model_name'].split('_')[-1]
-    #assert mltype in ['reg', 'cls'], "mltype should be either 'reg' or 'cls'."  
     if mltype not in ['reg', 'cls']:
         mltype = 'reg'
 

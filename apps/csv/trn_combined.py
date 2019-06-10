@@ -75,15 +75,18 @@ def run(args):
     row_sample = args['row_sample']
     col_sample = args['col_sample']
     tissue_type = args['tissue_type']
+
     cell_fea = args['cell_features']
     drug_fea = args['drug_features']
     other_fea = args['other_features']
+
     model_name = args['model_name']
     cv_method = args['cv_method']
     cv_folds = args['cv_folds']
     retrain = args['retrain']
     n_jobs = args['n_jobs']
-
+    
+    # NN params
     epochs = args['epochs']
     batch_size = args['batch_size']
     dr_rate = args['dr_rate']

@@ -156,14 +156,15 @@ def get_cli_args(args=None):
         # default=4,
         type=int)
 
-    # Select ML models
+    # Select outdir
     parser.add_argument('--outdir',
         # default=["lgb_reg"],
         type=str,
         help='Output dir.')    
 
+    # Select data name
     parser.add_argument('--dname',
-        type=str,
+        type=str, choices=['combined', 'top6'],
         help='Data name (combined (default) or top6).')
 
     # Select NN hyper_params
