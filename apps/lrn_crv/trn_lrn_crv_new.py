@@ -1,6 +1,4 @@
-"""
-TODO: update the function trn_lrn_crv.py so that it will accept a df instead of the source names!
-"""
+""" ... """
 from __future__ import print_function, division
 
 import warnings

@@ -65,3 +65,10 @@ When running on Mac, lightgbm gives an error:
 - https://lightgbm.readthedocs.io/en/latest/FAQ.html
 - This has been solved by installing "nomkl":  conda install nomkl
 - What is nomkl: https://docs.continuum.io/mkl-optimizations/
+
+
+-------------------------------------------------------------------------------------------
+Already tested
+-------------------------------------------------------------------------------------------
+python -m pdb apps/lrn_crv/launch_lrn_crv_new.py --dname combined -src ccle -cvm group
+

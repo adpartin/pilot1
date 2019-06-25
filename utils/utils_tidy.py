@@ -349,7 +349,7 @@ class Top6(DrugSensDataset):
 
     
 # ===================================================================================== 
-def load_tidy_combined(datapath:str, fea_list:list, logger=None, random_state=None):
+def load_tidy_combined(datapath:str, fea_list:list, logger=None, shuffle=True, random_state=None):
     """ Load tidy dataset that was generated from the combined dataframe.
     Args:
         datapath : full path to the tidy df
@@ -370,7 +370,8 @@ def load_tidy_combined(datapath:str, fea_list:list, logger=None, random_state=No
     data = make_colnames_gbm_compatible( data )
     
     # Shuffle
-    data = data.sample(frac=1.0, axis=0, random_state=random_state).reset_index(drop=True)
+    if shuffle:
+        data = data.sample(frac=1.0, axis=0, random_state=random_state).reset_index(drop=True)
 
     # if args['tissue_type']:
     #    # didn't tested!

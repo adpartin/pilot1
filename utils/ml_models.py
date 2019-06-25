@@ -302,7 +302,9 @@ class KERAS_REGRESSOR(BaseMLModel):
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
         elif opt_name == 'adam':
-            opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+            # opt = Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False) # original
+            opt = Adam(lr=1e-4, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+            # opt = Adam(lr=1e-4, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True)
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
@@ -333,7 +335,7 @@ class NN_MODEL0(BaseMLModel):
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
         x = Dense(1000, activation='relu')(inputs)
-        x = Dropout(dr_rate)(x)
+        # x = Dropout(dr_rate)(x)
 
         x = Dense(1000, activation='relu')(x)
         x = Dropout(dr_rate)(x)
@@ -350,9 +352,12 @@ class NN_MODEL0(BaseMLModel):
         x = Dense(60, activation='relu')(x)
         x = Dropout(dr_rate)(x)
         
+        x = Dense(30, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+
         outputs = Dense(1, activation='relu')(x)
         model = Model(inputs=inputs, outputs=outputs)
-        model.summary()
+        # model.summary()
         
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
@@ -374,11 +379,11 @@ class NN_MODEL1(BaseMLModel):
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
         #x = Lambda(lambda x: x, output_shape=(1000,))(inputs)
-        attn_lin = Dense(1000, activation='linear', name='attn_lin')(inputs)
+        attn_lin = Dense(1000, activation='relu', name='attn_lin')(inputs)
         attn_probs = Dense(1000, activation='softmax', name='attn_probs')(inputs)
-        attn_mul = keras.layers.multiply( [attn_lin, attn_probs], name='attn')
-        x = Dropout(dr_rate)(attn_mul)
-
+        x = keras.layers.multiply( [attn_lin, attn_probs], name='attn')
+        # x = Dropout(dr_rate)(x)
+            
         x = Dense(1000, activation='relu')(x)
         x = Dropout(dr_rate)(x)
 
@@ -394,9 +399,12 @@ class NN_MODEL1(BaseMLModel):
         x = Dense(60, activation='relu')(x)
         x = Dropout(dr_rate)(x)
 
+        x = Dense(30, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+
         outputs = Dense(1, activation='relu')(x)
         model = Model(inputs=inputs, outputs=outputs)
-        model.summary()
+        # model.summary()
         
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
@@ -432,10 +440,10 @@ class NN_MODEL2(BaseMLModel):
         x = Dense(500, activation='relu')(x)
         x = Dropout(dr_rate)(x)
         
-        attn_lin = Dense(250, activation='linear', name='attn_lin')(x)
+        attn_lin = Dense(250, activation='relu', name='attn_lin')(x)
         attn_probs = Dense(250, activation='softmax', name='attn_probs')(x)
-        attn_mul = keras.layers.multiply( [attn_lin, attn_probs], name='attn' )
-        x = Dropout(dr_rate)(attn_mul)
+        x = keras.layers.multiply( [attn_lin, attn_probs], name='attn' )
+        x = Dropout(dr_rate)(x)
         
         x = Dense(125, activation='relu')(x)
         x = Dropout(dr_rate)(x)
@@ -445,7 +453,7 @@ class NN_MODEL2(BaseMLModel):
 
         outputs = Dense(1, activation='relu')(x)
         model = Model(inputs=inputs, outputs=outputs)
-        model.summary()
+        # model.summary()
         
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
@@ -464,6 +472,68 @@ class NN_MODEL2(BaseMLModel):
         """ Dump trained model. """        
         self.model.save( str(Path(outdir)/'model.h5') )
         
+
+
+class NN_MODEL3(BaseMLModel):
+    """ Neural network regressor. """
+    model_name = 'nn_model3'
+
+    def __init__(self, in_dim_rna, in_dim_dsc, dr_rate=0.2, opt_name='sgd', logger=None):
+        # https://keras.io/getting-started/functional-api-guide/
+        # Chollet book
+
+        # Proc rna
+        in_rna = Input(shape=(in_dim_rna,), name='in_rna')
+        a = Dense(1000, activation='relu')(in_rna)
+        a = Dropout(dr_rate)(a)
+        a = Dense(1000, activation='relu')(a)
+        a = Dropout(dr_rate)(a)
+        a = Dense(1000, activation='relu')(a)
+        a = Dropout(dr_rate)(a)
+        rna = Model(inputs=in_rna, outputs=a)
+
+        # Proc dsc
+        in_dsc = Input(shape=(in_dim_dsc,), name='in_dsc')
+        b = Dense(1000, activation='relu')(in_dsc)
+        b = Dropout(dr_rate)(b)
+        b = Dense(1000, activation='relu')(b)
+        b = Dropout(dr_rate)(b)
+        b = Dense(1000, activation='relu')(b)
+        b = Dropout(dr_rate)(b)
+        dsc = Model(inputs=in_dsc, outputs=b)
+
+        # Merge layers
+        x = concatenate([rna.output, dsc.output])
+
+        # Dense layers
+        x = Dense(500, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        x = Dense(500, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+        x = Dense(500, activation='relu')(x)
+        x = Dropout(dr_rate)(x)
+
+        outputs = Dense(1, activation='relu')(x)
+        model = Model(inputs=[in_rna, in_dsc], outputs=[outputs])
+        # model.summary()
+        
+        if opt_name == 'sgd':
+            opt = SGD(lr=1e-4, momentum=0.9)
+        elif opt_name == 'adam':
+            opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+        else:
+            opt = SGD(lr=1e-4, momentum=0.9) # for clr
+
+        model.compile(loss='mean_squared_error',
+                      optimizer=opt,
+                      metrics=['mae', r2_krs])
+        self.model = model
+
+
+    def dump_model(self, outdir='.'):
+        """ Dump trained model. """        
+        self.model.save( str(Path(outdir)/'model.h5') )
+
 
 
 class LGBM_REGRESSOR(BaseMLModel):

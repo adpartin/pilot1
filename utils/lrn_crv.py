@@ -27,6 +27,9 @@ from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 from pandas.api.types import is_string_dtype
 from sklearn.preprocessing import LabelEncoder
 
+from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
+from keras.utils import plot_model
+
 # Utils
 import utils
 import ml_models
@@ -34,74 +37,20 @@ import ml_models
 # Import custom callbacks
 keras_contrib = '/vol/ml/apartin/projects/keras-contrib/keras_contrib/callbacks'
 sys.path.append(keras_contrib)
-#from callbacks import *
 from cyclical_learning_rate import CyclicLR
-
-
-# def reg_auroc(y_true, y_pred):
-#     y_true = np.where(y_true < 0.5, 1, 0)
-#     y_score = np.where(y_pred < 0.5, 1, 0)
-#     auroc = sklearn.metrics.roc_auc_score(y_true, y_score)
-#     return auroc
-
-
-# def calc_preds(estimator, xdata, ydata, mltype):
-#     """ Calc predictions. """
-#     if mltype == 'cls':    
-#         if ydata.ndim > 1 and ydata.shape[1] > 1:
-#             y_preds = estimator.predict_proba(xdata)
-#             y_preds = np.argmax(y_preds, axis=1)
-#             y_true = np.argmax(ydata, axis=1)
-#         else:
-#             y_preds = estimator.predict_proba(xdata)
-#             y_preds = np.argmax(y_preds, axis=1)
-#             y_true = ydata
-
-#     elif mltype == 'reg':
-#         y_preds = estimator.predict(xdata)
-#         y_true = ydata
-
-#     return y_preds, y_true
-
-
-# def calc_scores(y_true, y_preds, mltype, metrics=None):
-#     """ Create dict of scores.
-#     Args:
-#         metrics : TODO allow to pass a string of metrics
-#     """
-#     scores = OrderedDict()
-
-#     if mltype == 'cls':    
-#         scores['auroc'] = sklearn.metrics.roc_auc_score(y_true, y_preds)
-#         scores['f1_score'] = sklearn.metrics.f1_score(y_true, y_preds, average='micro')
-#         scores['acc_blnc'] = sklearn.metrics.balanced_accuracy_score(y_true, y_preds)
-
-#     elif mltype == 'reg':
-#         scores['r2'] = sklearn.metrics.r2_score(y_true=y_true, y_pred=y_preds)
-#         scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(y_true=y_true, y_pred=y_preds)
-#         scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(y_true=y_true, y_pred=y_preds)
-#         scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(y_true=y_true, y_pred=y_preds)
-#         scores['auroc_reg'] = reg_auroc(y_true=y_true, y_pred=y_preds)
-
-#     # score_names = ['r2', 'mean_absolute_error', 'median_absolute_error', 'mean_squared_error']
-
-#     # # https://scikit-learn.org/stable/modules/model_evaluation.html
-#     # for metric_name, metric in metrics.items():
-#     #     if isinstance(metric, str):
-#     #         scorer = sklearn.metrics.get_scorer(metric_name) # get a scorer from string
-#     #         scores[metric_name] = scorer(ydata, preds)
-#     #     else:
-#     #         scores[metric_name] = scorer(ydata, preds)
-
-#     return scores
 
 
 def my_learning_curve(X, Y,
                       mltype,
                       model_name='lgb_reg',
-                      cv=5, groups=None,
-                      lrn_crv_ticks=5, data_sizes_frac=None,
-                      args=None, fit_params=None, init_params=None,
+                      init_params=None, 
+                      fit_params=None,
+                      cv=5,
+                      cv_groups=None,
+                      cv_splits=None,
+                      lc_ticks=5,
+                      data_sz_frac=None,
+                      args=None,
                       metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'neg_mean_squared_error'],
                       n_jobs=1, random_state=None, logger=None, outdir='.'):
     """
@@ -112,9 +61,10 @@ def my_learning_curve(X, Y,
         Y : target
         mltype : type to ML problem (`reg` or `cls`)
         cv : number cv folds or sklearn's cv splitter --> scikit-learn.org/stable/glossary.html#term-cv-splitter
-        groups : groups for the cv splits (used for strict cv partitions --> non-overlapping cell lines)
-        lrn_crv_ticks : number of ticks in the learning curve (used if data_sizes_frac is None)
-        data_sizes_frac : relative numbers of training samples that will be used to generate learning curves
+        cv_splits : tuple of 2 dicts cv_splits[0] and cv_splits[1] contain the tr and vl splits, respectively 
+        cv_groups : groups for the cv splits (used for strict cv partitions --> non-overlapping cell lines)
+        lc_ticks : number of ticks in the learning curve (used if data_sz_frac is None)
+        data_sz_frac : relative numbers of training samples that will be used to generate learning curves
         fit_params : dict of parameters to the estimator's "fit" method
 
         metrics : allow to pass a string of metrics  TODO!
@@ -122,84 +72,101 @@ def my_learning_curve(X, Y,
 
     Examples:
         cv = sklearn.model_selection.KFold(n_splits=5, shuffle=False, random_state=0)
-        lrn_curve.my_learning_curve(X=xdata, Y=ydata, mltype='reg', cv=cv, lrn_crv_ticks=5)
-    """  
+        lrn_curve.my_learning_curve(X=xdata, Y=ydata, mltype='reg', cv=cv, lc_ticks=5)
+    """ 
     X = pd.DataFrame(X).values
     Y = pd.DataFrame(Y).values
 
-    # TODO: didn't test!
-    if isinstance(cv, int) and groups is None:
-        cv_folds = cv
-        cv = KFold(n_splits=cv_folds, shuffle=False, random_state=random_state)
-    if isinstance(cv, int) and groups is not None:
-        cv_folds = cv
-        cv = GroupKFold(n_splits=cv_folds)
+    # --------------------------------
+    # Store splits of indices in dicts 
+    # --------------------------------
+    tr_dct = {}
+    vl_dct = {}
+
+    # Use splits passed as input arg
+    if cv_splits is not None:
+        tr_id = cv_splits[0]
+        vl_id = cv_splits[1]
+        assert tr_id.shape[1]==vl_id.shape[1], 'tr and vl must have the same of folds.'
+        cv_folds = tr_id.shape[1]
+
+        for i in range(tr_id.shape[1]):
+            tr_dct[i] = tr_id.iloc[:, i].dropna().values.astype(int).tolist()
+            vl_dct[i] = vl_id.iloc[:, i].dropna().values.astype(int).tolist()
+
+        if tr_id.shape[1] == 1:
+            vl_size = vl_id.shape[0]/(vl_id.shape[0] + tr_id.shape[0])
+
+    # Generate splits on the fly
     else:
-        cv_folds = cv.get_n_splits()
+        # TODO: didn't test!
+        if isinstance(cv, int) and cv_groups is None:
+            cv_folds = cv
+            cv = KFold(n_splits=cv_folds, shuffle=False, random_state=random_state)
+        if isinstance(cv, int) and cv_groups is not None:
+            cv_folds = cv
+            cv = GroupKFold(n_splits=cv_folds)
+        else:
+            cv_folds = cv.get_n_splits() # cv is a sklearn splitter
+
+        if cv_folds == 1:
+            vl_size = cv.test_size
+
+        # Encode the group labels
+        if is_string_dtype(cv_groups):
+            grp_enc= LabelEncoder()
+            cv_grp = grp_enc.fit_transform(cv_grp)
+    
+        # Create sklearn splitter 
+        if mltype == 'cls':
+            if Y.ndim > 1 and Y.shape[1] > 1:
+                splitter = cv.split(X, np.argmax(Y, axis=1), groups=cv_grp)
+            else:
+                splitter = cv.split(X, Y, groups=cv_grp)
+        elif mltype == 'reg':
+            splitter = cv.split(X, Y, groups=cv_grp)
+        
+        # Generate the splits
+        for i, (tr_vec, vl_vec) in enumerate(splitter):
+            tr_dct[i] = tr_vec
+            vl_dct[i] = vl_vec
+
 
     # Define training set sizes
-    if data_sizes_frac is None:
-        #data_sizes_frac = np.linspace(0.1, 1.0, lrn_crv_ticks)
+    if data_sz_frac is None:
+        # data_sz_frac = np.linspace(0.1, 1.0, lc_ticks) # linear spacing
         base = 10
-        data_sizes_frac = np.logspace(0.0, 1.0, lrn_crv_ticks, endpoint=True, base=base)/base
+        data_sz_frac = np.logspace(0.0, 1.0, lc_ticks, endpoint=True, base=base)/base # log spacing
 
     if cv_folds == 1:
-        tr_sizes = [int(n) for n in (1-cv.test_size) * X.shape[0] * data_sizes_frac]
+        # tr_sizes = [int(n) for n in (1-cv.test_size) * X.shape[0] * data_sz_frac]
+        tr_sizes = [int(n) for n in (1-vl_size) * X.shape[0] * data_sz_frac]
     elif cv_folds > 1:
-        tr_sizes = [int(n) for n in (cv_folds-1)/cv_folds * X.shape[0] * data_sizes_frac]
+        tr_sizes = [int(n) for n in (cv_folds-1)/cv_folds * X.shape[0] * data_sz_frac]
 
     if logger is not None:
         logger.info('Train sizes: {}'.format(tr_sizes))
 
-    # Define comet experiments dict
-    if (args is not None) and ('comet' in set(args)):
-        comet_exp_dict = {}
-    
-    
-    # ---------------------------------------------------------------
-    # Method 1
-    # ---------------------------------------------------------------
-    if is_string_dtype(groups):
-        grp_enc= LabelEncoder()
-        groups = grp_enc.fit_transform(groups)
     
     # Now start nested loop of train size and cv folds
     tr_scores_all = [] # list of dicts
     vl_scores_all = [] # list of dicts
 
-    if mltype == 'cls':
-        if Y.ndim > 1 and Y.shape[1] > 1:
-            splitter = cv.split(X, np.argmax(Y, axis=1), groups=groups)
-        else:
-            splitter = cv.split(X, Y, groups=groups)
-    elif mltype == 'reg':
-        splitter = cv.split(X, Y, groups=groups)
-
     # CV loop
-    for fold_id, (tr_idx, vl_idx) in enumerate(splitter):
+    for fold_id, (tr_k, vl_k) in enumerate(zip( tr_dct.keys(), vl_dct.keys() )):
         if logger is not None:
             logger.info(f'Fold {fold_id+1}/{cv_folds}')
 
+        tr_id = tr_dct[tr_k]
+        vl_id = vl_dct[vl_k]
+
         # Samples from this dataset are sampled for training
-        xtr = X[tr_idx, :]
-        ytr = Y[tr_idx, :]
+        xtr = X[tr_id, :]
+        ytr = Y[tr_id, :]
 
         # A fixed set of validation samples for the current CV split
-        xvl = X[vl_idx, :]
-        yvl = np.squeeze(Y[vl_idx, :])        
-
-        # # Confirm that group splits are correct ...
-        # tr_grps_unq = set(groups[tr_idx])
-        # vl_grps_unq = set(groups[vl_idx])
-        # print('Total group (e.g., cell) intersections btw tr and vl: ', len(tr_grps_unq.intersection(vl_grps_unq)))
-        # print('A few intersections : ', list(tr_grps_unq.intersection(vl_grps_unq))[:3])
-
-        # Comet
-        # TODO: is this redundend?? --> used in top6_lrn_crv.py
-        #if (args is not None) and set(('comet_prj_name', 'comet_set_name')).issubset(set(args)):
-        #    comet_api_key = os.environ.get('COMET_API_KEY')
-        #    comet_prj_name = args['comet_prj_name']
-        #    comet_set_name = args['comet_set_name']
+        xvl = X[vl_id, :]
+        yvl = np.squeeze(Y[vl_id, :])        
 
         # Start run across data sizes
         idx = np.random.permutation(len(xtr))
@@ -207,25 +174,7 @@ def my_learning_curve(X, Y,
             if logger:
                 logger.info(f'    Train size: {tr_sz} ({i+1}/{len(tr_sizes)})')   
 
-            # Comet
-            # if (args is not None) and set(('comet_prj_name', 'comet_set_name')).issubset(set(args)):
-            if (args is not None) and ('comet' in set(args)):
-                comet_exp = Experiment(api_key=os.environ.get('COMET_API_KEY'),
-                                       project_name=args['comet']['comet_prj_name'])
-                comet_exp.set_name(args['comet']['comet_set_name'])
-                comet_exp.add_tag(f'trn size {tr_sz}')
-                # comet_exp_dict[tr_sz] = comet_exp
-                
-#             if (args is not None) and ('comet' in set(args)):
-#                 # comet_exp = comet_exp_dict[tr_sz]
-#                 comet_exp = Experiment(api_key=os.environ.get('COMET_API_KEY'),
-#                                        project_name=args['comet_prj_name'])
-#                 comet_exp.set_name(args['comet_set_name'])
-#                 comet_exp.add_tag(f'trn size {tr_sz}')
-#                 comet_exp_dict[tr_sz] = comet_exp
-                
-                                
-            # Sequentially get subset of samples (the input dataset X must be shuffled)
+            # Sequentially get a subset of samples (the input dataset X must be shuffled)
             xtr_sub = xtr[idx[:tr_sz], :]
             ytr_sub = np.squeeze(ytr[idx[:tr_sz], :])            
             #sub_grps = groups[idx[:tr_sz]]
@@ -234,8 +183,6 @@ def my_learning_curve(X, Y,
             estimator = ml_models.get_model(model_name, init_params=init_params)
 
             if 'nn' in model_name:
-                from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
-                from keras.utils import plot_model
                 plot_model(estimator.model, to_file=outdir/'nn_model.png')
 
                 # Create output dir
@@ -278,7 +225,7 @@ def my_learning_curve(X, Y,
 
             if 'nn' in model_name:
                 ml_models.plot_prfrm_metrics(history=history, title=f'Train size: {tr_sz}',
-                                             skp_ep=5, add_lr=True, outdir=out_nn_model)
+                                             skp_ep=20, add_lr=True, outdir=out_nn_model)
 
             # Add info
             tr_scores['tr_set'] = True
@@ -304,66 +251,14 @@ def my_learning_curve(X, Y,
     tr_df = scores_to_df(tr_scores_all)
     vl_df = scores_to_df(vl_scores_all)
     scores_all_df = pd.concat([tr_df, vl_df], axis=0)
-    # ---------------------------------------------------------------
-
-    # ---------------------------------------------------------------
-    # Method 2
-    # ---------------------------------------------------------------
-    #  # Define training set sizes
-    # if data_sizes_frac is None:
-    #     data_sizes_frac = np.linspace(0.1, 1.0, lrn_crv_ticks)
-    # data_sizes = [int(n) for n in X.shape[0]*data_sizes_frac]
-
-    # if logger is not None:
-    #     logger.info('Dataset sizes: {}'.format(data_sizes))
-
-    # # List to collect cv trianing scores for different data sizes
-    # scores_all_list = [] 
-    
-    # # Start run across data sizes
-    # for d_size in data_sizes:
-    #     if logger:
-    #         logger.info(f'Data size: {d_size}')      
-
-    #     xdata = X.iloc[idx[:d_size], :]
-    #     ydata = Y[idx[:d_size]]
-    #     sub_groups = groups[idx[:d_size]]
-
-    #     cv_scores = cross_validate(
-    #         estimator=sklearn.base.clone(estimator),
-    #         X=xdata, y=ydata,
-    #         scoring=metrics, cv=cv, groups=sub_groups,
-    #         n_jobs=n_jobs, fit_params=fit_params)
-
-    #     df = utils.update_cross_validate_scores(cv_scores)
-    #     df.insert(loc=df.shape[1]-cv_folds, column='tr_size', value=d_size)
-                
-    #     # Append results to master df
-    #     scores_all_list.append(df)
-
-    # # Concat results for data_sizes
-    # scores_all_df = pd.concat(scores_all_list, axis=0).reset_index(drop=True)
-    # ---------------------------------------------------------------   
 
     # Plot learning curves
-    figs = plt_learning_curve_multi_metric(df=scores_all_df, cv_folds=cv_folds,
-                                           outdir=outdir, args=args)
-    
-    # Comet log figs
-#     if (args is not None) and ('comet_prj_name' in args):
-#         for i, f in enumerate(figs):
-#             experiment.log_figure(figure_name=f'trn_size {train_sizes[i]}', figure=f, overwrite=True)
-    if (args is not None) and ('comet' in set(args)):
-        for i, f in enumerate(figs):
-            # comet_exp.log_figure(figure_name=f'trn_size {train_sizes[i]}', figure=f, overwrite=True)
-            comet_exp.log_figure(figure_name=f'Fig{i+1}', figure=f, overwrite=True)
-            # comet_exp_dict[train_sizes[i]].log_figure(figure_name=f'trn_size {train_sizes[i]}', figure=f, overwrite=True)
-
+    figs = plt_lrn_crv_multi_metric(df=scores_all_df, cv_folds=cv_folds, outdir=outdir, args=args)
     
     return scores_all_df
 
 
-def plt_learning_curve_multi_metric(df, cv_folds, outdir, args=None):
+def plt_lrn_crv_multi_metric(df, cv_folds, outdir, args=None):
     """
     Args:
         df : contains train and val scores for cv folds (the scores are the last cv_folds cols)
@@ -401,22 +296,17 @@ def plt_learning_curve_multi_metric(df, cv_folds, outdir, args=None):
         rslt.append(tr.values)
         rslt.append(vl.values)
 
-        if (args is not None) and set(('target_name', 'train_sources')).issubset(set(args)):
-            fname = 'learning_curve_' + args['target_name'] + '_' + metric_name + '.png'
-            title = 'Learning curve (target: {}, data: {})'.format(args['target_name'], '_'.join(args['train_sources']))
-        else:
-            fname = 'learning_curve_' + metric_name + '.png'
-            title = 'Learning curve'
+        fname = 'lrn_crv_' + metric_name + '.png'
+        title = 'Learning curve'
 
         path = outdir / fname
-        fig = plt_learning_curve(rslt=rslt, metric_name=metric_name,
-                                 title=title, path=path)
+        fig = plt_lrn_crv(rslt=rslt, metric_name=metric_name, title=title, path=path)
         figs.append(fig)
         
     return figs
 
 
-def plt_learning_curve(rslt, metric_name='score', ylim=None, title=None, path=None):
+def plt_lrn_crv(rslt, metric_name='score', ylim=None, title=None, path=None):
     """ 
     Args:
         rslt : output from sklearn.model_selection.learning_curve()

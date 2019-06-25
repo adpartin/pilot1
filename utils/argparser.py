@@ -188,8 +188,7 @@ def get_cli_args(args=None):
     parser.add_argument('-sc', '--scaler',
         # default=0.2,
         type=str,
-        choices=['stnd', 'minmax', 'rbst'],
-        help='Feature scaler (primarily for neural networks).')                                       
+        choices=['stnd', 'minmax', 'rbst'])
     parser.add_argument('--opt',
         # default=["lgb_reg"],
         type=str,

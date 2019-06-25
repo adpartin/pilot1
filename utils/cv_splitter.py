@@ -22,7 +22,7 @@ from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 
 
 def cv_splitter(cv_method: str='simple', cv_folds: int=1, test_size: float=0.2,
-                mltype: str='reg', shuffle: bool=True, random_state=None):
+                mltype: str='reg', shuffle: bool=False, random_state=None):
     """ Creates a cross-validation splitter.
     Args:
         cv_method: 'simple', 'stratify' (only for classification), 'groups' (only for regression)
@@ -42,7 +42,7 @@ def cv_splitter(cv_method: str='simple', cv_folds: int=1, test_size: float=0.2,
             if cv_folds == 1:
                 cv = StratifiedShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=random_state)
             else:
-                cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+                cv = StratifiedKFold(n_splits=cv_folds, shuffle=shuffle, random_state=random_state)
 
     # Regression
     elif mltype == 'reg':
@@ -57,7 +57,7 @@ def cv_splitter(cv_method: str='simple', cv_folds: int=1, test_size: float=0.2,
             if cv_folds == 1:
                 cv = ShuffleSplit(n_splits=cv_folds, test_size=test_size, random_state=random_state)
             else:
-                cv = KFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+                cv = KFold(n_splits=cv_folds, shuffle=shuffle, random_state=random_state)
     return cv
 
 
@@ -79,6 +79,8 @@ def plot_ytr_yvl_dist(ytr, yvl, title=None, outpath='.'):
         plt.savefig(outpath, bbox_inches='tight')
 
 
+
+# ------------------------------------------------------------------------------
 class SimpleSplit():
     """ Split data using KFold or ShuffleSplit.
     This class supports both single split (i.e. single tr/vl split) or multiple splits via kfold splits.
@@ -159,32 +161,5 @@ class GroupSplit():
             print(f'\nSplit {i}')
             print(f'Train size {len(self.groups[tr_idx])}, unique groups {len(np.unique(self.groups[tr_idx]))}')
             print(f'Val size   {len(self.groups[vl_idx])}, unique groups {len(np.unique(self.groups[vl_idx]))}')
-
-
-
-# class StratifiedSplit():
-#     def __init__(kfolds=1, test_size=0.2, random_state=None):
-#         self.random_state = random_state
-#         self.kfolds = kfolds
-#         if kfolds == 1:
-#             self.test_size = test_size
-
-
-def plot_ytr_yvl_dist(ytr, yvl, title=None, outpath=None):
-    """ Plot distributions of response data of train and val sets. """
-    fig, ax = plt.subplots()
-    plt.hist(ytr, bins=100, label='ytr', color='b', alpha=0.5)
-    plt.hist(yvl, bins=100, label='yvl', color='r', alpha=0.5)
-    if title is None:
-        title = ''
-    plt.title(title)
-    plt.tight_layout()
-    plt.grid(True)
-    plt.legend()
-    # plt.savefig(os.path.join(outpath, title+'_ytr_yvl_dist.png'), bbox_inches='tight')
-    if outpath is None:
-        plt.savefig('ytr_yvl_dist.png', bbox_inches='tight')
-    else:
-        plt.savefig(outpath, bbox_inches='tight')
 
 
