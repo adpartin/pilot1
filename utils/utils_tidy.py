@@ -420,7 +420,7 @@ def break_src_data(data:pd.DataFrame, target:str='AUC', scaler='stnd', target_tr
   
     # Get ydata 
     ydata = data[target]
-    data.drop(columns=target, inplace=True)
+    # data.drop(columns=target, inplace=True)
    
     # Transform the target
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.boxcox.html
@@ -473,7 +473,7 @@ def make_colnames_gbm_compatible(df):
     return df
 
 
-def extract_subset_fea(data, fea_list):
+def extract_subset_fea(data, fea_list, fea_sep='.'):
     """ Extract a subset of features for training.
     Args:
         data : tidy dataset (df contains multiple cols including features, meta, and target)
@@ -483,7 +483,6 @@ def extract_subset_fea(data, fea_list):
     """
     fea_data, other_data = split_fea_and_other_cols(data)
     fea_prfx_list = [fea_prfx_dict[fea] for fea in fea_list if fea in fea_prfx_dict.keys()]
-    fea_sep = '.'
     fea = [c for c in fea_data.columns if (c.split(fea_sep)[0] + fea_sep) in fea_prfx_list]
     fea_data = fea_data[fea].reset_index(drop=True)
 

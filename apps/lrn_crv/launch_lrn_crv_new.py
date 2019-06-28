@@ -229,9 +229,7 @@ def run(args):
                 # Get the data
                 datapath = DATADIR/subdir/DATAFILENAME
                 data = pd.read_parquet(datapath, engine='auto', columns=None)
-                xdata, ydata, _, _ = break_src_data(
-                        data, target=target_name,
-                        scaler=None) # logger=lg.logger
+                xdata, ydata, _, _ = break_src_data(data, target=target_name, scaler=None) # logger=lg.logger
          
                 dfs[src] = (ydata, xdata, tr_id, vl_id)
                 del data, xdata, ydata, tr_id, vl_id, src
@@ -285,10 +283,10 @@ def run(args):
         elif model_name == 'nn_reg':
             init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'attn': attn, 'logger': lg.logger}
             fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1} 
-        elif model_name == 'nn_model0' or 'nn_model1' or 'nn_model2':
+        elif model_name == 'nn_reg0' or 'nn_reg1' or 'nn_reg2':
             init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
             fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
-        elif model_name == 'nn_model3' or 'nn_model4':
+        elif model_name == 'nn_reg3' or 'nn_reg4':
             init_prms = {'in_dim_rna': None, 'in_dim_dsc': None, 'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
             fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
 
@@ -410,7 +408,7 @@ def main(args):
     # ML models
     parser.add_argument('-ml', '--model_name',
         default='lgb_reg', type=str, 
-        choices=['lgb_reg', 'rf_reg', 'nn_reg', 'nn_model0', 'nn_model1', 'nn_model2', 'nn_model3', 'nn_model4'],
+        choices=['lgb_reg', 'rf_reg', 'nn_reg', 'nn_reg0', 'nn_reg1', 'nn_reg2', 'nn_reg3', 'nn_reg4'],
         help='ML model to use for training (default: `lgb_reg`).')
 
     # NN hyper_params

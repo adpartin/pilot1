@@ -63,16 +63,16 @@ def get_model(model_name, init_params=None):
         model = RF_REGRESSOR(**init_params)
     elif model_name == 'nn_reg':
         model = KERAS_REGRESSOR(**init_params)
-    elif model_name == 'nn_model0':
-        model = NN_MODEL0(**init_params)
-    elif model_name == 'nn_model1':
-        model = NN_MODEL1(**init_params)
-    elif model_name == 'nn_model2':
-        model = NN_MODEL2(**init_params)
-    elif model_name == 'nn_model3':
-        model = NN_MODEL3(**init_params)
-    elif model_name == 'nn_model4':
-        model = NN_MODEL4(**init_params)
+    elif model_name == 'nn_reg0':
+        model = NN_REG0(**init_params)
+    elif model_name == 'nn_reg1':
+        model = NN_REG1(**init_params)
+    elif model_name == 'nn_reg2':
+        model = NN_REG2(**init_params)
+    elif model_name == 'nn_reg3':
+        model = NN_REG3(**init_params)
+    elif model_name == 'nn_reg4':
+        model = NN_REG4(**init_params)
     else:
         raise ValueError('model_name is invalid.')
     return model
@@ -302,8 +302,8 @@ class KERAS_REGRESSOR(BaseMLModel):
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
         elif opt_name == 'adam':
-            # opt = Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False) # original
-            opt = Adam(lr=1e-4, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+            opt = Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False) # original
+            # opt = Adam(lr=1e-4, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
             # opt = Adam(lr=1e-4, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True)
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
@@ -328,9 +328,9 @@ class KERAS_REGRESSOR(BaseMLModel):
 #         weightpath = os.path.join(outdir, 'weights.' + KERAS_REGRESSOR.model_name + '.h5')
 #         self.model.save_weights(weightpath)
 
-class NN_MODEL0(BaseMLModel):
+class NN_REG0(BaseMLModel):
     """ Neural network regressor. """
-    model_name = 'nn_model0'
+    model_name = 'nn_reg0'
 
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
@@ -362,7 +362,7 @@ class NN_MODEL0(BaseMLModel):
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
         elif opt_name == 'adam':
-            opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+            opt = Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
@@ -372,9 +372,9 @@ class NN_MODEL0(BaseMLModel):
         self.model = model
 
 
-class NN_MODEL1(BaseMLModel):
+class NN_REG1(BaseMLModel):
     """ Neural network regressor. """
-    model_name = 'nn_model1'
+    model_name = 'nn_reg1'
 
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
@@ -409,7 +409,7 @@ class NN_MODEL1(BaseMLModel):
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
         elif opt_name == 'adam':
-            opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+            opt = Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
@@ -425,9 +425,9 @@ class NN_MODEL1(BaseMLModel):
         
 
 
-class NN_MODEL2(BaseMLModel):
+class NN_REG2(BaseMLModel):
     """ Neural network regressor. """
-    model_name = 'nn_model2'
+    model_name = 'nn_reg2'
 
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
@@ -458,7 +458,7 @@ class NN_MODEL2(BaseMLModel):
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
         elif opt_name == 'adam':
-            opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+            opt = Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
@@ -474,9 +474,9 @@ class NN_MODEL2(BaseMLModel):
         
 
 
-class NN_MODEL3(BaseMLModel):
+class NN_REG3(BaseMLModel):
     """ Neural network regressor. """
-    model_name = 'nn_model3'
+    model_name = 'nn_reg3'
 
     def __init__(self, in_dim_rna, in_dim_dsc, dr_rate=0.2, opt_name='sgd', logger=None):
         # https://keras.io/getting-started/functional-api-guide/
@@ -520,7 +520,7 @@ class NN_MODEL3(BaseMLModel):
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
         elif opt_name == 'adam':
-            opt = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+            opt = Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 

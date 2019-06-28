@@ -109,7 +109,7 @@ def run(args):
         fname = prffx + '_cv_' + cv_method
 
     run_outdir = OUTDIR/fname
-    os.makedirs(run_outdir)
+    os.makedirs(run_outdir, exist_ok=True)
     logfilename = run_outdir/'logfile.log'
     lg = Logger(logfilename)
 
@@ -143,6 +143,8 @@ def run(args):
         data = get_data_by_src( data, src_names=src_names, logger=lg.logger )
         xdata, ydata, meta, tr_scaler = break_src_data( data, target=target_name, scaler=None, logger=lg.logger)
         ydata = pd.DataFrame(ydata)
+    
+        meta.to_parquet(run_outdir/'meta.parquet', engine='auto', compression='snappy')
 
     # Dump data
     xdata = xdata.reset_index(drop=True)

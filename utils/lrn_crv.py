@@ -153,9 +153,9 @@ def my_learning_curve(X, Y,
     vl_scores_all = [] # list of dicts
 
     # CV loop
-    for fold_id, (tr_k, vl_k) in enumerate(zip( tr_dct.keys(), vl_dct.keys() )):
+    for fold, (tr_k, vl_k) in enumerate(zip( tr_dct.keys(), vl_dct.keys() )):
         if logger is not None:
-            logger.info(f'Fold {fold_id+1}/{cv_folds}')
+            logger.info(f'Fold {fold+1}/{cv_folds}')
 
         tr_id = tr_dct[tr_k]
         vl_id = vl_dct[vl_k]
@@ -186,7 +186,7 @@ def my_learning_curve(X, Y,
                 plot_model(estimator.model, to_file=outdir/'nn_model.png')
 
                 # Create output dir
-                out_nn_model = outdir / ('cv'+str(fold_id+1) + '_sz'+str(tr_sz))
+                out_nn_model = outdir / ('cv'+str(fold+1) + '_sz'+str(tr_sz))
                 os.makedirs(out_nn_model, exist_ok=False)
                 
                 # Callbacks (custom)
@@ -230,8 +230,8 @@ def my_learning_curve(X, Y,
             # Add info
             tr_scores['tr_set'] = True
             vl_scores['tr_set'] = False
-            tr_scores['fold'] = 'f'+str(fold_id)
-            vl_scores['fold'] = 'f'+str(fold_id)
+            tr_scores['fold'] = 'f'+str(fold)
+            vl_scores['fold'] = 'f'+str(fold)
             tr_scores['tr_size'] = tr_sz
             vl_scores['tr_size'] = tr_sz
 
@@ -246,7 +246,7 @@ def my_learning_curve(X, Y,
         tr_df_tmp = scores_to_df(tr_scores_all)
         vl_df_tmp = scores_to_df(vl_scores_all)
         scores_all_df_tmp = pd.concat([tr_df_tmp, vl_df_tmp], axis=0)
-        scores_all_df_tmp.to_csv(outdir / (model_name + '_lrn_crv_scores_cv' + str(fold_id+1) + '.csv'), index=False)
+        scores_all_df_tmp.to_csv(outdir / (model_name + '_lrn_crv_scores_cv' + str(fold+1) + '.csv'), index=False)
 
     tr_df = scores_to_df(tr_scores_all)
     vl_df = scores_to_df(vl_scores_all)
