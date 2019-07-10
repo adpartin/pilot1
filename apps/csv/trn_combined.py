@@ -3,13 +3,11 @@ from __future__ import print_function, division
 import warnings
 warnings.filterwarnings('ignore')
 
-# from comet_ml import Experiment
 import os
-
 import sys
 from pathlib import Path
 import psutil
-import datetime
+from datetime import datetime
 from time import time
 from pprint import pprint
 
@@ -26,8 +24,7 @@ from scipy import stats
 np.set_printoptions(precision=3)
 
 from sklearn.utils.class_weight import compute_class_weight
-from sklearn.model_selection import learning_curve
-from sklearn.model_selection import cross_val_score, cross_validate, learning_curve
+from sklearn.model_selection import cross_val_score, cross_validate
 
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import ShuffleSplit, KFold
@@ -59,14 +56,30 @@ from cvrun import my_cross_validate
 
 # Path
 PRJ_NAME = file_path.name
-DATADIR = file_path / '../../data/processed/from_combined/tidy_drop_fibro'
+# DATADIR = file_path / '../../data/processed/from_combined/tidy_drop_fibro'
+DATADIR = file_path / '../../data/processed/from_combined'
 OUTDIR = file_path / '../../out/' / PRJ_NAME
-DATAFILENAME = 'tidy_data.parquet'
+# DATAFILENAME = 'tidy_data.parquet'
 CONFIGFILENAME = 'config_prms.txt'
 os.makedirs(OUTDIR, exist_ok=True)
 
 
-def run(args):
+def create_outdir(outdir, args):
+    t = datetime.now()
+    t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
+    t = ''.join([str(i) for i in t])
+    
+    l = [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']] 
+    if 'nn' in args['model_name']:
+        l = [args['opt']] + l
+                
+    name_sffx = '.'.join( args['train_sources'] + [args['model_name']] + l )
+    outdir = Path(outdir) / (name_sffx + '_' + t)
+    os.makedirs(outdir)
+    return outdir
+
+
+def run(args):    
     outdir = args['outdir']
     target_name = args['target_name']
     target_transform = args['target_transform']    
@@ -93,11 +106,15 @@ def run(args):
     opt_name = args['opt']
     attn = args['attn']
 
-    # Extract ml type ('reg' or 'cls')
-    mltype = args['model_name'].split('_')[-1]
-    #assert mltype in ['reg', 'cls'], "mltype should be either 'reg' or 'cls'."    
-    if mltype not in ['reg', 'cls']:
+    # ML type ('reg' or 'cls')
+    if 'reg' in model_name:
         mltype = 'reg'
+    elif 'cls' in model_name:
+        mltype = 'cls'
+    else:
+        raise ValueError('`model_name` must contain `reg` or `cls`.')    
+    
+    grp_by_col = 'CELL'
     
     # Feature list
     fea_list = cell_fea + drug_fea + other_fea
@@ -127,7 +144,8 @@ def run(args):
     # ========================================================================
     #       Logger
     # ========================================================================
-    run_outdir = utils.create_outdir(outdir, args=args)
+    # run_outdir = utils.create_outdir(outdir, args=args)
+    run_outdir = create_outdir(outdir, args=args)
     logfilename = run_outdir/'logfile.log'
     lg = Logger(logfilename)
 
@@ -142,6 +160,11 @@ def run(args):
     # ========================================================================
     #       Load data
     # ========================================================================
+    rna_norm = args['rna_norm']
+    if args['no_fibro']:
+        DATAFILENAME = f'tidy_{rna_norm}_no_fibro.parquet'
+    else:
+        DATAFILENAME = f'tidy_{rna_norm}.parquet'
     datapath = DATADIR / DATAFILENAME
 
     dataset = load_tidy_combined(
@@ -160,7 +183,7 @@ def run(args):
     # ========================================================================
     figpath = run_outdir/'figs'
     os.makedirs(figpath, exist_ok=True)
-   
+    
     utils.boxplot_rsp_per_drug(tr_data, target_name=target_name,
         path=figpath / f'{target_name}_per_drug_boxplot.png')
 
@@ -181,15 +204,15 @@ def run(args):
     if cv_method=='simple':
         groups = None
     elif cv_method=='group':
-        groups = tr_data['CELL'].copy()
+        groups = tr_data[grp_by_col].copy()
 
 
     # ========================================================================
     #       CV training
     # ========================================================================
-    lg.logger.info('\n{}'.format('='*50))
+    lg.logger.info('\n{}'.format('=' * 50))
     lg.logger.info(f'CV training ... {tr_sources}')
-    lg.logger.info('='*50)
+    lg.logger.info('=' * 50)
 
     # ML model params
     if model_name == 'lgb_reg':
@@ -197,11 +220,13 @@ def run(args):
         fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10, 'sample_weight': sample_weight
     elif model_name == 'nn_reg':
         init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'attn': attn, 'logger': lg.logger}
-        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
-    elif model_name == 'nn_model1' or 'nn_model2':
+        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1} 
+    elif model_name == 'nn_reg0' or 'nn_reg1' or 'nn_reg2':
         init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
         fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
-
+    elif model_name == 'nn_reg3' or 'nn_reg4':
+        init_prms = {'in_dim_rna': None, 'in_dim_dsc': None, 'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
+        fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
 
     # -----------------
     # sklearn CV method - (doesn't work with keras)
@@ -257,9 +282,9 @@ def run(args):
     #       Train final model (entire dataset) TODO: test this!
     # ========================================================================
     if retrain:
-        lg.logger.info('\n{}'.format('='*50))
+        lg.logger.info('\n{}'.format('=' * 50))
         lg.logger.info(f'Train final model (use entire dataset) ... {tr_sources}')
-        lg.logger.info('='*50)
+        lg.logger.info('=' * 50)
 
         # Get the data
         xdata, ydata, _, _ = break_src_data(
@@ -314,9 +339,9 @@ def run(args):
     # ========================================================================
     #       Infer
     # ========================================================================
-    lg.logger.info('\n{}'.format('='*50))
+    lg.logger.info('\n{}'.format('=' * 50))
     lg.logger.info(f'Inference ... {te_sources}')
-    lg.logger.info('='*50)
+    lg.logger.info('=' * 50)
     
     csv = []  # cross-study-validation scores
     for i, te_src in enumerate(te_sources):
@@ -328,8 +353,7 @@ def run(args):
             continue
         
         # Extract test data
-        te_src_data = get_data_by_src(
-            dataset, src_names=[te_src], logger=lg.logger)
+        te_src_data = get_data_by_src( dataset, src_names=[te_src], logger=lg.logger )
         
         if te_src_data.shape[0] == 0:
             continue  # continue if there are no data samples available for this source
@@ -349,7 +373,7 @@ def run(args):
 
         # Calc scores
         # scores = model_final.calc_scores(xdata=xte, ydata=yte, to_print=True)
-        y_preds, y_true = utils.calc_preds(estimator=model_final.model, x=xte, y=yte, mltype=mltype)
+        y_preds, y_true = utils.calc_preds(model_final.model, x=xte, y=yte, mltype=mltype)
         scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype)
         csv.append( pd.DataFrame([scores], index=[te_src]).T )
         

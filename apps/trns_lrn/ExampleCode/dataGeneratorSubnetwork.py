@@ -43,9 +43,11 @@ class DataGenerator(keras.utils.Sequence):
             batchIDs = self.ids[(index * self.batch_size):self.numSample]
         else:
             batchIDs = self.ids[(index * self.batch_size):((index + 1) * self.batch_size)]
+            
         # Initialization
         x = []
         y = np.empty(len(batchIDs))
+        
         for j in range(len(self.genomicData)):
             if not self.conv1D:
                 xj = np.empty((len(batchIDs), self.dimGenomicPlat[j]))
@@ -54,6 +56,7 @@ class DataGenerator(keras.utils.Sequence):
                 xj = np.empty((len(batchIDs), self.dimGenomicPlat[j], 1))
                 xj[:, :self.dimGenomicPlat[j], 0] = self.genomicData[j].loc[self.res.iloc[batchIDs]['ccl_name']][:]
             x.append(xj)
+            
         for j in range(len(self.drugData)):
             if not self.conv1D:
                 xj = np.empty((len(batchIDs), self.dimDrugPlat[j]))
@@ -62,6 +65,7 @@ class DataGenerator(keras.utils.Sequence):
                 xj = np.empty((len(batchIDs), self.dimDrugPlat[j], 1))
                 xj[:, :self.dimDrugPlat[j], 0] = self.drugData[j].loc[self.res.iloc[batchIDs]['ctrpDrugID']][:]
             x.append(xj)
+            
         y[:] = self.res.iloc[batchIDs]['area_under_curve']
 
         if self.weight is None:

@@ -23,7 +23,9 @@ dflt_args = {
     'retrain': False,
     'n_jobs': 4,
     'outdir': None,
-
+    
+    'rna_norm': 'raw',
+    'no_fibro': False,
     'dname': 'combined',
 
     # Learning curve
@@ -122,7 +124,7 @@ def get_cli_args(args=None):
     # Select ML models
     parser.add_argument('-ml', '--model_name',
         # default=["lgb_reg"],
-        choices=['lgb_reg', 'rf_reg', 'nn_reg', 'nn_model0', 'nn_model1', 'nn_model2', 'nn_model3', 'nn_model4'],
+        choices=['lgb_reg', 'rf_reg', 'nn_reg', 'nn_reg0', 'nn_reg1', 'nn_reg2', 'nn_reg3', 'nn_reg4'],
         help='ML model to use for training.')
 
     # Select CV scheme
@@ -162,6 +164,16 @@ def get_cli_args(args=None):
         type=str,
         help='Output dir.')    
 
+    # RNA normalization
+    parser.add_argument('--rna_norm',
+        type=str, choices=['raw', 'combat', 'src_scale'],
+        help="default=['raw']")
+
+    # Select data name
+    parser.add_argument('--no_fibro',
+        action='store_true',
+        help='Whether to use data that do not contain fibroblast (Default: False).')    
+    
     # Select data name
     parser.add_argument('--dname',
         type=str, choices=['combined', 'top6'],

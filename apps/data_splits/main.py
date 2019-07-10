@@ -7,16 +7,15 @@ from __future__ import print_function, division
 import warnings
 warnings.filterwarnings('ignore')
 
-# from comet_ml import Experiment
 import os
-
 import sys
+import platform
 from pathlib import Path
 import psutil
 import argparse
 from datetime import datetime
 from time import time
-from pprint import pprint
+from pprint import pprint, pformat
 from collections import OrderedDict
 
 import matplotlib
@@ -55,18 +54,22 @@ OUTDIR = file_path / '../../data/processed' / PRJ_NAME
 def run(args):
     t0 = time()
 
-    dpath = args['dpath'] 
-    dname = args['dname'] # TODO: remove this functionality
+    # dpath = args['dpath'] 
+    dirpath = Path(args['dirpath'])
+
+    # Combined
+    dname = args['dname']
+    rna_norm = args['rna_norm']
+    no_fibro = args['no_fibro']
     src_names = args['src_names']
     
     # Target
-    target_name = args['target_name']
+    # target_name = args['target_name']
 
     # Data splits
     te_method = args['te_method']
     te_size = args['te_size']
     cv_method = args['cv_method']
-    # cv_folds = args['cv_folds']
     
     # Features 
     cell_fea = args['cell_features']
@@ -77,7 +80,7 @@ def run(args):
     # Other params
     n_jobs = args['n_jobs']
 
-    # this is for `combined` TODO: probably need to pass this with meta
+    # This is for `combined` TODO: probably need to pass this with meta
     if dname == 'combined':
         grp_by_col = 'CELL' 
     else:
@@ -85,37 +88,46 @@ def run(args):
         grp_by_col = None
         cv_method = 'simple'
 
-    # Print args
-    pprint(args)
-
     # TODO: this need to be improved
     mltype = 'reg'  # required for the splits (stratify in case of classification)
     
     
     # -----------------------------------------------
-    #       Logger
+    #       Ourdir and Logger
     # -----------------------------------------------
+    # Outdir
+    """
     if dpath is not None: 
         prffx = Path(dpath).name.split('.')[:-1]
         prffx = '_'.join(prffx)
         prffx = 'top6' if 'top6' in prffx else prffx
+    """
+    if dirpath is not None:
+        prffx = dirpath.name
 
     elif dname == 'combined':
         prffx = '_'.join(src_names)
 
+    # fname = prffx + '_' + rna_norm + '_cv_' + cv_method
+    fname = prffx + '_cv_' + cv_method
     if te_method is not None:
-        fname = prffx + '_te_' + te_method + '_cv_' + cv_method
-    else:
-        fname = prffx + '_cv_' + cv_method
+        fname = fname + '_te_' + te_method
 
-    run_outdir = OUTDIR/fname
+    if dname == 'combined':
+        fname = fname + '_' + rna_norm
+        if no_fibro:
+            fname = fname + '_no_fibro'
+
+    run_outdir = OUTDIR / fname
     os.makedirs(run_outdir, exist_ok=True)
+
+    # Logger
     logfilename = run_outdir/'logfile.log'
     lg = Logger(logfilename)
-
-    lg.logger.info(f'File path: {file_path}')
-    lg.logger.info(f'System CPUs: {psutil.cpu_count(logical=True)}')
-    lg.logger.info(f'n_jobs: {n_jobs}')
+    lg.logger.info(datetime.now())
+    lg.logger.info(f'\nFile path: {file_path}')
+    lg.logger.info(f'Machine: {platform.node()} ({platform.system()}, {psutil.cpu_count()} CPUs)')
+    lg.logger.info(f'\n{pformat(args)}')
 
     # Dump args to file
     utils.dump_args(args, run_outdir)        
@@ -124,6 +136,7 @@ def run(args):
     # -----------------------------------------------
     #       Load data and pre-proc
     # -----------------------------------------------
+    """
     if dpath is not None: 
         if dpath.split('.')[-1] == 'parquet': 
             data = pd.read_parquet(dpath, engine='auto', columns=None)
@@ -133,24 +146,33 @@ def run(args):
         # Split features and traget
         ydata = data.loc[:, [target_name]]
         xdata = data.drop(columns=target_name)
+    """
+    if dirpath is not None:
+        if (dirpath/'xdata.parquet').is_file():
+            xdata = pd.read_parquet( dirpath/'xdata.parquet', engine='auto', columns=None )
+            meta = pd.read_parquet( dirpath/'meta.parquet', engine='auto', columns=None )
 
     elif dname == 'combined':
-        DATADIR = file_path / '../../data/processed/from_combined/tidy_drop_fibro'
-        DATAFILENAME = 'tidy_data.parquet'
+        DATADIR = file_path / '../../data/processed/from_combined'
+        file_format = '.parquet'
+        fname = 'tidy_' + rna_norm
+        if no_fibro:
+            fname = fname + '_no_fibro'
+        DATAFILENAME = fname + file_format
         datapath = DATADIR / DATAFILENAME
-    
+
         data = load_tidy_combined( datapath, fea_list=fea_list, shuffle=False, random_state=SEED ) # logger=lg.logger
         data = get_data_by_src( data, src_names=src_names, logger=lg.logger )
-        xdata, ydata, meta, tr_scaler = break_src_data( data, target=target_name, scaler=None, logger=lg.logger)
-        ydata = pd.DataFrame(ydata)
+        xdata, _, meta, tr_scaler = break_src_data( data, target=None, scaler=None, logger=lg.logger)
+        # ydata = pd.DataFrame(ydata)
     
-        meta.to_parquet(run_outdir/'meta.parquet', engine='auto', compression='snappy')
+        #meta.to_parquet(run_outdir/'meta.parquet', engine='auto', compression='snappy')
 
     # Dump data
     xdata = xdata.reset_index(drop=True)
-    ydata = ydata.reset_index(drop=True)
-    xdata.to_parquet(run_outdir/'xdata.parquet', engine='auto', compression='snappy')
-    ydata.to_parquet(run_outdir/'ydata.parquet', engine='auto', compression='snappy')
+    meta = meta.reset_index(drop=True)
+    xdata.to_parquet( run_outdir/'xdata.parquet', engine='auto', compression='snappy' )
+    meta.to_parquet( run_outdir/'meta.parquet', engine='auto', compression='snappy' )
 
 
     # -----------------------------------------------
@@ -169,8 +191,7 @@ def run(args):
             te_grp = te_grp.values[idx_vec]
 
         if is_string_dtype(te_grp):
-            grp_enc = LabelEncoder()
-            te_grp = grp_enc.fit_transform(te_grp)
+            te_grp = LabelEncoder().fit_transform(te_grp)
    
         # Split train/test
         tr_id, te_id = next(te_splitter.split(idx_vec, groups=te_grp))
@@ -180,32 +201,24 @@ def run(args):
         pd.Series(tr_id).to_csv(run_outdir/f'tr_id.csv', index=False, header=False)
         pd.Series(te_id).to_csv(run_outdir/f'te_id.csv', index=False, header=False)
 
-        #te_xdata = xdata.iloc[te_id, :]
-        te_ydata = ydata.iloc[te_id, :] 
-        #tr_xdata = xdata.iloc[tr_id, :]  
-        tr_ydata = ydata.iloc[tr_id, :]  
+        #te_ydata = ydata.iloc[te_id, :] 
+        #tr_ydata = ydata.iloc[tr_id, :]  
         
         # Update the master idx vector for the CV splits
         idx_vec = tr_id
 
-        # Plot dist of responses
-        plot_ytr_yvl_dist(ytr=tr_ydata.values, yvl=te_ydata.values,
-                title='tr and te', outpath=run_outdir/'tr_te_resp_dist.png')
+        # Plot dist of responses (TODO: this can be done to all response metrics)
+        #plot_ytr_yvl_dist(ytr=tr_ydata.values, yvl=te_ydata.values,
+        #        title='tr and te', outpath=run_outdir/'tr_te_resp_dist.png')
 
         # Confirm that group splits are correct
         if te_method=='group' and grp_by_col is not None:
             tr_grps_unq = set(meta.loc[tr_id, grp_by_col])
             vl_grps_unq = set(meta.loc[te_id, grp_by_col])
-            lg.logger.info(f'  Total group ({grp_by_col}) intersections btw tr and te: {len(tr_grps_unq.intersection(te_grps_unq))}.')
-            lg.logger.info(f'  A few intersections : {list(tr_grps_unq.intersection(te_grps_unq))[:3]}.')
+            lg.logger.info(f'\tTotal group ({grp_by_col}) intersections btw tr and te: {len(tr_grps_unq.intersection(te_grps_unq))}.')
+            lg.logger.info(f'\tA few intersections : {list(tr_grps_unq.intersection(te_grps_unq))[:3]}.')
     
-        # Save train/test
-        #tr_xdata.to_parquet(run_outdir/'xdata.parquet', engine='auto', compression='snappy')
-        #tr_ydata.to_parquet(run_outdir/'ydata.parquet', engine='auto', compression='snappy')
-        #te_xdata.to_parquet(run_outdir/'te_xdata.parquet', engine='auto', compression='snappy')
-        #te_ydata.to_parquet(run_outdir/'te_ydata.parquet', engine='auto', compression='snappy')
-
-        del te_xdata, tr_xdata, te_ydata, tr_ydata, te_meta, tr_meta, tr_id, te_id
+        del tr_id, te_id
 
 
     # -----------------------------------------------
@@ -228,8 +241,7 @@ def run(args):
             cv_grp = cv_grp.values[idx_vec]
 
         if is_string_dtype(cv_grp):
-            grp_enc = LabelEncoder()
-            cv_grp = grp_enc.fit_transform(cv_grp)
+            cv_grp = LabelEncoder().fit_transform(cv_grp)
     
         tr_folds = {} 
         vl_folds = {} 
@@ -238,8 +250,6 @@ def run(args):
         for fold, (tr_id, vl_id) in enumerate(cv.split(idx_vec, groups=cv_grp)):
             tr_id = idx_vec[tr_id] # adjust the indices!
             vl_id = idx_vec[vl_id] # adjust the indices!
-            # if lg.logger is not None:
-            #     lg.logger.info(f'Fold {fold+1}/{cv_folds}')
 
             tr_folds[fold] = tr_id.tolist()
             vl_folds[fold] = vl_id.tolist()
@@ -248,9 +258,9 @@ def run(args):
             if cv_method=='group' and grp_by_col is not None:
                 tr_grps_unq = set(meta.loc[tr_id, grp_by_col])
                 vl_grps_unq = set(meta.loc[vl_id, grp_by_col])
-                lg.logger.info(f'  Total group ({grp_by_col}) intersections btw tr and vl: {len(tr_grps_unq.intersection(vl_grps_unq))}.')
-                lg.logger.info(f'   Unique cell lines in tr: {len(tr_grps_unq)}.')
-                lg.logger.info(f'   Unique cell lines in vl: {len(vl_grps_unq)}.')
+                lg.logger.info(f'\tTotal group ({grp_by_col}) intersections btw tr and vl: {len(tr_grps_unq.intersection(vl_grps_unq))}.')
+                lg.logger.info(f'\tUnique cell lines in tr: {len(tr_grps_unq)}.')
+                lg.logger.info(f'\tUnique cell lines in vl: {len(vl_grps_unq)}.')
         
         # Convet to df
         # from_dict takes too long  -->  stackoverflow.com/questions/19736080/
@@ -271,24 +281,34 @@ def main(args):
     parser = argparse.ArgumentParser(description="Generate and save dataset splits.")
 
     # Data path
-    parser.add_argument('--dpath',
-            default=None, type=str,
-            help='Full data path (default: None).')
+    # parser.add_argument('--dpath',
+    #         default=None, type=str,
+    #         help='Full data path (default: None).')
 
+    # Input data
+    parser.add_argument('--dirpath',
+            default=None, type=str,
+            help='Full dir path to the data (default: None).')
+
+    # Combined related params
     # Data name
     parser.add_argument('--dname',
         default=None, choices=['combined'],
         help='Data name (default: None).')
-
-    # Cell line sources 
+    parser.add_argument('--rna_norm',
+        default='raw', choices=['raw', 'combat'],
+        help='RNA normalization (default: `raw`).')
+    parser.add_argument('--no_fibro',
+            action='store_true', default=False,
+            help='Default: False')
     parser.add_argument('-src', '--src_names', nargs='+',
         default=None, choices=['ccle', 'gcsi', 'gdsc', 'ctrp', 'nci60'],
         help='Data sources to use (default: None).')
 
     # Target to predict
-    parser.add_argument('-t', '--target_name',
-        default='AUC', choices=['AUC', 'AUC1', 'IC50'],
-        help='Column name of the target variable (default: `AUC`).')
+    # parser.add_argument('-t', '--target_name',
+    #     default='AUC', choices=['AUC', 'AUC1', 'IC50'],
+    #     help='Column name of the target variable (default: `AUC`).')
 
     # Feature types
     parser.add_argument('-cf', '--cell_features', nargs='+',

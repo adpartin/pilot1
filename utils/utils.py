@@ -12,6 +12,7 @@ import matplotlib
 # matplotlib.use('TkAgg')
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 import seaborn as sns
 from scipy import stats
@@ -84,34 +85,39 @@ def dropna(df, axis=0, th=0.4):
     return df
 
 
-def reg_auroc(y_true, y_pred):
-    """ Compute area under the ROC for regression. TODO: check this func. """
-    y_true = np.where(y_true < 0.5, 1, 0)
-    y_score = np.where(y_pred < 0.5, 1, 0)
-    auroc = sklearn.metrics.roc_auc_score(y_true, y_score)
-    return auroc
+# Define custom metric to calc auroc from regression
+# scikit-learn.org/stable/modules/model_evaluation.html#scoring
+def reg_auroc(y_true, y_pred, th=0.5):
+    """ Compute area under the ROC for regression. """
+    y_true = np.where(y_true < th, 1, 0)
+    y_score = np.where(y_pred < th, 1, 0)
+    reg_auroc_score = sklearn.metrics.roc_auc_score(y_true, y_score)
+    return reg_auroc_score
+
+def reg_auroc_score():
+    return sklearn.metrics.make_scorer(score_func=reg_auroc, greater_is_better=True)    
 
 
 def calc_preds(estimator, x, y, mltype):
     """ Calc predictions. """
     if mltype == 'cls':    
         if y.ndim > 1 and y.shape[1] > 1:
-            y_preds = estimator.predict_proba(x)
-            y_preds = np.argmax(y_preds, axis=1)
+            y_pred = estimator.predict_proba(x)
+            y_pred = np.argmax(y_pred, axis=1)
             y_true = np.argmax(ydata, axis=1)
         else:
-            y_preds = estimator.predict_proba(x)
-            y_preds = np.argmax(y_preds, axis=1)
+            y_pred = estimator.predict_proba(x)
+            y_pred = np.argmax(y_pred, axis=1)
             y_true = y
             
     elif mltype == 'reg':
-        y_preds = estimator.predict(x)
+        y_pred = estimator.predict(x)
         y_true = y
 
-    return y_preds, y_true
+    return y_pred, y_true
 
 
-def calc_scores(y_true, y_preds, mltype, metrics=None):
+def calc_scores(y_true, y_pred, mltype, metrics=None):
     """ Create dict of scores.
     Args:
         metrics : TODO allow to pass a string of metrics
@@ -119,26 +125,24 @@ def calc_scores(y_true, y_preds, mltype, metrics=None):
     scores = OrderedDict()
 
     if mltype == 'cls':    
-        scores['auroc'] = sklearn.metrics.roc_auc_score(y_true, y_preds)
-        scores['f1_score'] = sklearn.metrics.f1_score(y_true, y_preds, average='micro')
-        scores['acc_blnc'] = sklearn.metrics.balanced_accuracy_score(y_true, y_preds)
+        scores['auroc'] = sklearn.metrics.roc_auc_score(y_true, y_pred)
+        scores['f1_score'] = sklearn.metrics.f1_score(y_true, y_pred, average='micro')
+        scores['acc_blnc'] = sklearn.metrics.balanced_accuracy_score(y_true, y_pred)
 
     elif mltype == 'reg':
-        scores['r2'] = sklearn.metrics.r2_score(y_true=y_true, y_pred=y_preds)
-        scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(y_true=y_true, y_pred=y_preds)
-        scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(y_true=y_true, y_pred=y_preds)
-        scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(y_true=y_true, y_pred=y_preds)
-        scores['auroc_reg'] = reg_auroc(y_true=y_true, y_pred=y_preds)
-
-    # score_names = ['r2', 'mean_absolute_error', 'median_absolute_error', 'mean_squared_error']
+        scores['r2'] = sklearn.metrics.r2_score(y_true=y_true, y_pred=y_pred)
+        scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(y_true=y_true, y_pred=y_pred)
+        scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(y_true=y_true, y_pred=y_pred)
+        scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(y_true=y_true, y_pred=y_pred)
+        scores['auroc_reg'] = reg_auroc(y_true=y_true, y_pred=y_pred)
 
     # # https://scikit-learn.org/stable/modules/model_evaluation.html
     # for metric_name, metric in metrics.items():
     #     if isinstance(metric, str):
     #         scorer = sklearn.metrics.get_scorer(metric_name) # get a scorer from string
-    #         scores[metric_name] = scorer(ydata, preds)
+    #         scores[metric_name] = scorer(ydata, pred)
     #     else:
-    #         scores[metric_name] = scorer(ydata, preds)
+    #         scores[metric_name] = scorer(ydata, pred)
 
     return scores
 
@@ -199,25 +203,6 @@ def cv_scores_to_df(cv_scores, decimals=3, calc_stats=False):
 #     return adj_r2
 
 
-# def calc_scores(model, xdata, ydata):
-#     """ Create dict of scores. """
-#     # TODO: replace `if` with `try`
-#     preds = model.predict(xdata)
-#     scores = OrderedDict()
-#     scores['r2_score'] = sklearn.metrics.r2_score(ydata, preds)
-#     scores['adj_r2_score'] = adj_r2_score(ydata, preds, x_size=xdata.shape)
-#     scores['mean_abs_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
-#     scores['median_abs_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
-#     # scores['explained_variance_score'] = sklearn.metrics.explained_variance_score(ydata, preds)
-    
-#     scores['r2'] = sklearn.metrics.r2_score(ydata, preds)
-#     #scores['adj_r2_score'] = self.__adj_r2_score(ydata, preds)
-#     scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
-#     scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
-#     scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(ydata, preds)
-#     return scores
-
-    
 def print_scores(model, xdata, ydata, logger=None):
     preds = model.predict(xdata)
     model_r2_score = r2_score(ydata, preds)
@@ -384,7 +369,7 @@ def plot_qq(x, var_name, path='qq_plot.png'):
     plt.savefig(path, bbox_inches='tight')
 
 
-def plot_rf_fi(rf_model, figsize=(8, 5), plot_direction='h', columns=None, max_cols_plot=None,
+def plot_rf_fi(rf, figsize=(8, 5), plot_direction='h', columns=None, max_cols_plot=None,
                color='g', title=None, errorbars=True):
     """ Plot feature importance from a random forest.
     Args:
@@ -398,8 +383,8 @@ def plot_rf_fi(rf_model, figsize=(8, 5), plot_direction='h', columns=None, max_c
     fontsize=14
     alpha=0.7
 
-    importance = rf_model.feature_importances_
-    std = np.std([tree.feature_importances_ for tree in rf_model.estimators_], axis=0)
+    importance = rf.feature_importances_
+    std = np.std([tree.feature_importances_ for tree in rf.estimators_], axis=0)
     indices = np.argsort(importance)[::-1]  # feature indices ordered by importance
     top_indices = indices[:max_cols_plot]    # get indices of top most important features
     if columns is None:
@@ -494,139 +479,3 @@ def plot_density(df, col, split_by, kind='kde', bins=100, figsize=(15, 5), title
     if outpath:
         plt.savefig(fname=outpath) 
         
-
-# ---------------------------------------------------------------------------------
-# def impute_and_scale(df, scaling='std', imputing='mean', dropna='all'):
-#     """Impute missing values with mean and scale data included in pandas dataframe.
-#     Parameters
-#     ----------
-#     df : pandas dataframe
-#         dataframe to impute and scale
-#     scaling : 'maxabs' [-1,1], 'minmax' [0,1], 'std', or None, optional (default 'std')
-#         type of scaling to apply
-#     """
-#     from sklearn.preprocessing import MaxAbsScaler, MinMaxScaler, StandardScaler, Imputer
-    
-#     if dropna:
-#         df = df.dropna(axis=1, how=dropna)
-#     else:
-#         empty_cols = df.columns[df.notnull().sum() == 0]
-#         df[empty_cols] = 0
-
-#     if imputing is None or imputing.lower() == 'none':
-#         mat = df.values
-#     else:
-#         imputer = Imputer(strategy=imputing, axis=0)
-#         mat = imputer.fit_transform(df)
-
-#     if scaling is None or scaling.lower() == 'none':
-#         return pd.DataFrame(mat, columns=df.columns)
-
-#     if scaling == 'maxabs':
-#         scaler = MaxAbsScaler()
-#     elif scaling == 'minmax':
-#         scaler = MinMaxScaler()
-#     else:
-#         scaler = StandardScaler()
-
-#     mat = scaler.fit_transform(mat)
-#     df = pd.DataFrame(mat, columns=df.columns)
-
-#     return df
-
-
-# def load_drug_info():
-#     path = os.path.join(DATADIR, 'drug_info')
-#     df = pd.read_table(path, dtype=object)
-#     df['PUBCHEM'] = 'PubChem.CID.' + df['PUBCHEM']
-#     return df
-
-
-# def load_drug_set_fingerprints(drug_set='Combined_PubChem', ncols=None, usecols=None,
-#                                scaling=None, imputing=None, add_prefix=False):
-#     fps = ['PFP', 'ECFP']
-#     usecols_all = usecols
-#     df_merged = None
-#     for fp in fps:
-#         path = os.path.join(DATADIR, '{}_dragon7_{}.tsv'.format(drug_set, fp))  # path = get_file(DATA_URL + '{}_dragon7_{}.tsv'.format(drug_set, fp))
-#         df_cols = pd.read_table(path, engine='c', nrows=0, skiprows=1, header=None)
-#         total = df_cols.shape[1] - 1
-#         if usecols_all is not None:
-#             usecols = [x.replace(fp+'.', '') for x in usecols_all]
-#             usecols = [int(x) for x in usecols if x.isdigit()]
-#             usecols = [x for x in usecols if x in df_cols.columns]
-#             if usecols[0] != 0:
-#                 usecols = [0] + usecols
-#             df_cols = df_cols.loc[:, usecols]
-#         elif ncols and ncols < total:
-#             usecols = np.random.choice(total, size=ncols, replace=False)
-#             usecols = np.append([0], np.add(sorted(usecols), 1))
-#             df_cols = df_cols.iloc[:, usecols]
-
-#         dtype_dict = dict((x, np.float32) for x in df_cols.columns[1:])
-#         df = pd.read_table(path, engine='c', skiprows=1, header=None,
-#                            usecols=usecols, dtype=dtype_dict)
-#         df.columns = ['{}.{}'.format(fp, x) for x in df.columns]
-
-#         col1 = '{}.0'.format(fp)
-#         df1 = pd.DataFrame(df.loc[:, col1])
-#         df1.rename(columns={col1: 'Drug'}, inplace=True)
-
-#         df2 = df.drop(col1, 1)
-#         if add_prefix:
-#             df2 = df2.add_prefix('dragon7.')
-
-#         df2 = impute_and_scale(df2, scaling, imputing, dropna=None)
-
-#         df = pd.concat([df1, df2], axis=1)
-
-#         df_merged = df if df_merged is None else df_merged.merge(df)
-
-#     return df_merged
-
-
-# def load_drug_fingerprints(ncols=None, scaling='std', imputing='mean', dropna=None, add_prefix=True):
-#     df_info = load_drug_info()
-#     df_info['Drug'] = df_info['PUBCHEM']
-
-#     df_fp = load_drug_set_fingerprints(drug_set='Combined_PubChem', ncols=ncols)
-#     df_fp = pd.merge(df_info[['ID', 'Drug']], df_fp, on='Drug').drop('Drug', 1).rename(columns={'ID': 'Drug'})
-
-#     df_fp2 = load_drug_set_fingerprints(drug_set='NCI60', usecols=df_fp.columns.tolist() if ncols else None)
-
-#     df_fp = pd.concat([df_fp, df_fp2]).reset_index(drop=True)
-#     df1 = pd.DataFrame(df_fp.loc[:, 'Drug'])
-#     df2 = df_fp.drop('Drug', 1)
-#     df2 = impute_and_scale(df2, scaling=None, imputing=imputing, dropna=dropna)
-#     if add_prefix:
-#         df2 = df2.add_prefix('dragon7.')
-#     df_fp = pd.concat([df1, df2], axis=1)
-
-#     # logger.info('Loaded combined dragon7 drug fingerprints: %s', df_fp.shape)
-
-#     return df_fp
-
-
-# def summarize_response_data(df):
-#     df_sum = df.groupby('Source').agg({'Growth': 'count', 'Sample': 'nunique',
-#                                        'Drug1': 'nunique', 'Drug2': 'nunique'})
-#     df_sum['MedianDose'] = df.groupby('Source').agg({'Dose1': 'median'})
-#     return df_sum
-
-
-# def assign_partition_groups(df, partition_by='drug_pair'):
-#     if partition_by == 'cell':
-#         group = df['Sample']
-#     elif partition_by == 'drug_pair':
-#         df_info = load_drug_info()
-#         id_dict = df_info[['ID', 'PUBCHEM']].drop_duplicates(['ID']).set_index('ID').iloc[:, 0]
-#         group = df['Drug1'].copy()
-#         group[(df['Drug2'].notnull()) & (df['Drug1'] <= df['Drug2'])] = df['Drug1'] + ',' + df['Drug2']
-#         group[(df['Drug2'].notnull()) & (df['Drug1'] > df['Drug2'])] = df['Drug2'] + ',' + df['Drug1']
-#         group2 = group.map(id_dict)
-#         mapped = group2.notnull()
-#         group[mapped] = group2[mapped]
-#     elif partition_by == 'index':
-#         group = df.reset_index()['index']
-#     print('Grouped response data by {}: {} groups'.format(partition_by, group.nunique()))
-#     return group

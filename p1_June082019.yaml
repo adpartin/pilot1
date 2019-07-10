@@ -1,4 +1,4 @@
-name: keras_
+name: p1
 channels:
   - pytorch
   - anaconda

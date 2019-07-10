@@ -11,7 +11,7 @@ import pandas as pd
 
 class CombinedRNASeqLINCS():
     """ Combined LINCS dataset. """
-    def __init__(self, datadir, cellmeta_fname, dataset='raw', sources=[],
+    def __init__(self, datadir, cellmeta_fname, rna_norm='raw', sources=[],
                  na_values=['na', '-', ''], verbose=True):
         """ Note that df_rna file must have the following structure:
         df_rna.columns[0] --> 'Sample'
@@ -24,11 +24,11 @@ class CombinedRNASeqLINCS():
             CELLMETA_FILENAME = 'combined_metadata_2018May.txt'
             lincs = CombinedLINCS(dataset='combat', datadir=DATADIR, cellmeta_fname=CELLMETA_FILENAME)
         """
-        if dataset == 'raw':
+        if rna_norm == 'raw':
             DATASET = 'combined_rnaseq_data_lincs1000'
-        elif dataset == 'source_scale':
+        elif rna_norm == 'source_scale':
             DATASET = 'combined_rnaseq_data_lincs1000_source_scale'
-        elif dataset == 'combat':
+        elif rna_norm == 'combat':
             DATASET = 'combined_rnaseq_data_lincs1000_combat'
         else:
             raise ValueError(f'The passed dataset ({DATASET}) is not supported.')
@@ -134,7 +134,6 @@ class CombinedRNASeqLINCS():
         return meta
     
     
-    # def extract_specific_datasets(self, sources=[]):
     def get_subset(self, sources=[]):
         """ Get samples of the specified data sources (this is a getter method).
         Args:

@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from time import time
 from collections import OrderedDict
+import math
 
 import sklearn
 import numpy as np
@@ -35,13 +36,6 @@ try:
     import lightgbm as lgb
 except ImportError:
     print('Module not found (lightgbm).')
-
-
-# class GBM():
-#     """ This is a super class for training and fine-tuning GBM models, i.e.,
-#     xgboost and lightgbm. These models share similar API where various methods are the same.
-#     """
-#     # https://www.kaggle.com/spektrum/randomsearchcv-to-hyper-tune-1st-level
 
 
 def r2_krs(y_true, y_pred):
@@ -165,6 +159,31 @@ def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
         plt.close()
         
 
+
+class Attention(keras.layers.Layer):
+    def __init__(self, output_dim, **kwargs):
+        self.output_dim = output_dim
+        super(Attention, self).__init__(**kwargs)
+    
+    def build(self, input_shape):
+        self.kernel = self.add_weight(name='kernel',
+                                      shape=(input_shape[1], self.output_dim),
+                                      initializer='uniform',
+                                      trainable=True)
+        super(Attention, self).build(input_shape)
+    
+    def call(self, V):
+        Q = keras.backend.dot(V, self.kernel)
+        Q =  Q * V
+        Q = Q / math.sqrt(self.output_dim)
+        Q = keras.activations.softmax(Q)
+        return Q
+    
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+
+
 class BaseMLModel():
     """ A parent class with some general methods for children ML classes.
     The children classes are specific ML models such random forest regressor, lightgbm regressor, etc.
@@ -178,88 +197,6 @@ class BaseMLModel():
         r2_score = sklearn.metrics.r2_score(ydata, preds)
         adj_r2 = 1 - (1 - r2_score) * (self.x_size[0] - 1)/(self.x_size[0] - self.x_size[1] - 1)
         return adj_r2
-
-
-    def calc_scores(self, xdata, ydata, metrics=None, to_print=False):
-        """ Create dict of scores for regression. """
-        # metrics = {'r2_score': sklearn.metrics.r2_score,
-        #            'mean_absolute_error': sklearn.metrics.mean_absolute_error,
-        #            'median_absolute_error': sklearn.metrics.median_absolute_error,
-        #            'explained_variance_score': sklearn.metrics.explained_variance_score}
-        # TODO: replace `if` with `try`
-        if hasattr(self, 'model'):
-            preds = self.model.predict(xdata)
-            scores = OrderedDict()
-
-            # for metric_name, metric in metrics.items():
-            #     if isinstance(metric, str):
-            #         scorer = sklearn.metrics.get_scorer(metric_name) # get a scorer from string
-            #         scores[metric_name] = scorer(ydata, preds)
-            #     else:
-            #         scores[metric_name] = scorer(ydata, preds)
-
-            scores['r2'] = sklearn.metrics.r2_score(ydata, preds)
-            #scores['adj_r2_score'] = self.__adj_r2_score(ydata, preds)
-            scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(ydata, preds)
-            scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(ydata, preds)
-            scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(ydata, preds)
-
-            # TODO:
-            y_true = np.where(ydata < 0.5, 1, 0)
-            y_score = np.where(preds < 0.5, 1, 0)
-            scores['reg_auroc_score'] = sklearn.metrics.roc_auc_score(y_true, y_score)
-
-            self.scores = scores
-            if to_print:
-                self.print_scores()
-
-            return self.scores
-
-
-    def print_scores(self):
-        """ Print performance scores. """
-        # TODO: replace `if` with `try`
-        if hasattr(self, 'scores') and self.logger is not None:
-            for score_name, score_value in self.scores.items():
-                self.logger.info(f'{score_name}: {score_value:.2f}')
-
-
-    def dump_preds(self, df_data, xdata, target_name, outpath=None):
-        """
-        Args:
-            df_data : df that contains the cell and drug names, and target value
-            xdata : features to make predictions on
-            target_name : name of the target as it appears in the df (e.g. 'AUC')
-            outpath : full path to store the predictions
-        """
-        # TODO: replace `if` with `try`
-        if hasattr(self, 'model'):
-            combined_cols = ['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]
-            ccle_org_cols = ['CELL', 'DRUG', 'tissuetype', target_name]
-
-            ##df1 = df_data[['CELL', 'DRUG', 'csite', 'ctype', 'simplified_csite', 'simplified_ctype', target_name]].copy()
-            if set(combined_cols).issubset(set(df_data.columns.tolist())):
-                df1 = df_data[combined_cols].copy()
-            elif set(ccle_org_cols).issubset(set(df_data.columns.tolist())):
-                df1 = df_data[ccle_org_cols].copy()
-            else:
-                df1 = df_data['CELL', 'DRUG'].copy()
-
-            preds = self.model.predict(xdata)
-            abs_error = abs(df_data[target_name] - preds)
-            #squared_error = (df_data[target_name] - preds)**2
-            df2 = pd.DataFrame({target_name+'_pred': self.model.predict(xdata),
-                                target_name+'_abs_err': abs_error,
-                                #target_name+'_sq_err': squared_error
-                                })
-            df2 = df2.round(5)
-
-            df_preds = pd.concat([df1, df2], axis=1).reset_index(drop=True)
-
-            if outpath is not None:
-                df_preds.to_csv(outpath, index=False)
-            else:
-                df_preds.to_csv('preds.csv', index=False)
 
 
 
@@ -297,7 +234,6 @@ class KERAS_REGRESSOR(BaseMLModel):
         
         outputs = Dense(1, activation='relu')(x)
         model = Model(inputs=inputs, outputs=outputs)
-        model.summary()
         
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
@@ -318,46 +254,52 @@ class KERAS_REGRESSOR(BaseMLModel):
         """ Dump trained model. """        
         self.model.save( str(Path(outdir)/'model.h5') )
         
-#         # Serialize model to JSON
-#         model_json = self.model.to_json()
-#         modelpath = os.path.join(outdir, 'model.' + KERAS_REGRESSOR.model_name + '.json')
-#         with open(modelpath, 'w') as mfile:
-#             mfile.write(model_json)
 
-#         # serialize weights to HDF5
-#         weightpath = os.path.join(outdir, 'weights.' + KERAS_REGRESSOR.model_name + '.h5')
-#         self.model.save_weights(weightpath)
 
 class NN_REG0(BaseMLModel):
-    """ Neural network regressor. """
+    """ Neural network regressor.
+    Fully-connected NN.
+    """
     model_name = 'nn_reg0'
 
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
-        x = Dense(1000, activation='relu')(inputs)
-        # x = Dropout(dr_rate)(x)
+        x = Dense(1000)(inputs)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
 
-        x = Dense(1000, activation='relu')(x)
+        x = Dense(1000)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
         
-        x = Dense(500, activation='relu')(x)
+        x = Dense(500)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
         
-        x = Dense(250, activation='relu')(x)
+        x = Dense(250)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
         
-        x = Dense(125, activation='relu')(x)
+        x = Dense(125)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
 
-        x = Dense(60, activation='relu')(x)
+        x = Dense(60)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
         
-        x = Dense(30, activation='relu')(x)
+        x = Dense(30)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
 
         outputs = Dense(1, activation='relu')(x)
         model = Model(inputs=inputs, outputs=outputs)
-        # model.summary()
         
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
@@ -373,38 +315,57 @@ class NN_REG0(BaseMLModel):
 
 
 class NN_REG1(BaseMLModel):
-    """ Neural network regressor. """
+    """ Neural network regressor. 
+    Fully-connected NN with attention layer.
+    """
     model_name = 'nn_reg1'
 
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
         #x = Lambda(lambda x: x, output_shape=(1000,))(inputs)
-        attn_lin = Dense(1000, activation='relu', name='attn_lin')(inputs)
-        attn_probs = Dense(1000, activation='softmax', name='attn_probs')(inputs)
-        x = keras.layers.multiply( [attn_lin, attn_probs], name='attn')
-        # x = Dropout(dr_rate)(x)
-            
-        x = Dense(1000, activation='relu')(x)
+        # attn_lin = Dense(1000, activation='relu', name='attn_lin')(inputs)
+        # attn_probs = Dense(1000, activation='softmax', name='attn_probs')(inputs)
+        # x = keras.layers.multiply( [attn_lin, attn_probs], name='attn')
+        
+        # New attention layer (Rick, Austin)
+        a = Dense(1000)(inputs)
+        a = BatchNormalization()(a)
+        a = Activation('relu')(a)
+        b = Attention(1000)(a)
+        x = keras.layers.multiply([b, a])
+
+        x = Dense(1000)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
 
-        x = Dense(500, activation='relu')(x)
+        x = Dense(500)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
         
-        x = Dense(250, activation='relu')(x)
+        x = Dense(250)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
         
-        x = Dense(125, activation='relu')(x)
+        x = Dense(125)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
 
-        x = Dense(60, activation='relu')(x)
+        x = Dense(60)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
 
-        x = Dense(30, activation='relu')(x)
+        x = Dense(30)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
 
         outputs = Dense(1, activation='relu')(x)
         model = Model(inputs=inputs, outputs=outputs)
-        # model.summary()
         
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
@@ -428,7 +389,7 @@ class NN_REG1(BaseMLModel):
 class NN_REG2(BaseMLModel):
     """ Neural network regressor. """
     model_name = 'nn_reg2'
-
+    # TODO: activation should come after batchnorm!!
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
         x = Dense(1000, activation='relu')(inputs)
@@ -453,7 +414,6 @@ class NN_REG2(BaseMLModel):
 
         outputs = Dense(1, activation='relu')(x)
         model = Model(inputs=inputs, outputs=outputs)
-        # model.summary()
         
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
@@ -484,38 +444,63 @@ class NN_REG3(BaseMLModel):
 
         # Proc rna
         in_rna = Input(shape=(in_dim_rna,), name='in_rna')
-        a = Dense(1000, activation='relu')(in_rna)
+        a = Dense(1000)(in_rna)
+        a = BatchNormalization()(a)
+        a = Activation('relu')(a)
         a = Dropout(dr_rate)(a)
-        a = Dense(1000, activation='relu')(a)
+
+        a = Dense(800)(a)
+        a = BatchNormalization()(a)
+        a = Activation('relu')(a)
         a = Dropout(dr_rate)(a)
-        a = Dense(1000, activation='relu')(a)
+        
+        a = Dense(600)(a)
+        a = BatchNormalization()(a)
+        a = Activation('relu')(a)
         a = Dropout(dr_rate)(a)
-        rna = Model(inputs=in_rna, outputs=a)
+
+        rna = Model(inputs=in_rna, outputs=a, name='out_rna')
 
         # Proc dsc
         in_dsc = Input(shape=(in_dim_dsc,), name='in_dsc')
-        b = Dense(1000, activation='relu')(in_dsc)
+        b = Dense(1000)(in_dsc)
+        b = BatchNormalization()(b)
+        b = Activation('relu')(b)
         b = Dropout(dr_rate)(b)
-        b = Dense(1000, activation='relu')(b)
+
+        b = Dense(800)(b)
+        b = BatchNormalization()(b)
+        b = Activation('relu')(b)
         b = Dropout(dr_rate)(b)
-        b = Dense(1000, activation='relu')(b)
+
+        b = Dense(600)(b)
+        b = BatchNormalization()(b)
+        b = Activation('relu')(b)
         b = Dropout(dr_rate)(b)
-        dsc = Model(inputs=in_dsc, outputs=b)
+        
+        dsc = Model(inputs=in_dsc, outputs=b, name='out_dsc')
 
         # Merge layers
         x = concatenate([rna.output, dsc.output])
 
         # Dense layers
-        x = Dense(500, activation='relu')(x)
-        x = Dropout(dr_rate)(x)
-        x = Dense(500, activation='relu')(x)
-        x = Dropout(dr_rate)(x)
-        x = Dense(500, activation='relu')(x)
+        x = Dense(1000, name='in_merged')(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
 
-        outputs = Dense(1, activation='relu')(x)
+        x = Dense(500)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
+        x = Dropout(dr_rate)(x)
+
+        x = Dense(250)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
+        x = Dropout(dr_rate)(x)
+
+        outputs = Dense(1, activation='relu', name='out_nn')(x)
         model = Model(inputs=[in_rna, in_dsc], outputs=[outputs])
-        # model.summary()
         
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
@@ -528,6 +513,45 @@ class NN_REG3(BaseMLModel):
                       optimizer=opt,
                       metrics=['mae', r2_krs])
         self.model = model
+
+
+    def fit_cv(self,
+            in_rna, in_dsc,
+            epochs: int=150, batch_size: int=32,
+            cv: int=5,
+            cv_splits: tuple=None):
+        # TODO: finish this!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        pass
+        """
+        for 
+        model.fit({'in_rna': in_rna, 'in_dsc': in_dsc},
+                  {'out_nn': ydata},
+                    epochs=epochs, batch_size=batch_size)   
+
+        if cv_splits is not None:
+            tr_id = cv_splits[0]
+            vl_id = cv_splits[1]
+            assert tr_id.shape[1]==vl_id.shape[1], 'tr and vl must have the same of folds.'
+            cv_folds = tr_id.shape[1]
+
+            for i in range(tr_id.shape[1]):
+                tr_dct[i] = tr_id.iloc[:, i].dropna().values.astype(int).tolist()
+                vl_dct[i] = vl_id.iloc[:, i].dropna().values.astype(int).tolist()
+
+            if tr_id.shape[1] == 1:
+                vl_size = vl_id.shape[0]/(vl_id.shape[0] + tr_id.shape[0])
+
+        # If pre-defined splits are not passed, then generate splits on the fly
+        else:
+            if isinstance(cv, int):
+                cv_folds = cv
+                cv = KFold(n_splits=cv_folds, shuffle=False, random_state=random_state)
+            else:
+                cv_folds = cv.get_n_splits() # cv is a sklearn splitter
+
+            if cv_folds == 1:
+                vl_size = cv.test_size
+        """
 
 
     def dump_model(self, outdir='.'):

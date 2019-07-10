@@ -1,4 +1,4 @@
-name: cell-drug-sens
+name: p1
 channels:
   - anaconda
   - defaults

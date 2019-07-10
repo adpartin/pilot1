@@ -2,9 +2,7 @@
 Functions to generate learning curves.
 Records performance (error or score) vs training set size.
 """
-from comet_ml import Experiment
 import os
-
 import sys
 from pathlib import Path
 from collections import OrderedDict
@@ -27,12 +25,14 @@ from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 from pandas.api.types import is_string_dtype
 from sklearn.preprocessing import LabelEncoder
 
+import keras
 from keras.callbacks import ModelCheckpoint, CSVLogger, ReduceLROnPlateau, EarlyStopping, TensorBoard
 from keras.utils import plot_model
 
 # Utils
 import utils
 import ml_models
+from ml_models import r2_krs
 
 # Import custom callbacks
 keras_contrib = '/vol/ml/apartin/projects/keras-contrib/keras_contrib/callbacks'
@@ -40,21 +40,22 @@ sys.path.append(keras_contrib)
 from cyclical_learning_rate import CyclicLR
 
 
-def my_learning_curve(X, Y,
-                      mltype,
-                      model_name='lgb_reg',
-                      init_params=None, 
-                      fit_params=None,
-                      cv=5,
-                      cv_groups=None,
-                      cv_splits=None,
-                      lc_ticks=5,
-                      data_sz_frac=None,
-                      args=None,
-                      metrics=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'neg_mean_squared_error'],
-                      n_jobs=1, random_state=None, logger=None, outdir='.'):
+def my_learning_curve(
+        X, Y,
+        mltype: str,
+        model_name: str='lgb_reg',
+        init_params: dict=None, 
+        fit_params: dict=None,
+        cv=5,
+        cv_splits=None,
+        lc_ticks: int=5,
+        tick_spacing: str='log',
+        data_sz_frac=None,
+        args=None,
+        metrics: list=['r2', 'neg_mean_absolute_error', 'neg_median_absolute_error', 'neg_mean_squared_error'],
+        n_jobs=1, random_state=None, logger=None, outdir='.'):
     """
-    Train estimator using various train set sizes and generate learning curves for different metrics.
+    Train estimator using multiple train set sizes and generate learning curves for multiple metrics.
     The CV splitter splits the input dataset into cv_folds data subsets.
     Args:
         X : features matrix
@@ -62,7 +63,6 @@ def my_learning_curve(X, Y,
         mltype : type to ML problem (`reg` or `cls`)
         cv : number cv folds or sklearn's cv splitter --> scikit-learn.org/stable/glossary.html#term-cv-splitter
         cv_splits : tuple of 2 dicts cv_splits[0] and cv_splits[1] contain the tr and vl splits, respectively 
-        cv_groups : groups for the cv splits (used for strict cv partitions --> non-overlapping cell lines)
         lc_ticks : number of ticks in the learning curve (used if data_sz_frac is None)
         data_sz_frac : relative numbers of training samples that will be used to generate learning curves
         fit_params : dict of parameters to the estimator's "fit" method
@@ -87,7 +87,7 @@ def my_learning_curve(X, Y,
     if cv_splits is not None:
         tr_id = cv_splits[0]
         vl_id = cv_splits[1]
-        assert tr_id.shape[1]==vl_id.shape[1], 'tr and vl must have the same of folds.'
+        assert tr_id.shape[1] == vl_id.shape[1], 'tr and vl must have the same of folds.'
         cv_folds = tr_id.shape[1]
 
         for i in range(tr_id.shape[1]):
@@ -97,34 +97,25 @@ def my_learning_curve(X, Y,
         if tr_id.shape[1] == 1:
             vl_size = vl_id.shape[0]/(vl_id.shape[0] + tr_id.shape[0])
 
-    # Generate splits on the fly
+    # If pre-defined splits are not passed, then generate splits on the fly
     else:
-        # TODO: didn't test!
-        if isinstance(cv, int) and cv_groups is None:
+        if isinstance(cv, int):
             cv_folds = cv
             cv = KFold(n_splits=cv_folds, shuffle=False, random_state=random_state)
-        if isinstance(cv, int) and cv_groups is not None:
-            cv_folds = cv
-            cv = GroupKFold(n_splits=cv_folds)
         else:
             cv_folds = cv.get_n_splits() # cv is a sklearn splitter
 
         if cv_folds == 1:
             vl_size = cv.test_size
 
-        # Encode the group labels
-        if is_string_dtype(cv_groups):
-            grp_enc= LabelEncoder()
-            cv_grp = grp_enc.fit_transform(cv_grp)
-    
         # Create sklearn splitter 
         if mltype == 'cls':
             if Y.ndim > 1 and Y.shape[1] > 1:
-                splitter = cv.split(X, np.argmax(Y, axis=1), groups=cv_grp)
+                splitter = cv.split(X, np.argmax(Y, axis=1))
             else:
-                splitter = cv.split(X, Y, groups=cv_grp)
+                splitter = cv.split(X, Y)
         elif mltype == 'reg':
-            splitter = cv.split(X, Y, groups=cv_grp)
+            splitter = cv.split(X, Y)
         
         # Generate the splits
         for i, (tr_vec, vl_vec) in enumerate(splitter):
@@ -134,18 +125,20 @@ def my_learning_curve(X, Y,
 
     # Define training set sizes
     if data_sz_frac is None:
-        # data_sz_frac = np.linspace(0.1, 1.0, lc_ticks) # linear spacing
-        base = 10
-        data_sz_frac = np.logspace(0.0, 1.0, lc_ticks, endpoint=True, base=base)/base # log spacing
+        if any([tick_spacing.lower()==s for s in ['lin', 'linear']]):
+            data_sz_frac = np.linspace(0.1, 1.0, lc_ticks) # linear spacing
+        elif any([tick_spacing.lower()==s for s in ['log']]):
+            base = 10
+            data_sz_frac = np.logspace(0.0, 1.0, lc_ticks, endpoint=True, base=base)/base # log spacing
+        logger.info(f'Ticks spacing: {tick_spacing}.')
 
     if cv_folds == 1:
-        # tr_sizes = [int(n) for n in (1-cv.test_size) * X.shape[0] * data_sz_frac]
         tr_sizes = [int(n) for n in (1-vl_size) * X.shape[0] * data_sz_frac]
     elif cv_folds > 1:
         tr_sizes = [int(n) for n in (cv_folds-1)/cv_folds * X.shape[0] * data_sz_frac]
 
     if logger is not None:
-        logger.info('Train sizes: {}'.format(tr_sizes))
+        logger.info('Train sizes: {}\n'.format(tr_sizes))
 
     
     # Now start nested loop of train size and cv folds
@@ -172,12 +165,11 @@ def my_learning_curve(X, Y,
         idx = np.random.permutation(len(xtr))
         for i, tr_sz in enumerate(tr_sizes):
             if logger:
-                logger.info(f'    Train size: {tr_sz} ({i+1}/{len(tr_sizes)})')   
+                logger.info(f'\tTrain size: {tr_sz} ({i+1}/{len(tr_sizes)})')   
 
             # Sequentially get a subset of samples (the input dataset X must be shuffled)
             xtr_sub = xtr[idx[:tr_sz], :]
             ytr_sub = np.squeeze(ytr[idx[:tr_sz], :])            
-            #sub_grps = groups[idx[:tr_sz]]
 
             # Get the estimator
             estimator = ml_models.get_model(model_name, init_params=init_params)
@@ -197,34 +189,42 @@ def my_learning_curve(X, Y,
                 csv_logger = CSVLogger(out_nn_model/'training.log')
                 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
                                               min_delta=0.0001, cooldown=3, min_lr=0.000000001)
-                early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1, mode='auto')
+                early_stop = EarlyStopping(monitor='val_loss', patience=100, verbose=1, mode='auto')
                 
                 # Callbacks list
+                callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
                 if (args is not None) and (args['opt']=='clr'):
-                    callback_list = [checkpointer, csv_logger, early_stop, reduce_lr, clr]
-                else:
-                    callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
-                    # TODO: which val set should be used??
-                    # fit_params['validation_data'] = (xvl, yvl)
-                    # fit_params['validation_split'] = 0.2
+                    callback_list = callback_list + [clr]
 
                 # Fit params
-                fit_params['validation_split'] = 0.2
+                # TODO: which val set should be used??
+                fit_params['validation_data'] = (xvl, yvl)
+                # fit_params['validation_split'] = 0.2
                 fit_params['callbacks'] = callback_list
 
             # Train model
             history = estimator.model.fit(xtr_sub, ytr_sub, **fit_params)
 
+            # If nn, load the best model
+            if 'nn' in model_name:
+                model = keras.models.load_model(str(out_nn_model/'autosave.model.h5'), custom_objects={'r2_krs': r2_krs}) # https://github.com/keras-team/keras/issues/5916
+            else:
+                # If not NN model
+                model = estimator.model
+
             # Calc preds and scores TODO: dump preds
             # ... training set
-            y_preds, y_true = utils.calc_preds(estimator=estimator.model, x=xtr_sub, y=ytr_sub, mltype=mltype)
-            tr_scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
+            y_pred, y_true = utils.calc_preds(model, x=xtr_sub, y=ytr_sub, mltype=mltype)
+            tr_scores = utils.calc_scores(y_true=y_true, y_pred=y_pred, mltype=mltype, metrics=None)
             # ... val set
-            y_preds, y_true = utils.calc_preds(estimator=estimator.model, x=xvl, y=yvl, mltype=mltype)
-            vl_scores = utils.calc_scores(y_true=y_true, y_preds=y_preds, mltype=mltype, metrics=None)
+            y_pred, y_true = utils.calc_preds(model, x=xvl, y=yvl, mltype=mltype)
+            vl_scores = utils.calc_scores(y_true=y_true, y_pred=y_pred, mltype=mltype, metrics=None)
+
+            nm = ((y_true - y_pred) ** 2).sum(axis=0, dtype=np.float64)
+            dn = ((y_true - np.average(y_true, axis=0)) ** 2).sum(axis=0, dtype=np.float64)
 
             if 'nn' in model_name:
-                ml_models.plot_prfrm_metrics(history=history, title=f'Train size: {tr_sz}',
+                ml_models.plot_prfrm_metrics(history, title=f'Train size: {tr_sz}',
                                              skp_ep=20, add_lr=True, outdir=out_nn_model)
 
             # Add info
@@ -253,7 +253,7 @@ def my_learning_curve(X, Y,
     scores_all_df = pd.concat([tr_df, vl_df], axis=0)
 
     # Plot learning curves
-    figs = plt_lrn_crv_multi_metric(df=scores_all_df, cv_folds=cv_folds, outdir=outdir, args=args)
+    figs = plt_lrn_crv_multi_metric(scores_all_df, cv_folds=cv_folds, outdir=outdir, args=args)
     
     return scores_all_df
 
@@ -324,8 +324,8 @@ def plt_lrn_crv(rslt, metric_name='score', ylim=None, title=None, path=None):
     te_scores_mean = np.mean(te_scores, axis=1)
     te_scores_std  = np.std(te_scores, axis=1)
 
-    plt.plot(tr_sizes, tr_scores_mean, 'o-', color='r', label="Train score")
-    plt.plot(tr_sizes, te_scores_mean, 'o-', color='g', label="Val score")
+    plt.plot(tr_sizes, tr_scores_mean, 'o-', color='r', label='Train score')
+    plt.plot(tr_sizes, te_scores_mean, 'o-', color='g', label='Val score')
     plt.fill_between(tr_sizes,
                      tr_scores_mean - tr_scores_std,
                      tr_scores_mean + tr_scores_std,

@@ -1,4 +1,4 @@
-name: cell-drug-sens
+name: p1_mac
 channels:
   - anaconda
   - defaults

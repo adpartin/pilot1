@@ -10,16 +10,15 @@ from __future__ import print_function, division
 import warnings
 warnings.filterwarnings('ignore')
 
-# from comet_ml import Experiment
 import os
-
 import sys
+import platform
 from pathlib import Path
 import psutil
 import argparse
 from datetime import datetime
 from time import time
-from pprint import pprint
+from pprint import pprint, pformat
 from collections import OrderedDict
 from glob import glob
 
@@ -47,7 +46,6 @@ sys.path.append(str(utils_path))
 # import trn_lrn_crv
 import utils
 from utils_tidy import load_tidy_combined, get_data_by_src, break_src_data 
-#import argparser
 from classlogger import Logger
 import ml_models
 from cv_splitter import cv_splitter, plot_ytr_yvl_dist
@@ -57,7 +55,6 @@ from lrn_crv import my_learning_curve
 # Path
 PRJ_NAME = file_path.name 
 OUTDIR = file_path / '../../out/' / PRJ_NAME
-CONFIGFILENAME = 'config_prms.txt'
 
 
 
@@ -118,11 +115,9 @@ def create_outdir(outdir, args, src):
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
     
-    #l = [args['opt']] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']] 
+    l = [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']] 
     if 'nn' in args['model_name']:
-        l = [args['opt']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']]
-    else:
-        l = [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']] 
+        l = [args['opt']] + l
                 
     name_sffx = '.'.join( [src] + [args['model_name']] + l )
     outdir = Path(outdir) / (name_sffx + '_' + t)
@@ -135,14 +130,13 @@ def run(args):
     t0 = time()
 
     dirpath = Path(args['dirpath'])
-    #dname = args['dname']
-    #src_names = args['src_names']
+    # dname = args['dname']
+    # src_names = args['src_names']
    
     # Target
     target_name = args['target_name']
 
     # Data split 
-    #cv_method = args['cv_method']
     cv_folds = args['cv_folds']
 
     # Features 
@@ -156,7 +150,6 @@ def run(args):
     batch_size = args['batch_size']
     dr_rate = args['dr_rate']
     opt_name = args['opt']
-    # attn = args['attn']
 
     # Learning curve
     lc_ticks = args['lc_ticks']
@@ -166,28 +159,19 @@ def run(args):
     n_jobs = args['n_jobs']
 
     # ML type ('reg' or 'cls')
-    mltype = args['model_name'].split('_')[-1]
-    if mltype not in ['reg', 'cls']:
+    if 'reg' in model_name:
         mltype = 'reg'
-
-    # Print args
-    pprint(args)
-
-    # Define custom metric to calc auroc from regression
-    # scikit-learn.org/stable/modules/model_evaluation.html#scoring
-    def reg_auroc(y_true, y_pred, th=0.5):
-        y_true = np.where(y_true < th, 1, 0)
-        y_score = np.where(y_pred < th, 1, 0)
-        auroc = sklearn.metrics.roc_auc_score(y_true, y_score)
-        return auroc
-    reg_auroc_score = sklearn.metrics.make_scorer(score_func=reg_auroc, greater_is_better=True)
+    elif 'cls' in model_name:
+        mltype = 'cls'
+    else:
+        raise ValueError('`model_name` must contain `reg` or `cls`.')
 
     # Define metrics
     metrics = {'r2': 'r2',
                'neg_mean_absolute_error': 'neg_mean_absolute_error', #sklearn.metrics.neg_mean_absolute_error,
                'neg_median_absolute_error': 'neg_median_absolute_error', #sklearn.metrics.neg_median_absolute_error,
                'neg_mean_squared_error': 'neg_mean_squared_error', #sklearn.metrics.neg_mean_squared_error,
-               'reg_auroc_score': reg_auroc_score,
+               'reg_auroc_score': utils.reg_auroc_score,
     }
     
     
@@ -197,15 +181,10 @@ def run(args):
     dfs = {}
 
     if dirpath is not None:
-        if Path(dirpath/'xdata.parquet').is_file():
-            xdata = pd.read_parquet( Path(dirpath/'xdata.parquet'), engine='auto', columns=None )
-            ydata = pd.read_parquet( Path(dirpath/'ydata.parquet'), engine='auto', columns=None )
-            ydata = ydata[[target_name]]
-        else:
-            if Path(dirpath/'xdata.csv').is_file():
-                xdata = pd.read_csv( Path(dirpath/'xdata.csv') )
-                ydata = pd.read_csv( Path(dirpath/'ydata.csv') )
-                ydata = ydata[[target_name]]
+        if (dirpath/'xdata.parquet').is_file():
+            xdata = pd.read_parquet( dirpath/'xdata.parquet', engine='auto', columns=None )
+            meta = pd.read_parquet( dirpath/'meta.parquet', engine='auto', columns=None )
+            ydata = meta[[target_name]]
 
         tr_id = pd.read_csv( dirpath/f'{cv_folds}fold_tr_id.csv' )
         vl_id = pd.read_csv( dirpath/f'{cv_folds}fold_vl_id.csv' )
@@ -214,6 +193,7 @@ def run(args):
         dfs[src] = (ydata, xdata, tr_id, vl_id) 
             
     elif dname == 'combined':
+        # TODO: this is not used anymore (probably won't work)
         DATADIR = file_path / '../../data/processed/data_splits'
         DATAFILENAME = 'data.parquet'
         dirs = glob(str(DATADIR/'*'))
@@ -227,10 +207,11 @@ def run(args):
                 vl_id = pd.read_csv(DATADIR/subdir/f'{cv_folds}fold_vl_id.csv')
 
                 # Get the data
-                datapath = DATADIR/subdir/DATAFILENAME
+                datapath = DATADIR / subdir / DATAFILENAME
                 data = pd.read_parquet(datapath, engine='auto', columns=None)
-                xdata, ydata, _, _ = break_src_data(data, target=target_name, scaler=None) # logger=lg.logger
-         
+                xdata, _, meta, _ = break_src_data(data, target=None, scaler=None) # logger=lg.logger
+                ydata = meta[[target_name]]
+                
                 dfs[src] = (ydata, xdata, tr_id, vl_id)
                 del data, xdata, ydata, tr_id, vl_id, src
 
@@ -256,14 +237,13 @@ def run(args):
         # -----------------------------------------------
         #       Logger
         # -----------------------------------------------
-        #run_outdir = utils.create_outdir(outdir, args=args)
         run_outdir = create_outdir(OUTDIR, args, src)
         logfilename = run_outdir/'logfile.log'
         lg = Logger(logfilename)
-
-        lg.logger.info(f'File path: {file_path}')
-        lg.logger.info(f'System CPUs: {psutil.cpu_count(logical=True)}')
-        lg.logger.info(f'n_jobs: {n_jobs}')
+        lg.logger.info(datetime.now())
+        lg.logger.info(f'\nFile path: {file_path}')
+        lg.logger.info(f'Machine: {platform.node()} ({platform.system()}, {psutil.cpu_count()} CPUs)')
+        lg.logger.info(f'\n{pformat(args)}')
 
         # Dump args to file
         utils.dump_args(args, run_outdir)        
@@ -272,9 +252,9 @@ def run(args):
         # -----------------------------------------------
         #      ML model configurations
         # -----------------------------------------------
-        lg.logger.info('\n\n{}'.format('='*50))
+        lg.logger.info('\n\n{}'.format('=' * 50))
         lg.logger.info(f'Learning curves ... {src}')
-        lg.logger.info('='*50)
+        lg.logger.info('=' * 50)
 
         # ML model params
         if model_name == 'lgb_reg':
@@ -306,17 +286,17 @@ def run(args):
             init_params = init_prms,
             fit_params = fit_prms,
             cv = None,
-            cv_groups = None, # cv_groups,
             cv_splits = (tr_id, vl_id),
             lc_ticks = lc_ticks,
             data_sz_frac = None,
             args = args,
             metrics = metrics,
             n_jobs = n_jobs, random_state = SEED, logger = lg.logger, outdir = run_outdir)
-        lg.logger.info('Runtime: {:.1f} mins'.format( (time()-t0)/60) )
+        lg.logger.info('Runtime: {:.1f} hrs'.format( (time()-t0)/360) )
 
         # Dump results
-        lrn_crv_scores.to_csv( run_outdir/('lrn_crv_scores_' + src + '.csv'), index=False) 
+        # lrn_crv_scores.to_csv( run_outdir/('lrn_crv_scores_' + src + '.csv'), index=False) 
+        lrn_crv_scores.to_csv( run_outdir/('lrn_crv_scores.csv'), index=False) 
         lg.logger.info(f'\nlrn_crv_scores\n{lrn_crv_scores}')
 
 
@@ -366,9 +346,9 @@ def main(args):
             help='Full dir path to the data and split indices (default: None).')
 
     # Select data name
-    parser.add_argument('--dname',
-        default=None, choices=['combined'],
-        help='Data name (default: `combined`).')
+    # parser.add_argument('--dname',
+    #     default=None, choices=['combined'],
+    #     help='Data name (default: `combined`).')
 
     # Select (cell line) sources 
     # parser.add_argument('-src', '--src_names', nargs='+',
@@ -392,12 +372,6 @@ def main(args):
         help='Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).') # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
 
     # Data split methods
-    # parser.add_argument('-tem', '--te_method',
-    #     default=None, choices=['simple', 'group'],
-    #     help='Test split method.')
-    # parser.add_argument('--te_size', type=float,
-    #     default=0.1, 
-    #     help='Test size split ratio.')
     parser.add_argument('-cvm', '--cv_method',
         default='simple', type=str, choices=['simple', 'group'],
         help='Cross-val split method (default: `simple`).')
@@ -426,7 +400,7 @@ def main(args):
         help='Normalization method of the features (default: `stnd`).')
     parser.add_argument('--opt',
         default='sgd', type=str, choices=['sgd', 'adam', 'clr'],
-        help='Optimizer name (default: `opt`).')    
+        help='Optimizer name (default: `sgd`).')
 
     # Learning curve
     parser.add_argument('--lc_ticks', default=5, type=int,
