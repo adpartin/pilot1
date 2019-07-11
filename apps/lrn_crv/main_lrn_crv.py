@@ -56,59 +56,6 @@ from lrn_crv import my_learning_curve
 PRJ_NAME = file_path.name 
 OUTDIR = file_path / '../../out/' / PRJ_NAME
 
-
-
-def plot_agg_lrn_crv(df, outdir='.'):
-    """ Generates learning curve plots for each metric across all cell line sources. """
-    # Get the number of cv_folds
-    cvf = len([c for c in df.columns.tolist() if c[0]=='f'])
-
-    rs = ['b', 'r', 'k', 'c', 'm']
-    title = None
-
-    for i, met_name in enumerate(df['metric'].unique()):
-        dfm = df[df['metric']==met_name].reset_index(drop=True)
-
-        y_values = dfm.iloc[:, -cvf:].values
-        y_ = y_values.min() * 0.05
-        ymin = y_values.min()
-        ymax = y_values.max()
-        ylim = [ymin - y_, ymax + y_]
-
-        fig = plt.figure(figsize=(14, 7))
-        for j, s in enumerate(dfm['src'].unique()):
-
-            dfs = dfm[dfm['src']==s].reset_index(drop=True)
-            tr_sizes  = dfs['tr_size'].unique()
-            tr_scores = dfs.loc[dfs['tr_set']==True, dfs.columns[-cvf:]]
-            te_scores = dfs.loc[dfs['tr_set']==False, dfs.columns[-cvf:]]
-
-            tr_scores_mean = np.mean(tr_scores, axis=1)
-            tr_scores_std  = np.std(tr_scores, axis=1)
-            te_scores_mean = np.mean(te_scores, axis=1)
-            te_scores_std  = np.std(te_scores, axis=1)
-
-            plt.plot(tr_sizes, tr_scores_mean, '.-', color=colors[j], label=s+'_tr')
-            plt.plot(tr_sizes, te_scores_mean, '.--', color=colors[j], label=s+'_val')
-
-            plt.fill_between(tr_sizes, tr_scores_mean - tr_scores_std, tr_scores_mean + tr_scores_std, alpha=0.1, color=colors[j])
-            plt.fill_between(tr_sizes, te_scores_mean - te_scores_std, te_scores_mean + te_scores_std, alpha=0.1, color=colors[j])
-
-            if title is not None:
-                plt.title(title)
-            else:
-                plt.title('Learning curve (' + met_name + ')')
-            plt.xlabel('Train set size')
-            plt.ylabel(met_name)
-            plt.legend(bbox_to_anchor=(1.1, 1), loc='upper right', ncol=1)
-            # plt.legend(loc='best')
-            plt.grid(True)
-            plt.tight_layout()
-        
-        plt.ylim(ylim) 
-        plt.savefig( Path(outdir) / ('lrn_crv_' + met_name + '.png') )
-
-
         
 def create_outdir(outdir, args, src):
     t = datetime.now()
@@ -125,7 +72,84 @@ def create_outdir(outdir, args, src):
     return outdir
     
         
+def parse_args(args):
+    parser = argparse.ArgumentParser(description="Generate learning curves.")
+
+    # Input data
+    parser.add_argument('--dirpath',
+            default=None, type=str,
+            help='Full dir path to the data and split indices (default: None).')
+
+    # Select data name
+    # parser.add_argument('--dname',
+    #     default=None, choices=['combined'],
+    #     help='Data name (default: `combined`).')
+
+    # Select (cell line) sources 
+    # parser.add_argument('-src', '--src_names', nargs='+',
+    #     default=None, choices=['ccle', 'gcsi', 'gdsc', 'ctrp', 'nci60'],
+    #     help='Data sources to use (relevant only for the `combined` dataset).')
+
+    # Select target to predict
+    parser.add_argument('-t', '--target_name',
+            default='AUC', type=str, choices=['AUC', 'AUC1', 'IC50'],
+            help='Column name of the target variable (default: AUC).')
+
+    # Select feature types
+    parser.add_argument('-cf', '--cell_features', nargs='+',
+            default=['rna'], choices=['rna', 'cnv', 'clb'],
+            help='Cell line features (default: `rna`).') # ['rna_latent']
+    parser.add_argument('-df', '--drug_features', nargs='+',
+            default=['dsc'], choices=['dsc', 'fng', 'dlb'],
+            help='Drug features (default: `dsc`).') # ['fng', 'dsc_latent', 'fng_latent']
+    parser.add_argument('-of', '--other_features',
+            default=[], choices=[],
+            help='Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).') # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
+
+    # Data split methods
+    parser.add_argument('-cvm', '--cv_method',
+            default='simple', type=str, choices=['simple', 'group'],
+            help='Cross-val split method (default: `simple`).')
+    parser.add_argument('-cvf', '--cv_folds', 
+            default=5, type=str,
+            help='Number cross-val folds (default: 5).')
+    
+    # ML models
+    parser.add_argument('-ml', '--model_name',
+            default='lgb_reg', type=str, 
+            choices=['lgb_reg', 'rf_reg', 'nn_reg', 'nn_reg0', 'nn_reg1', 'nn_reg2', 'nn_reg3', 'nn_reg4'],
+            help='ML model to use for training (default: `lgb_reg`).')
+
+    # NN hyper_params
+    parser.add_argument('-ep', '--epochs',
+            default=200, type=int,
+            help='Number of epochs (default: 200).')
+    parser.add_argument('-b', '--batch_size',
+            default=32, type=int,
+            help='Batch size (default: 32).')
+    parser.add_argument('--dr_rate',
+            default=0.2, type=float,
+            help='Dropout rate (default: 0.2).')
+    parser.add_argument('-sc', '--scaler',
+            default='stnd', type=str, choices=['stnd', 'minmax', 'rbst'],
+            help='Normalization method of the features (default: `stnd`).')
+    parser.add_argument('--opt',
+            default='sgd', type=str, choices=['sgd', 'adam', 'clr'],
+            help='Optimizer name (default: `sgd`).')
+
+    # Learning curve
+    parser.add_argument('--lc_ticks', default=5, type=int,
+            help='Number of ticks in the learning curve plot default: 5).')
+
+    # Define n_jobs
+    parser.add_argument('--n_jobs', default=4, type=int, help='Default: 4.')
+
+    # Parse args
+    args = parser.parse_args(args)
+    args = vars(args)
+    return args
         
+
 def run(args):
     t0 = time()
 
@@ -295,7 +319,6 @@ def run(args):
         lg.logger.info('Runtime: {:.1f} hrs'.format( (time()-t0)/360) )
 
         # Dump results
-        # lrn_crv_scores.to_csv( run_outdir/('lrn_crv_scores_' + src + '.csv'), index=False) 
         lrn_crv_scores.to_csv( run_outdir/('lrn_crv_scores.csv'), index=False) 
         lg.logger.info(f'\nlrn_crv_scores\n{lrn_crv_scores}')
 
@@ -338,80 +361,7 @@ def run(args):
 
 
 def main(args):
-    parser = argparse.ArgumentParser(description="Generate learning curves.")
-
-    # Input data
-    parser.add_argument('--dirpath',
-            default=None, type=str,
-            help='Full dir path to the data and split indices (default: None).')
-
-    # Select data name
-    # parser.add_argument('--dname',
-    #     default=None, choices=['combined'],
-    #     help='Data name (default: `combined`).')
-
-    # Select (cell line) sources 
-    # parser.add_argument('-src', '--src_names', nargs='+',
-    #     default=None, choices=['ccle', 'gcsi', 'gdsc', 'ctrp', 'nci60'],
-    #     help='Data sources to use (relevant only for the `combined` dataset).')
-
-    # Select target to predict
-    parser.add_argument('-t', '--target_name',
-        default='AUC', type=str, choices=['AUC', 'AUC1', 'IC50'],
-        help='Column name of the target variable (default: AUC).')
-
-    # Select feature types
-    parser.add_argument('-cf', '--cell_features', nargs='+',
-        default=['rna'], choices=['rna', 'cnv', 'clb'],
-        help='Cell line features (default: `rna`).') # ['rna_latent']
-    parser.add_argument('-df', '--drug_features', nargs='+',
-        default=['dsc'], choices=['dsc', 'fng', 'dlb'],
-        help='Drug features (default: `dsc`).') # ['fng', 'dsc_latent', 'fng_latent']
-    parser.add_argument('-of', '--other_features',
-        default=[], choices=[],
-        help='Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).') # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
-
-    # Data split methods
-    parser.add_argument('-cvm', '--cv_method',
-        default='simple', type=str, choices=['simple', 'group'],
-        help='Cross-val split method (default: `simple`).')
-    parser.add_argument('-cvf', '--cv_folds', 
-            default=5, type=str,
-            help='Number cross-val folds (default: 5).')
-    
-    # ML models
-    parser.add_argument('-ml', '--model_name',
-        default='lgb_reg', type=str, 
-        choices=['lgb_reg', 'rf_reg', 'nn_reg', 'nn_reg0', 'nn_reg1', 'nn_reg2', 'nn_reg3', 'nn_reg4'],
-        help='ML model to use for training (default: `lgb_reg`).')
-
-    # NN hyper_params
-    parser.add_argument('-ep', '--epochs',
-        default=200, type=int,
-        help='Number of epochs (default: 200).')
-    parser.add_argument('-b', '--batch_size',
-        default=32, type=int,
-        help='Batch size (default: 32).')
-    parser.add_argument('--dr_rate',
-        default=0.2, type=float,
-        help='Dropout rate (default: 0.2).')
-    parser.add_argument('-sc', '--scaler',
-        default='stnd', type=str, choices=['stnd', 'minmax', 'rbst'],
-        help='Normalization method of the features (default: `stnd`).')
-    parser.add_argument('--opt',
-        default='sgd', type=str, choices=['sgd', 'adam', 'clr'],
-        help='Optimizer name (default: `sgd`).')
-
-    # Learning curve
-    parser.add_argument('--lc_ticks', default=5, type=int,
-        help='Number of ticks in the learning curve plot default: 5).')
-
-    # Define n_jobs
-    parser.add_argument('--n_jobs', default=4, type=int, help='Default: 4.')
-
-    # Parse args and run
-    args = parser.parse_args(args)
-    args = vars(args)
+    args = parse_args(args)
     ret = run(args)
     
 
