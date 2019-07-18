@@ -46,14 +46,14 @@ class Logger():
         #     log.addHandler(fh)
         #     log.addHandler(sh)
 
-        self.logger.info('{}'.format('-'*90))
+        self.logger.info('{}'.format('-' * 90))
         #return logger
 
 
     def kill_logger(self):
         n_seps = 70
         self.logger.info('\nKill logger.')
-        self.logger.info('{}\n'.format('-'*n_seps))
+        self.logger.info('{}\n'.format('-' * n_seps))
         self.logger.removeHandler(self.fileHandler)
         self.logger.removeHandler(self.consoleHandler)
 

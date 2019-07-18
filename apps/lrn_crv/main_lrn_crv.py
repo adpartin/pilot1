@@ -55,21 +55,6 @@ from lrn_crv import my_learning_curve
 # Path
 PRJ_NAME = file_path.name 
 OUTDIR = file_path / '../../out/' / PRJ_NAME
-
-        
-def create_outdir(outdir, args, src):
-    t = datetime.now()
-    t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
-    t = ''.join([str(i) for i in t])
-    
-    l = [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']] 
-    if 'nn' in args['model_name']:
-        l = [args['opt']] + l
-                
-    name_sffx = '.'.join( [src] + [args['model_name']] + l )
-    outdir = Path(outdir) / (name_sffx + '_' + t)
-    os.makedirs(outdir)
-    return outdir
     
         
 def parse_args(args):
@@ -149,7 +134,22 @@ def parse_args(args):
     args = vars(args)
     return args
         
-
+    
+def create_outdir(outdir, args, src):
+    t = datetime.now()
+    t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
+    t = ''.join([str(i) for i in t])
+    
+    l = [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']] 
+    if 'nn' in args['model_name']:
+        l = [args['opt']] + l
+                
+    name_sffx = '.'.join( [src] + [args['model_name']] + l )
+    outdir = Path(outdir) / (name_sffx + '_' + t)
+    os.makedirs(outdir)
+    return outdir    
+    
+    
 def run(args):
     t0 = time()
 

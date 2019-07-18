@@ -182,7 +182,7 @@ def my_learning_curve(
                 os.makedirs(out_nn_model, exist_ok=False)
                 
                 # Callbacks (custom)
-                clr = CyclicLR(base_lr=0.0001, max_lr=0.001, mode='triangular')
+                clr = CyclicLR(base_lr=1e-4, max_lr=1e-3, mode='triangular')
                 
                 # Keras callbacks
                 checkpointer = ModelCheckpoint(str(out_nn_model/'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
