@@ -59,6 +59,16 @@ def dump_args(args, outdir='.'):
             file.write('{} = {}\n'.format(k, v))
 
 
+def dump_dict(args, outpath='./dict.txt'):
+    """ Dump dict into file.
+    Examples:
+        utils.dump_dict(args, outdir=outdir)
+    """
+    with open( Path(outpath), 'w' ) as file:
+        for k, v in args.items():
+            file.write('{} = {}\n'.format(k, v))            
+            
+            
 def subsample(df, v, axis=0):
     """ Extract a random subset of rows or cols from df. """
     assert v > 0, f'sample must be >0; got {v}'

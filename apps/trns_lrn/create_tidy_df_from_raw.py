@@ -19,6 +19,7 @@ import sklearn
 import numpy as np
 import pandas as pd
 
+from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
@@ -51,6 +52,9 @@ def parse_args(args):
     parser.add_argument('-df', '--drg_fea', nargs='+', default=['DD'], choices=['DD'],
                         help='Drug features (default: `DD`).')
     
+    parser.add_argument('-dk', '--drg_pca_k', default=None, type=int, help='Number of drug PCA components (default: None).')
+    parser.add_argument('-ck', '--ccl_pca_k', default=None, type=int, help='Number of cell PCA components (default: None).')
+    
     parser.add_argument('--n_jobs', default=4, type=int, help='Number of cpu workers (default: 4).')
     
     args = parser.parse_args(args)
@@ -62,8 +66,10 @@ def create_outdir(outdir, args):
     # t = datetime.now()
     # t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     # t = ''.join([str(i) for i in t])
-    
-    l = [args['src']] + args['ccl_fea'] + args['drg_fea']
+    if any([True for i in [args['ccl_pca_k'], args['drg_pca_k']] if i is not None]): 
+        l = [args['src']] + args['ccl_fea'] + args['drg_fea'] + [f'drg_pca{drg_pca_k}'] + [f'ccl_pca{ccl_pca_k}']
+    else:
+        l = [args['src']] + args['ccl_fea'] + args['drg_fea']
                 
     name_sffx = '.'.join( l )
     # outdir = Path(outdir) / (name_sffx + '_' + t)
@@ -100,6 +106,8 @@ def run(args):
     ccl_fea_list = args['ccl_fea']
     drg_fea_list = args['drg_fea']
     n_jobs = args['n_jobs']
+    drg_pca_k = args['drg_pca_k']
+    ccl_pca_k = args['ccl_pca_k']    
     fea_sep = '_'
     
     
@@ -139,12 +147,12 @@ def run(args):
     lg.logger.info('ccl: {}'.format(ccl.shape))
     lg.logger.info('drg: {}'.format(drg.shape))
     
-    tmp = res.groupby('SOURCE').agg({'ccl_name': 'nunique', 'ctrpDrugID': 'nunique'}).reset_index()
-    lg.logger.info(tmp)
-    
     # Update resp
     res = res.reset_index()
-    res = res.rename(columns={'index': 'idx', 'SOURCE': 'src', 'area_under_curve': 'auc'})
+    res = res.rename(columns={'index': 'idx', 'ccl_name': 'cclname', 'SOURCE': 'src', 'area_under_curve': 'auc'})    
+    
+    tmp = res.groupby('src').agg({'cclname': 'nunique', 'ctrpDrugID': 'nunique'}).reset_index()
+    lg.logger.info(tmp)
 
     
     # =====================================================
@@ -164,9 +172,36 @@ def run(args):
     cnt_fea(drg, logger=lg.logger);
     drg = extract_subset_fea(df=drg, fea_list=drg_fea_list, fea_sep=fea_sep)
     cnt_fea(drg, logger=lg.logger);
+    
+    def pca_exp_var(pca, k):
+        return np.sum(pca.explained_variance_ratio_[:k])
+    
+    def dump_pca_data(datadir, pca_x, k, fea_name):
+        df = pd.DataFrame(pca_x.iloc[:, :k])
+        df.to_csv(datadir/f'{fea_name}_pca{k}.csv', index=False)    
+    
+    def pca_on_fea(df, fea_name, k, datadir):
+        lg.logger.info(f'Calc PCA for {fea_name} features.')
+        index = df.index
+        n = 1400
+        pca = PCA(n_components=n, random_state=SEED, svd_solver='auto')
+        pca_x = pca.fit_transform(df)
+        pca_x = StandardScaler().fit_transform(pca_x)
+        pca_x = pd.DataFrame(pca_x, index=index,
+                             columns=[f'{fea_name}_PC'+str(i+1) for i in range(n)])
+        exp_var = pca_exp_var(pca, k)
+        # dump_pca_data(datadir, pca_x=pca_x, k=k, fea_name=fea_name);
+        lg.logger.info(f'{fea_name} PCA variance explained {exp_var:.4f} (k={k}).')
+        return pca_x.iloc[:, :k]
+        
+    if drg_pca_k is not None:
+        ccl = pca_on_fea(df=ccl, fea_name='ccl', k=ccl_pca_k, datadir=datadir)
 
+    if ccl_pca_k is not None:
+        drg = pca_on_fea(df=drg, fea_name='drg', k=drg_pca_k, datadir=datadir)
+            
     # Bring the labels in, in order to merge on
-    ccl = ccl.reset_index().rename(columns={'index': 'ccl_name'})
+    ccl = ccl.reset_index().rename(columns={'index': 'cclname'})
     drg = drg.reset_index().rename(columns={'index': 'ctrpDrugID'})
 
 
@@ -175,29 +210,39 @@ def run(args):
     # =====================================================
     def merge_dfs(res_df, ccl_df, drg_df):
         """ Merge the following dfs: response, ccl fea, drug fea """
-        mrg_df = pd.merge(res_df, ccl_df, on='ccl_name', how='inner')
+        mrg_df = pd.merge(res_df, ccl_df, on='cclname', how='inner')
         mrg_df = pd.merge(mrg_df, drg_df, on='ctrpDrugID', how='inner')
         return mrg_df
 
     lg.logger.info('\nMerge ...')
-    mrg = merge_dfs(res, ccl, drg)
-    lg.logger.info('mrg.shape: {}'.format(mrg.shape))
+    mrg_df = merge_dfs(res, ccl, drg)
+    lg.logger.info('mrg_df.shape: {}'.format(mrg_df.shape))
 
 
     # =====================================================
     #       Extract xdata, ydata, meta and  dump to file
     # =====================================================
-    xdata = extract_subset_fea(df=mrg, fea_list=ccl_fea_list+drg_fea_list, fea_sep=fea_sep)
-    ydata = mrg[['auc']]
-    meta = mrg.drop(columns=xdata.columns)
+    """
+    xdata = extract_subset_fea(df=mrg_df, fea_list=['cclname']+ccl_fea_list+drg_fea_list, fea_sep=fea_sep)
+    ydata = mrg_df[['auc']]
+    meta = mrg_df.drop(columns=xdata.columns)
     meta = meta.drop(columns=['auc'])
     
     prfx = '.'.join( [src.lower()] + ccl_fea_list + drg_fea_list )
     xdata.to_parquet(run_outdir/(prfx+'_xdata.parquet'), index=False)
     ydata.to_parquet(run_outdir/(prfx+'_ydata.parquet'), index=False)
     meta.to_parquet( run_outdir/(prfx+'_meta.parquet'),  index=False)
-    
+
     lg.logger.info('xdata memory usage: {:.2f} GB\n'.format(sys.getsizeof(xdata)/1e9))
+    """
+    if any([True for i in [ccl_pca_k, drg_pca_k] if i is not None]): 
+        prfx = '.'.join( [src.lower()] + ccl_fea_list + drg_fea_list + [f'drg_pca{drg_pca_k}'] + [f'ccl_pca{ccl_pca_k}'] )
+    else:
+        prfx = '.'.join( [src.lower()] + ccl_fea_list + drg_fea_list )
+    
+    mrg_df.to_parquet(run_outdir/(prfx+'_data.parquet'), index=False)
+    lg.logger.info('mrg_df usage: {:.2f} GB\n'.format(sys.getsizeof(mrg_df)/1e9))
+    
     lg.kill_logger()
 
 

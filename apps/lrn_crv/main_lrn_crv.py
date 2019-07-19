@@ -61,9 +61,7 @@ def parse_args(args):
     parser = argparse.ArgumentParser(description="Generate learning curves.")
 
     # Input data
-    parser.add_argument('--dirpath',
-            default=None, type=str,
-            help='Full dir path to the data and split indices (default: None).')
+    parser.add_argument('--dirpath', default=None, type=str, help='Full path to data and splits (default: None).')
 
     # Select data name
     # parser.add_argument('--dname',
@@ -76,55 +74,38 @@ def parse_args(args):
     #     help='Data sources to use (relevant only for the `combined` dataset).')
 
     # Select target to predict
-    parser.add_argument('-t', '--target_name',
-            default='AUC', type=str, choices=['AUC', 'AUC1', 'IC50'],
+    parser.add_argument('-t', '--target_name', default='AUC', type=str, choices=['AUC', 'AUC1', 'IC50'],
             help='Column name of the target variable (default: AUC).')
 
     # Select feature types
-    parser.add_argument('-cf', '--cell_features', nargs='+',
-            default=['rna'], choices=['rna', 'cnv', 'clb'],
+    parser.add_argument('-cf', '--cell_features', nargs='+', default=['rna'], choices=['rna', 'cnv', 'clb'],
             help='Cell line features (default: `rna`).') # ['rna_latent']
-    parser.add_argument('-df', '--drug_features', nargs='+',
-            default=['dsc'], choices=['dsc', 'fng', 'dlb'],
+    parser.add_argument('-df', '--drug_features', nargs='+', default=['dsc'], choices=['dsc', 'fng', 'dlb'],
             help='Drug features (default: `dsc`).') # ['fng', 'dsc_latent', 'fng_latent']
-    parser.add_argument('-of', '--other_features',
-            default=[], choices=[],
+    parser.add_argument('-of', '--other_features', default=[], choices=[],
             help='Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).') # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
 
     # Data split methods
-    parser.add_argument('-cvm', '--cv_method',
-            default='simple', type=str, choices=['simple', 'group'],
-            help='Cross-val split method (default: `simple`).')
-    parser.add_argument('-cvf', '--cv_folds', 
-            default=5, type=str,
-            help='Number cross-val folds (default: 5).')
+    parser.add_argument('-cvm', '--cv_method', default='simple', type=str, choices=['simple', 'group'],
+            help='CV split method (default: `simple`).')
+    parser.add_argument('-cvf', '--cv_folds', default=5, type=str, help='Number cross-val folds (default: 5).')
     
     # ML models
-    parser.add_argument('-ml', '--model_name',
-            default='lgb_reg', type=str, 
+    parser.add_argument('-ml', '--model_name', default='lgb_reg', type=str, 
             choices=['lgb_reg', 'rf_reg', 'nn_reg', 'nn_reg0', 'nn_reg1', 'nn_reg2', 'nn_reg3', 'nn_reg4'],
             help='ML model to use for training (default: `lgb_reg`).')
 
     # NN hyper_params
-    parser.add_argument('-ep', '--epochs',
-            default=200, type=int,
-            help='Number of epochs (default: 200).')
-    parser.add_argument('-b', '--batch_size',
-            default=32, type=int,
-            help='Batch size (default: 32).')
-    parser.add_argument('--dr_rate',
-            default=0.2, type=float,
-            help='Dropout rate (default: 0.2).')
-    parser.add_argument('-sc', '--scaler',
-            default='stnd', type=str, choices=['stnd', 'minmax', 'rbst'],
-            help='Normalization method of the features (default: `stnd`).')
-    parser.add_argument('--opt',
-            default='sgd', type=str, choices=['sgd', 'adam', 'clr'],
+    parser.add_argument('-ep', '--epochs', default=200, type=int, help='Number of epochs (default: 200).')
+    parser.add_argument('-b', '--batch_size', default=32, type=int, help='Batch size (default: 32).')
+    parser.add_argument('--dr_rate', default=0.2, type=float, help='Dropout rate (default: 0.2).')
+    parser.add_argument('-sc', '--scaler', default='stnd', type=str, choices=['stnd', 'minmax', 'rbst'],
+            help='Feature normalization method (default: `stnd`).')
+    parser.add_argument('--opt', default='sgd', type=str, choices=['sgd', 'adam', 'clr'],
             help='Optimizer name (default: `sgd`).')
 
     # Learning curve
-    parser.add_argument('--lc_ticks', default=5, type=int,
-            help='Number of ticks in the learning curve plot default: 5).')
+    parser.add_argument('--lc_ticks', default=5, type=int, help='Number of ticks in the learning curve plot default: 5).')
 
     # Define n_jobs
     parser.add_argument('--n_jobs', default=4, type=int, help='Default: 4.')

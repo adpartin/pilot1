@@ -33,28 +33,62 @@ from torch import nn, optim
 from torch.optim import lr_scheduler
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+import copy
 
 SEED=42
+
 
 # File path
 file_path = Path(__file__).resolve().parent
 
 
+# Utils
+utils_path = file_path / '../../utils'
+sys.path.append(str(utils_path))
+import utils
+from classlogger import Logger
+
+
+# Path
+PRJ_NAME = file_path.name 
+OUTDIR = file_path / '../../out/' / PRJ_NAME
+
+
 def parse_args(args):
-    # Args
     parser = argparse.ArgumentParser(description="Compare keras and pytorch.")
-    parser.add_argument('--frm', default='krs', type=str, choices=['krs', 'trch'], help='DL framework (default: keras).')
-    parser.add_argument('--dname', default='top6', type=str, choices=['top6', 'ytn'], help='Dataset name (default: top6).')
-    parser.add_argument('--src', default='GDSC', type=str, help='Data source (default: GDSC).')
-    parser.add_argument('--n_jobs', default=4, type=int, help='Number of cpu workers (default: 4).')
+
+    # Input data
+    parser.add_argument('--dirpath', default=None, type=str, help='Full path to data and split (default: None).')
+
+    parser.add_argument('--dname', default='ytn', type=str, choices=['top6', 'ytn'], help='Dataset name (default: ytn).')
+    parser.add_argument('--frm', default='trch', type=str, choices=['krs', 'trch'], help='DL framework (default: trch).')
+    # parser.add_argument('--src', default='GDSC', type=str, help='Data source (default: GDSC).')
+
     parser.add_argument('--ep', default=250, type=int, help='Epochs (default: 250).')
+    parser.add_argument('--dr_rate', default=0.2, type=float, help='Dropout rate (default: 0.2).')
+    parser.add_argument('--batch_size', default=32, type=float, help='Batch size (default: 32).')
+
+    parser.add_argument('--n_jobs', default=4, type=int, help='Number of cpu workers (default: 4).')
     args = parser.parse_args(args)
     args = vars(args)
     return args
 
 
+def create_outdir(outdir, args):
+    t = datetime.now()
+    t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
+    t = ''.join([str(i) for i in t])
+    
+    l = [args['src']] + [args['frm']] + ['ep'+str(args['ep'])] + ['dr'+str(args['dr_rate'])] 
+        
+    name_sffx = '.'.join( l )
+    outdir = Path(outdir) / (name_sffx + '_' + t)
+    os.makedirs(outdir)
+    return outdir
+
+
 def r2_torch(y_true, y_pred):
-    """ TODO: consider to convert tensors"""
+    """ TODO: consider to convert tensors """
     epsilon = 1e-7  # this epsilon value is used in TF
     SS_res = torch.sum( (y_true - y_pred)**2 )
     SS_tot = torch.sum( (y_true - torch.mean(y_true))**2 )
@@ -123,13 +157,6 @@ def fit(model: nn.Module,
         metrics (list) : list of metric scores to log
             (available metrics: 'mean_abs_err','median_abs_err', 'mean_sqrd_err', 'r2)
     """ 
-    # print(f'Arg `device`: {device}')
-    # model.to(device)
-    # print('current_device:', torch.cuda.current_device())
-
-    # Choose cuda device with context manager --> try using context manager!!!
-    # with torch.cuda.device(device):
-
     # Create dicts to log scores
     if vl_dl is None:
         logs = OrderedDict({'loss': []})
@@ -138,6 +165,8 @@ def fit(model: nn.Module,
         logs = OrderedDict({'loss': [], 'val_loss': []})
         for m in metrics: logs.update(OrderedDict({m: [], 'val_'+m: []}))
 
+    best_score = -np.inf # torch.Tensor([float('inf')])
+            
     # Iter over epochs
     phases = ['train', 'val'] if vl_dl is not None else ['train']
     for ep in range(epochs):
@@ -164,18 +193,23 @@ def fit(model: nn.Module,
 
                 # Process batch
                 if ph == 'train':
-                    loss, pred = proc_batch(x_dct=xx_dct, y=y, model=model, loss_fnc=loss_fnc, opt=opt)
+                    loss, pred = proc_batch(x_dct=x_dct, y=y, model=model, loss_fnc=loss_fnc, opt=opt)
                 else:
-                    loss, pred = proc_batch(x_dct=xx_dct, y=y, model=model, loss_fnc=loss_fnc, opt=None)
+                    loss, pred = proc_batch(x_dct=x_dct, y=y, model=model, loss_fnc=loss_fnc, opt=None)
 
                 # Compute metrics (running avg)
-                scores[loss_name] += loss.item()
+                scores[loss_name] += loss.item() * x.size(0) # TODO: why should multiply by this value??
                 scores = update_scores_reg(pred=pred, true=y, scores=scores)
 
             # Log scores
             for m in scores.keys():
                 logs[m].append(scores[m]/len(dl))
 
+            # Store best model
+            if ph=='val' and scores['val_r2'] > best_score:
+                best_score = scores['val_r2']
+                best_model_wts = copy.deepcopy(model.state_dict())
+                
             del y, x, x_dct, loss, pred, scores
 
         if verbose:
@@ -185,7 +219,14 @@ def fit(model: nn.Module,
 
         # TODO: log scores into file
 
-    return logs
+    return model, logs
+
+
+def set_parameter_requires_grad(model, fea_extractor):
+    """ This is for transfer learning. """
+    if fea_extractor:
+        for param in model.parameters():
+            param.requires_grad = False
 
 
 def weight_init_linear(m: nn.Module):
@@ -205,7 +246,8 @@ def get_model_device(model):
     return str(next(model.parameters()).device)
 
 
-class Dataset_Merged(Dataset):
+class Dataset_Tidy(Dataset):
+    """ ... """
     def __init__(self,
                  xdata: pd.DataFrame,
                  ydata: pd.DataFrame):
@@ -213,7 +255,7 @@ class Dataset_Merged(Dataset):
         xdata = pd.DataFrame(xdata).values
         ydata = pd.DataFrame(ydata).values
         self.x = torch.tensor(xdata, dtype=torch.float32)
-        self.y = torch.tensor(ydata, dtype=torch.float32)
+        self.y = torch.tensor(ydata, dtype=torch.float64)
         self.y = self.y.view(-1, 1)
 
     def __len__(self):
@@ -225,8 +267,10 @@ class Dataset_Merged(Dataset):
         return x, y
 
 
-class NN_Reg_Merged(nn.Module):
+class NN_Reg_Tidy(nn.Module):
+    """ ... """
     def __init__(self, input_dim, dr_rate=0.2):
+        """ ... """
         super().__init__()
         self.input_dim = input_dim
         self.dr_rate = dr_rate
@@ -234,80 +278,120 @@ class NN_Reg_Merged(nn.Module):
         self.fc1 = nn.Linear(self.input_dim, 1000)
         self.fc2 = nn.Linear(1000, 500)
         self.fc3 = nn.Linear(500, 250)
-        self.fc4 = nn.Linear(250, 60)
-        self.fc5 = nn.Linear(60, 1)
+        self.fc4 = nn.Linear(250, 125)
+        self.fc5 = nn.Linear(125, 60)
+        self.fc6 = nn.Linear(60, 30)
+        self.fc7 = nn.Linear(30, 1)
         self.dropout = nn.Dropout(self.dr_rate)
-
-#             self.layers = [self.input_dim, 1000, 1000, 500, 250, 125, 60, 30, 1]
-#             # self.layers = [self.input_dim, 1000, 500, 250, 60, 1]
-#             self.net = nn.ModuleList([ nn.Linear(self.layers[i], self.layers[i+1]) for i in range(len(self.layers)-1) ])
-#             # self.net.apply(weight_init_linear)        
+  
 
     def forward(self, x):
         x = self.dropout(F.relu(self.fc1(x)))
         x = self.dropout(F.relu(self.fc2(x)))
         x = self.dropout(F.relu(self.fc3(x)))
         x = self.dropout(F.relu(self.fc4(x)))
-        x = F.relu(self.fc5(x))
-
-#             for i, layer in enumerate(self.net):
-#                 if i == 0:
-#                     # input layer
-#                     x = layer(x)
-#                     # x = F.batch_norm(x, training=self.training)
-#                     x = F.relu(x)
-#                     x = F.dropout(x, p=self.dr_rate, training=self.training)
-
-#                 elif i == (len(self.layers) - 1):
-#                     # output layer
-#                     x = layer(x)
-#                     x = F.relu(x) # TODO: should this be mse
-
-#                 else:
-#                     # hidden layers
-#                     x = layer(x)
-#                     # x = F.batch_norm(x, training=self.training)
-#                     x = F.relu(x)
-#                     x = F.dropout(x, p=self.dr_rate, training=self.training)            
+        x = self.dropout(F.relu(self.fc5(x)))
+        x = self.dropout(F.relu(self.fc6(x)))
+        x = F.relu(self.fc7(x)) 
         return x
 
 
 def run(args):
-    # Args
+    dirpath = Path(args['dirpath'])
+    dname = args['dname']
     framework = args['frm']
-    data_name = args['dname']
-    src = args['src']
-    n_jobs = args['n_jobs']
+    # src = args['src']
+    
     epochs = args['ep']
+    dr_rate = args['dr_rate']
+    batch_size = args['batch_size']
+    n_jobs = args['n_jobs']
 
-    dr_rate = 0.2
-    batch_size = 32
     verbose = True    
-    
-    # fold = 0
-    # ccl_fea_list = ['geneGE']
-    # drg_fea_list = ['DD']
-    # fea_sep = '_'
-    # fea_float_dtype = fea_float_dtype
+    args['src'] = dirpath.name.split('.')[0]
+    src = args['src'] 
     
     
     # =====================================================
-    # Load data
+    #       Logger
     # =====================================================
-    if data_name=='ytn':
+    run_outdir = create_outdir(OUTDIR, args)
+    logfilename = run_outdir/'logfile.log'
+    lg = Logger(logfilename)
+    lg.logger.info(datetime.now())
+    lg.logger.info(f'\nFile path: {file_path}')
+    lg.logger.info(f'Machine: {platform.node()} ({platform.system()}, {psutil.cpu_count()} CPUs)')
+    lg.logger.info(f'\n{pformat(args)}')
+
+    # Dump args to file
+    utils.dump_args(args, run_outdir)      
+    
+
+    # =====================================================
+    #       Load data
+    # =====================================================
+    """
+    xdata_fpath = Path((glob(str(dirpath/'*xdata.parquet')))[0])
+    ydata_fpath = Path((glob(str(dirpath/'*ydata.parquet')))[0])
+    meta_fpath = Path((glob(str(dirpath/'*meta.parquet')))[0])
+    if xdata_fpath.is_file():
+        xdata = pd.read_parquet( xdata_fpath, engine='auto', columns=None )
+    if ydata_fpath.is_file():
+        ydata = pd.read_parquet( ydata_fpath, engine='auto', columns=None )
+    if meta_fpath.is_file():
+        meta = pd.read_parquet( meta_fpath, engine='auto', columns=None )
+    """
+    data_fpath = Path((glob(str(dirpath/'*data.parquet')))[0])
+    if data_fpath.is_file():
+        data = pd.read_parquet( data_fpath, engine='auto', columns=None )
+        lg.logger.info('\ndata {}'.format(data.shape))
+
+
+    if dname=='ytn':
         datadir = Path(file_path/'../../data/yitan/Data')
         ccl_folds_dir = Path(file_path/'../../data/yitan/CCL_10Fold_Partition')
         pdm_folds_dir = Path(file_path/'../../data/yitan/PDM_10Fold_Partition')
 
-        # Read train data
-        xtr = pd.read_parquet(datadir/f'{src.lower()}_xtr.parquet')
-        ytr = pd.read_parquet(datadir/f'{src.lower()}_ytr.parquet')
+        fold = 0
+        ccl_fea_list = ['geneGE']
+        drg_fea_list = ['DD']
+        # ccl_fea_list = ['ccl']
+        # drg_fea_list = ['drg']
+        fea_sep = '_'
 
-        # Read val data
-        xvl = pd.read_parquet(datadir/f'{src.lower()}_xvl.parquet')
-        yvl = pd.read_parquet(datadir/f'{src.lower()}_yvl.parquet')
+        ids_path = ccl_folds_dir/f'{src}/cv_{fold}' # 'TestList.txt'
+        tr_ids_list = pd.read_csv(ids_path/'TrainList.txt', header=None).squeeze().values
+        vl_ids_list = pd.read_csv(ids_path/'ValList.txt', header=None).squeeze().values
+        # te_ids_list = pd.read_csv(ids_path/'TestList.txt', header=None).squeeze().values
 
-    elif data_name=='top6':
+        data_tr = data[ data['cclname'].isin( tr_ids_list ) ]
+        data_vl = data[ data['cclname'].isin( vl_ids_list ) ]
+        # data_te = data[ data['cclname'].isin( te_ids_list ) ]
+
+        lg.logger.info('data_tr {}'.format(data_tr.shape))
+        lg.logger.info('data_vl {}'.format(data_vl.shape))
+        # lg.logger.info('data_te {}'.format(data_te.shape))
+
+        def extract_subset_fea(df, fea_list, fea_sep='_'):
+            """ Extract features based feature prefix name. """
+            fea = [c for c in df.columns if (c.split(fea_sep)[0]) in fea_list]
+            df = df[fea]
+            return df
+
+        def extract_data(df):
+            """ ... """
+            X = extract_subset_fea(df, fea_list=ccl_fea_list + drg_fea_list, fea_sep='_')
+            Y = df[['auc']]
+            meta = df.drop(columns=X.columns)
+            meta = meta.drop(columns=['auc'])
+            return X, Y, meta
+
+        xtr, ytr, mtr = extract_data(data_tr)
+        xvl, yvl, mvl = extract_data(data_vl)
+        # xte, yte, mte = extract_data(data_te)
+        
+
+    elif dname=='top6':
         datadir = Path(file_path/'../../data/processed/topN/topNcode/')
         datapath = datadir/'top_6.res_reg.cf_rnaseq.dd_dragon7.labled.parquet'
         data = pd.read_parquet(datapath, engine='auto', columns=None)
@@ -335,15 +419,17 @@ def run(args):
         xtr = pd.DataFrame( scaler.fit_transform(xtr), columns=columns ).astype(np.float32)
         xvl = pd.DataFrame( scaler.transform(xvl), columns=columns ).astype(np.float32)
 
-    print('xtr.shape:', xtr.shape)
-    print('xvl.shape:', xvl.shape)
-    print('ytr.shape:', ytr.shape)
-    print('yvl.shape:', yvl.shape)
+
+    lg.logger.info('\nxtr.shape: {}'.format(xtr.shape))
+    lg.logger.info('xvl.shape: {}'.format(xvl.shape))
+    lg.logger.info('ytr.shape: {}'.format(ytr.shape))
+    lg.logger.info('yvl.shape: {}'.format(yvl.shape))
 
 
     # =====================================================
     # Train with LGBM
     # =====================================================
+    """
     print('\n{}'.format('=' * 50))
     print('Train with LGBM ...')
     
@@ -370,24 +456,24 @@ def run(args):
     lgbm_scores['mae_tr'] = mean_absolute_error(ytr, pred_ytr)
     lgbm_scores['mae_vl'] = mean_absolute_error(yvl, pred_yvl)
     for k, v, in lgbm_scores.items(): print(f'{k}: {v}')
+    """
 
 
     # =====================================================
     # Choose NN framework
     # =====================================================
     if framework == 'trch':
-        print('\n{}'.format('=' * 50))
-        print('Train with NN Reg ...')
-        print('PyTorch version:', torch.__version__)
-        print('\nCUDA info ...')
-        print('is_available:  ', torch.cuda.is_available())
-        print('device_name:   ', torch.cuda.get_device_name(0))
-        print('device_count:  ', torch.cuda.device_count())
-        print('current_device:', torch.cuda.current_device())
+        lg.logger.info('\n{}'.format('=' * 50))
+        lg.logger.info('Train with NN Reg ...')
+        lg.logger.info('PyTorch version: {}'.format(torch.__version__))
+        lg.logger.info('\nCUDA info ...')
+        lg.logger.info('device_name:    {}'.format( torch.cuda.get_device_name(0) ))
+        lg.logger.info('device_count:   {}'.format( torch.cuda.device_count() ))
+        lg.logger.info('current_device: {}'.format( torch.cuda.current_device() ))
 
         # Create torch datasets
-        tr_ds = Dataset_Merged(xdata=xtr, ydata=ytr)
-        vl_ds = Dataset_Merged(xdata=xvl, ydata=yvl)
+        tr_ds = Dataset_Tidy(xdata=xtr, ydata=ytr)
+        vl_ds = Dataset_Tidy(xdata=xvl, ydata=yvl)
 
         # Create data loaders
         tr_loader_kwargs = {'batch_size': batch_size, 'shuffle': True, 'num_workers': n_jobs}
@@ -400,7 +486,7 @@ def run(args):
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
         # Create model and move to CUDA device
-        model = NN_Reg_Merged(input_dim=tr_ds.x.shape[1]).to(device) # send model to gpu/cpu device
+        model = NN_Reg_Tidy(input_dim=tr_ds.x.shape[1]).to(device) # send model to gpu/cpu device
         # model.apply(weight_init_linear)
         print(model)
 
@@ -425,7 +511,7 @@ def run(args):
                    tr_dl=tr_loader,
                    vl_dl=vl_loader,
                    **fit_kwargs)
-        print('Train time: {:.3f} mins'.format( (time()-t0)/60 ))
+        print('Train time: {:.2f} mins'.format( (time()-t0)/60 ))
 
         # Predict
         xtr = torch.tensor(xtr.values, dtype=torch.float32).to(device)
@@ -440,7 +526,9 @@ def run(args):
         nn_scores['r2_vl'] = r2_score(yvl, pred_yvl)
         nn_scores['mae_tr'] = mean_absolute_error(ytr, pred_ytr)
         nn_scores['mae_vl'] = mean_absolute_error(yvl, pred_yvl)
-        for k, v, in nn_scores.items(): print(f'{k}: {v}')
+        lg.logger.info(pformat(nn_scores))
+        # for k, v, in nn_scores.items(): print(f'{k}: {v}')
+        utils.dump_dict(nn_scores, outpath=run_outdir/'./krs_scores.txt')
 
 
     elif framework == 'krs':
@@ -459,41 +547,54 @@ def run(args):
             SS_tot = K.sum(K.square(y_true - K.mean(y_true)))
             return (1 - SS_res/(SS_tot + K.epsilon()))      
 
-        def nn_reg_merged(input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
+        def nn_reg_tidy(input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
             inputs = Input(shape=(input_dim,))
-            x = Dense(1000)(inputs)
-            x = BatchNormalization()(x)
-            x = Activation('relu')(x)
-
-            x = Dense(1000)(x)
-            x = BatchNormalization()(x)
-            x = Activation('relu')(x)
+            
+            x = Dense(1000, activation='relu')(inputs)
             x = Dropout(dr_rate)(x)
-
-            x = Dense(500)(x)
-            x = BatchNormalization()(x)
-            x = Activation('relu')(x)
+            
+            x = Dense(500, activation='relu')(x)
             x = Dropout(dr_rate)(x)
-
-            x = Dense(250)(x)
-            x = BatchNormalization()(x)
-            x = Activation('relu')(x)
+            
+            x = Dense(250, activation='relu')(x)
             x = Dropout(dr_rate)(x)
-
-            x = Dense(125)(x)
-            x = BatchNormalization()(x)
-            x = Activation('relu')(x)
+            
+            x = Dense(60, activation='relu')(x)
             x = Dropout(dr_rate)(x)
+            
+#             x = Dense(1000)(inputs)
+#             x = BatchNormalization()(x)
+#             x = Activation('relu')(x)
 
-            x = Dense(60)(x)
-            x = BatchNormalization()(x)
-            x = Activation('relu')(x)
-            x = Dropout(dr_rate)(x)
+#             x = Dense(1000)(x)
+#             x = BatchNormalization()(x)
+#             x = Activation('relu')(x)
+#             x = Dropout(dr_rate)(x)
 
-            x = Dense(30)(x)
-            x = BatchNormalization()(x)
-            x = Activation('relu')(x)
-            x = Dropout(dr_rate)(x)
+#             x = Dense(500)(x)
+#             x = BatchNormalization()(x)
+#             x = Activation('relu')(x)
+#             x = Dropout(dr_rate)(x)
+
+#             x = Dense(250)(x)
+#             x = BatchNormalization()(x)
+#             x = Activation('relu')(x)
+#             x = Dropout(dr_rate)(x)
+
+#             x = Dense(125)(x)
+#             x = BatchNormalization()(x)
+#             x = Activation('relu')(x)
+#             x = Dropout(dr_rate)(x)
+
+#             x = Dense(60)(x)
+#             x = BatchNormalization()(x)
+#             x = Activation('relu')(x)
+#             x = Dropout(dr_rate)(x)
+
+#             x = Dense(30)(x)
+#             x = BatchNormalization()(x)
+#             x = Activation('relu')(x)
+#             x = Dropout(dr_rate)(x)
 
             outputs = Dense(1, activation='relu')(x)
             model = Model(inputs=inputs, outputs=outputs)
@@ -528,13 +629,13 @@ def run(args):
         init_kwargs = {'input_dim': xtr.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name}
         fit_kwargs = {'batch_size': batch_size, 'epochs': epochs, 'verbose': verbose}
         fit_kwargs['callbacks'] = callback_list
-        fit_kwargs['validation_split'] = 0.1
-        model = nn_reg_merged(**init_kwargs)
+        # fit_kwargs['validation_split'] = 0.1
+        model = nn_reg_tidy(**init_kwargs)
 
         # Train model
         t0 = time()
         history = model.fit(xtr, ytr, **fit_kwargs)
-        print('Train time: {:.3f} mins'.format( (time()-t0)/60 ))
+        print('Train time: {:.2f} mins'.format( (time()-t0)/60 ))
 
         # Predict
         pred_ytr = model.predict(xtr)
@@ -547,7 +648,9 @@ def run(args):
         nn_scores['r2_vl'] = r2_score(yvl, pred_yvl)
         nn_scores['mae_tr'] = mean_absolute_error(ytr, pred_ytr)
         nn_scores['mae_vl'] = mean_absolute_error(yvl, pred_yvl)
-        for k, v, in nn_scores.items(): print(f'{k}: {v}')
+        lg.logger.info(pformat(nn_scores))
+        # for k, v, in nn_scores.items(): print(f'{k}: {v}')
+        utils.dump_dict(nn_scores, outpath=run_outdir/'./krs_scores.txt')
 
 
     print('Done.')

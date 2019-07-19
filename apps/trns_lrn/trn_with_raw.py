@@ -240,28 +240,6 @@ def get_model_device(model):
     return str(next(model.parameters()).device)
 
 
-class NN_Reg_Merged(nn.Module):
-    def __init__(self, input_dim, dr_rate=0.2):
-        super().__init__()
-        self.input_dim = input_dim
-        self.dr_rate = dr_rate
-
-        self.fc1 = nn.Linear(self.input_dim, 1000)
-        self.fc2 = nn.Linear(1000, 500)
-        self.fc3 = nn.Linear(500, 250)
-        self.fc4 = nn.Linear(250, 60)
-        self.fc5 = nn.Linear(60, 1)
-        self.dropout = nn.Dropout(self.dr_rate)      
-
-    def forward(self, x):
-        x = self.dropout(F.relu(self.fc1(x)))
-        x = self.dropout(F.relu(self.fc2(x)))
-        x = self.dropout(F.relu(self.fc3(x)))
-        x = self.dropout(F.relu(self.fc4(x)))
-        x = F.relu(self.fc5(x))
-        return x
-
-
 class Dataset_Raw(Dataset):
     def __init__(self,
                  res_df: pd.DataFrame,
@@ -462,7 +440,6 @@ class NN_Reg_Raw(nn.Module):
         
 
     def forward(self, ccl_fea, drg_fea):
-        # Input
         x = torch.cat((ccl_fea, drg_fea), dim=1)
         
         x = self.dropout(F.relu(self.fc1(x)))
