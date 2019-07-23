@@ -64,9 +64,7 @@ def parse_args(args):
     parser.add_argument('--dirpath', default=None, type=str, help='Full path to data and splits (default: None).')
 
     # Select data name
-    # parser.add_argument('--dname',
-    #     default=None, choices=['combined'],
-    #     help='Data name (default: `combined`).')
+    # parser.add_argument('--dname', default=None, choices=['combined'], help='Data name (default: `combined`).')
 
     # Select (cell line) sources 
     # parser.add_argument('-src', '--src_names', nargs='+',
@@ -112,7 +110,6 @@ def parse_args(args):
 
     # Parse args
     args = parser.parse_args(args)
-    args = vars(args)
     return args
         
     
@@ -234,9 +231,8 @@ def run(args):
             elif scaler == 'rbst':
                 scaler = RobustScaler()
         
-        colnames = xdata.columns
-        xdata = scaler.fit_transform(xdata).astype(np.float32)
-        xdata = pd.DataFrame(xdata, columns=colnames)
+        cols = xdata.columns
+        xdata = pd.DataFrame(scaler.fit_transform(xdata), columns=cols, dtype=np.float32)
 
 
         # -----------------------------------------------
@@ -263,17 +259,17 @@ def run(args):
 
         # ML model params
         if model_name == 'lgb_reg':
-            init_prms = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
-            fit_prms = {'verbose': False}  # 'early_stopping_rounds': 10,
+            init_kwargs = {'n_jobs': n_jobs, 'random_state': SEED, 'logger': lg.logger}
+            fit_kwargs = {'verbose': False}  # 'early_stopping_rounds': 10,
         elif model_name == 'nn_reg':
-            init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'attn': attn, 'logger': lg.logger}
-            fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1} 
+            init_kwargs = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'attn': attn, 'logger': lg.logger}
+            fit_kwargs = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1} 
         elif model_name == 'nn_reg0' or 'nn_reg1' or 'nn_reg2':
-            init_prms = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
-            fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
+            init_kwargs = {'input_dim': xdata.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
+            fit_kwargs = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
         elif model_name == 'nn_reg3' or 'nn_reg4':
-            init_prms = {'in_dim_rna': None, 'in_dim_dsc': None, 'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
-            fit_prms = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
+            init_kwargs = {'in_dim_rna': None, 'in_dim_dsc': None, 'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
+            fit_kwargs = {'batch_size': batch_size, 'epochs': epochs, 'verbose': 1}  # 'validation_split': 0.1
 
 
         # -----------------------------------------------
@@ -288,8 +284,8 @@ def run(args):
             Y = ydata,
             mltype = mltype,
             model_name = model_name,
-            init_params = init_prms,
-            fit_params = fit_prms,
+            init_kwargs = init_kwargs,
+            fit_kwargs = fit_kwargs,
             cv = None,
             cv_splits = (tr_id, vl_id),
             lc_ticks = lc_ticks,
@@ -343,6 +339,7 @@ def run(args):
 
 def main(args):
     args = parse_args(args)
+    args = vars(args)
     ret = run(args)
     
 

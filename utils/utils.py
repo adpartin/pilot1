@@ -56,7 +56,7 @@ def dump_args(args, outdir='.'):
     """
     with open( Path(outdir)/'args.txt', 'w' ) as file:
         for k, v in args.items():
-            file.write('{} = {}\n'.format(k, v))
+            file.write('{}: {}\n'.format(k, v))
 
 
 def dump_dict(args, outpath='./dict.txt'):
@@ -66,7 +66,7 @@ def dump_dict(args, outpath='./dict.txt'):
     """
     with open( Path(outpath), 'w' ) as file:
         for k, v in args.items():
-            file.write('{} = {}\n'.format(k, v))            
+            file.write('{}: {}\n'.format(k, v))            
             
             
 def subsample(df, v, axis=0):

@@ -44,8 +44,8 @@ def my_learning_curve(
         X, Y,
         mltype: str,
         model_name: str='lgb_reg',
-        init_params: dict=None, 
-        fit_params: dict=None,
+        init_kwargs: dict=None, 
+        fit_kwargs: dict=None,
         cv=5,
         cv_splits=None,
         lc_ticks: int=5,
@@ -65,7 +65,7 @@ def my_learning_curve(
         cv_splits : tuple of 2 dicts cv_splits[0] and cv_splits[1] contain the tr and vl splits, respectively 
         lc_ticks : number of ticks in the learning curve (used if data_sz_frac is None)
         data_sz_frac : relative numbers of training samples that will be used to generate learning curves
-        fit_params : dict of parameters to the estimator's "fit" method
+        fit_kwargs : dict of parameters to the estimator's "fit" method
 
         metrics : allow to pass a string of metrics  TODO!
         args : command line args
@@ -172,7 +172,7 @@ def my_learning_curve(
             ytr_sub = np.squeeze(ytr[idx[:tr_sz], :])            
 
             # Get the estimator
-            estimator = ml_models.get_model(model_name, init_params=init_params)
+            estimator = ml_models.get_model(model_name, init_kwargs=init_kwargs)
 
             if 'nn' in model_name:
                 plot_model(estimator.model, to_file=outdir/'nn_model.png')
@@ -185,7 +185,7 @@ def my_learning_curve(
                 clr = CyclicLR(base_lr=1e-4, max_lr=1e-3, mode='triangular')
                 
                 # Keras callbacks
-                checkpointer = ModelCheckpoint(str(out_nn_model/'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
+                checkpointer = ModelCheckpoint(str(out_nn_model/'model_best.h5'), verbose=0, save_weights_only=False, save_best_only=True)
                 csv_logger = CSVLogger(out_nn_model/'training.log')
                 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
                                               min_delta=0.0001, cooldown=3, min_lr=0.000000001)
@@ -198,12 +198,12 @@ def my_learning_curve(
 
                 # Fit params
                 # TODO: which val set should be used??
-                fit_params['validation_data'] = (xvl, yvl)
-                # fit_params['validation_split'] = 0.2
-                fit_params['callbacks'] = callback_list
+                fit_kwargs['validation_data'] = (xvl, yvl)
+                # fit_kwargs['validation_split'] = 0.2
+                fit_kwargs['callbacks'] = callback_list
 
             # Train model
-            history = estimator.model.fit(xtr_sub, ytr_sub, **fit_params)
+            history = estimator.model.fit(xtr_sub, ytr_sub, **fit_kwargs)
 
             # If nn, load the best model
             if 'nn' in model_name:

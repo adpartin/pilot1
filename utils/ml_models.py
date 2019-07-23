@@ -45,28 +45,28 @@ def r2_krs(y_true, y_pred):
     return (1 - SS_res/(SS_tot + K.epsilon()))
 
 
-def get_model(model_name, init_params=None):
+def get_model(model_name, init_kwargs=None):
     """ Return a model.
     Args:
-        init_params : init parameters to the model
+        init_kwargs : init parameters to the model
         model_name : model name
     """
     if model_name == 'lgb_reg':
-        model = LGBM_REGRESSOR(**init_params)
+        model = LGBM_REGRESSOR(**init_kwargs)
     elif model_name == 'rf_reg':
-        model = RF_REGRESSOR(**init_params)
+        model = RF_REGRESSOR(**init_kwargs)
     elif model_name == 'nn_reg':
-        model = KERAS_REGRESSOR(**init_params)
+        model = KERAS_REGRESSOR(**init_kwargs)
     elif model_name == 'nn_reg0':
-        model = NN_REG0(**init_params)
+        model = NN_REG0(**init_kwargs)
     elif model_name == 'nn_reg1':
-        model = NN_REG1(**init_params)
+        model = NN_REG1(**init_kwargs)
     elif model_name == 'nn_reg2':
-        model = NN_REG2(**init_params)
+        model = NN_REG2(**init_kwargs)
     elif model_name == 'nn_reg3':
-        model = NN_REG3(**init_params)
+        model = NN_REG3(**init_kwargs)
     elif model_name == 'nn_reg4':
-        model = NN_REG4(**init_params)
+        model = NN_REG4(**init_kwargs)
     else:
         raise ValueError('model_name is invalid.')
     return model
@@ -262,43 +262,57 @@ class NN_REG0(BaseMLModel):
     """
     model_name = 'nn_reg0'
 
-    def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
-        inputs = Input(shape=(input_dim,))
-        x = Dense(1000)(inputs)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
+    def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', initializer='he_uniform', logger=None):
+        inputs = Input(shape=(input_dim,), name='inputs')
 
-        x = Dense(1000)(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = Dropout(dr_rate)(x)
-        
-        x = Dense(500)(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = Dropout(dr_rate)(x)
-        
-        x = Dense(250)(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = Dropout(dr_rate)(x)
-        
-        x = Dense(125)(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = Dropout(dr_rate)(x)
+        layers = [1000, 1000, 500, 250, 125, 60, 30]
+        # layers = [1000, 500, 250, 60]
 
-        x = Dense(60)(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = Dropout(dr_rate)(x)
+        for i, l_size in enumerate(layers):
+            if i == 0:
+                x = Dense(l_size, kernel_initializer=initializer, name=f'fc{i+1}')(inputs)
+            else:
+                x = Dense(l_size, kernel_initializer=initializer, name=f'fc{i+1}')(x)
+            x = BatchNormalization(name=f'bn{i+1}')(x)
+            x = Activation('relu', name=f'a{i+1}')(x)
+            x = Dropout(dr_rate, name=f'drp{i+1}')(x)        
         
-        x = Dense(30)(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = Dropout(dr_rate)(x)
+#         inputs = Input(shape=(input_dim,))
+#         x = Dense(1000)(inputs)
+#         x = BatchNormalization()(x)
+#         x = Activation('relu')(x)
 
-        outputs = Dense(1, activation='relu')(x)
+#         x = Dense(1000)(x)
+#         x = BatchNormalization()(x)
+#         x = Activation('relu')(x)
+#         x = Dropout(dr_rate)(x)
+        
+#         x = Dense(500)(x)
+#         x = BatchNormalization()(x)
+#         x = Activation('relu')(x)
+#         x = Dropout(dr_rate)(x)
+        
+#         x = Dense(250)(x)
+#         x = BatchNormalization()(x)
+#         x = Activation('relu')(x)
+#         x = Dropout(dr_rate)(x)
+        
+#         x = Dense(125)(x)
+#         x = BatchNormalization()(x)
+#         x = Activation('relu')(x)
+#         x = Dropout(dr_rate)(x)
+
+#         x = Dense(60)(x)
+#         x = BatchNormalization()(x)
+#         x = Activation('relu')(x)
+#         x = Dropout(dr_rate)(x)
+        
+#         x = Dense(30)(x)
+#         x = BatchNormalization()(x)
+#         x = Activation('relu')(x)
+#         x = Dropout(dr_rate)(x)
+
+        outputs = Dense(1, activation='relu', name='outputs')(x)
         model = Model(inputs=inputs, outputs=outputs)
         
         if opt_name == 'sgd':
@@ -312,6 +326,15 @@ class NN_REG0(BaseMLModel):
                       optimizer=opt,
                       metrics=['mae', r2_krs])
         self.model = model
+        
+        
+    def dump_model(self, outpath='.'):
+        """ Dump trained model. """        
+        if outpath is None:
+            self.model.save( str(Path(outpath)/f'{self.model_name}.h5') )
+        else:
+            self.model.save( str(Path(outpath)) )
+
 
 
 class NN_REG1(BaseMLModel):

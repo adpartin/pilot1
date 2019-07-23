@@ -51,30 +51,87 @@ PRJ_NAME = file_path.name
 OUTDIR = file_path / '../../data/processed' / PRJ_NAME
 
         
+def parse_args(args):
+    parser = argparse.ArgumentParser(description="Generate and save dataset splits.")
+
+    # Input data
+    parser.add_argument('--dirpath', default=None, type=str, help='Full path to data (default: None).')
+
+    # Combined related params
+    # Data name
+    parser.add_argument('--dname', default=None, choices=['combined'], help='Data name (default: None).')
+    parser.add_argument('--rna_norm', default='raw', choices=['raw', 'combat'], help='RNA normalization (default: `raw`).')
+    parser.add_argument('--no_fibro', action='store_true', default=False, help='Default: False')
+    parser.add_argument('--src', nargs='+', default=None, choices=['ccle', 'gcsi', 'gdsc', 'ctrp', 'nci60'],
+        help='Data sources to use (default: None).')
+
+    # Target to predict
+    # parser.add_argument('-t', '--target_name', default='AUC', choices=['AUC', 'AUC1', 'IC50'],
+    #     help='Column name of the target variable (default: `AUC`).')
+
+    # Feature types
+    parser.add_argument('-cf', '--cell_fea', nargs='+', default=['rna'], choices=['rna', 'cnv', 'clb'],
+        help='Cell line features (default: `rna`).') # ['rna_latent']
+    parser.add_argument('-df', '--drug_fea', nargs='+', default=['dsc'], choices=['dsc', 'fng', 'dlb'],
+        help='Drug features (default: `dsc`).') # ['fng', 'dsc_latent', 'fng_latent']
+    parser.add_argument('-of', '--other_fea', default=[], choices=[],
+        help='Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).') # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
+
+    # Data split methods
+    parser.add_argument('-tem', '--te_method', default=None, choices=['simple', 'group'],
+        help='Test split method (default: None).')
+    parser.add_argument('--te_size', type=float, default=0.1, 
+        help='Test size split ratio (default: 0.1).')
+    parser.add_argument('-cvm', '--cv_method', default='simple', choices=['simple', 'group'],
+        help='Cross-val split method (default: `simple`).')
+    parser.add_argument('--vl_size', type=float, default=0.1, 
+        help='Val size split ratio for single split (default: 0.1).')
+
+    # Define n_jobs
+    parser.add_argument('--n_jobs', default=4,  type=int, help='Default: 4.')
+
+    # Parse args and run
+    args = parser.parse_args(args)
+    return args
+
+
+def split_size(x):
+    """ Split size can be float (0, 1) or int.
+    This function casts this value as needed. 
+    """
+    assert x > 0, 'Split size must be greater than 0.'
+    return int(x) if x > 1.0 else x
+
+
 def run(args):
     t0 = time()
 
-    # dpath = args['dpath'] 
-    dirpath = Path(args['dirpath'])
+    # dirpath = Path(args['dirpath'])
+    dirpath = None if args['dirpath'] is None else Path(args['dirpath'])
 
     # Combined
     dname = args['dname']
     rna_norm = args['rna_norm']
     no_fibro = args['no_fibro']
-    src_names = args['src_names']
+    src = args['src']
     
     # Target
     # target_name = args['target_name']
 
     # Data splits
     te_method = args['te_method']
-    te_size = args['te_size']
     cv_method = args['cv_method']
+    te_size = split_size(args['te_size'])
+    vl_size = split_size(args['vl_size'])
+
+    te_size = split_size(args['te_size'])
+    vl_size = split_size(args['vl_size'])
     
+
     # Features 
-    cell_fea = args['cell_features']
-    drug_fea = args['drug_features']
-    other_fea = args['other_features']
+    cell_fea = args['cell_fea']
+    drug_fea = args['drug_fea']
+    other_fea = args['other_fea']
     fea_list = cell_fea + drug_fea + other_fea    
     
     # Other params
@@ -106,7 +163,7 @@ def run(args):
         prffx = dirpath.name
 
     elif dname == 'combined':
-        prffx = '_'.join(src_names)
+        prffx = '_'.join(src)
 
     # fname = prffx + '_' + rna_norm + '_cv_' + cv_method
     fname = prffx + '_cv_' + cv_method
@@ -162,7 +219,7 @@ def run(args):
         datapath = DATADIR / DATAFILENAME
 
         data = load_tidy_combined( datapath, fea_list=fea_list, shuffle=False, random_state=SEED ) # logger=lg.logger
-        data = get_data_by_src( data, src_names=src_names, logger=lg.logger )
+        data = get_data_by_src( data, src_names=src, logger=lg.logger )
         xdata, _, meta, tr_scaler = break_src_data( data, target=None, scaler=None, logger=lg.logger)
         # ydata = pd.DataFrame(ydata)
     
@@ -230,7 +287,6 @@ def run(args):
     for cv_folds in cv_folds_list:
         lg.logger.info(f'\nCV folds: {cv_folds}')
 
-        vl_size = 0.2
         cv = cv_splitter(cv_method=cv_method, cv_folds=cv_folds, test_size=vl_size,
                          mltype=mltype, shuffle=False, random_state=SEED)
 
@@ -278,65 +334,7 @@ def run(args):
 
 
 def main(args):
-    parser = argparse.ArgumentParser(description="Generate and save dataset splits.")
-
-    # Data path
-    # parser.add_argument('--dpath',
-    #         default=None, type=str,
-    #         help='Full data path (default: None).')
-
-    # Input data
-    parser.add_argument('--dirpath',
-            default=None, type=str,
-            help='Full dir path to the data (default: None).')
-
-    # Combined related params
-    # Data name
-    parser.add_argument('--dname',
-        default=None, choices=['combined'],
-        help='Data name (default: None).')
-    parser.add_argument('--rna_norm',
-        default='raw', choices=['raw', 'combat'],
-        help='RNA normalization (default: `raw`).')
-    parser.add_argument('--no_fibro',
-            action='store_true', default=False,
-            help='Default: False')
-    parser.add_argument('-src', '--src_names', nargs='+',
-        default=None, choices=['ccle', 'gcsi', 'gdsc', 'ctrp', 'nci60'],
-        help='Data sources to use (default: None).')
-
-    # Target to predict
-    # parser.add_argument('-t', '--target_name',
-    #     default='AUC', choices=['AUC', 'AUC1', 'IC50'],
-    #     help='Column name of the target variable (default: `AUC`).')
-
-    # Feature types
-    parser.add_argument('-cf', '--cell_features', nargs='+',
-        default=['rna'], choices=['rna', 'cnv', 'clb'],
-        help='Cell line features (default: `rna`).') # ['rna_latent']
-    parser.add_argument('-df', '--drug_features', nargs='+',
-        default=['dsc'], choices=['dsc', 'fng', 'dlb'],
-        help='Drug features (default: `dsc`).') # ['fng', 'dsc_latent', 'fng_latent']
-    parser.add_argument('-of', '--other_features',
-        default=[], choices=[],
-        help='Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).') # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
-
-    # Data split methods
-    parser.add_argument('-tem', '--te_method',
-        default=None, choices=['simple', 'group'],
-        help='Test split method (default: None).')
-    parser.add_argument('--te_size', type=float,
-        default=0.1, 
-        help='Test size split ratio (default: 0.1).')
-    parser.add_argument('-cvm', '--cv_method',
-        default='simple', choices=['simple', 'group'],
-        help='Cross-val split method (default: `simple`).')
-
-    # Define n_jobs
-    parser.add_argument('--n_jobs', default=4,  type=int, help='Default: 4.')
-
-    # Parse args and run
-    args = parser.parse_args(args)
+    args = parse_args(args)
     args = vars(args)
     ret = run(args)
     
