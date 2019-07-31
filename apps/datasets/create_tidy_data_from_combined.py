@@ -220,7 +220,7 @@ lincs = CombinedRNASeqLINCS(
     sources=sources,
     na_values=na_values,
     verbose=True)
-rna, cmeta = lincs._df_rna, lincs._meta
+rna, cmeta = lincs.get_rna(), lincs.get_meta()
 rna.rename(columns={'Sample': 'CELL'}, inplace=True)
 cmeta.rename(columns={'Sample': 'CELL', 'source': 'SOURCE'}, inplace=True)
 

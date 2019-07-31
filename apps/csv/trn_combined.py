@@ -382,7 +382,7 @@ def run(args):
         # model_final.dump_preds(df_data=te_src_data, xdata=xte, target_name=target_name,
         #                        outpath=os.path.join(run_outdir, preds_fname))                 
 
-        lg.logger.info('Runtime: {:.1f} mins'.format( (time()-t0)/60) )
+        lg.logger.info('Runtime: {:.1f} mins'.format( (time()-t0)/60 ))
 
     # Combine test set preds
     if len(csv) > 0:
@@ -403,7 +403,7 @@ def run(args):
     # csv_all = csv_all.round(decimals=3)
 
     lg.logger.info(f'\ncsv_scores\n{csv_all}')
-    csv_all.to_csv( run_outdir/('csv_scores_' + tr_sources_name + '.csv'), index=False )
+    csv_all.to_csv( run_outdir/(f'csv_scores_tr_{sources_name}.csv'), index=False )
 
     # Kill logger
     lg.kill_logger()

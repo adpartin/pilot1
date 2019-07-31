@@ -179,11 +179,9 @@ def run(args):
     os.makedirs(run_outdir, exist_ok=True)
 
     # Logger
-    logfilename = run_outdir/'logfile.log'
-    lg = Logger(logfilename)
-    lg.logger.info(datetime.now())
-    lg.logger.info(f'\nFile path: {file_path}')
-    lg.logger.info(f'Machine: {platform.node()} ({platform.system()}, {psutil.cpu_count()} CPUs)')
+    run_outdir = create_outdir(OUTDIR, args)
+    lg = Logger(run_outdir/'logfile.log')
+    lg.logger.info(f'File path: {file_path}')
     lg.logger.info(f'\n{pformat(args)}')
 
     # Dump args to file
@@ -241,14 +239,17 @@ def run(args):
         lg.logger.info('\nSplit train/test.')
         te_splitter = cv_splitter(cv_method=te_method, cv_folds=1, test_size=te_size,
                                   mltype=mltype, shuffle=False, random_state=SEED)
-        if te_method=='simple':
-            te_grp = None
-        elif te_method=='group':
-            te_grp = meta[grp_by_col].copy()
-            te_grp = te_grp.values[idx_vec]
 
-        if is_string_dtype(te_grp):
-            te_grp = LabelEncoder().fit_transform(te_grp)
+        te_grp = meta[grp_by_col].values[idx_vec] if te_method=='group' else None
+        if is_string_dtype(te_grp): te_grp = LabelEncoder().fit_transform(te_grp)
+
+        #if te_method=='simple':
+        #    te_grp = None
+        #elif te_method=='group':
+        #    te_grp = meta[grp_by_col].copy()
+        #    te_grp = te_grp.values[idx_vec]
+
+        #if is_string_dtype(te_grp): te_grp = LabelEncoder().fit_transform(te_grp)
    
         # Split train/test
         tr_id, te_id = next(te_splitter.split(idx_vec, groups=te_grp))
@@ -270,10 +271,10 @@ def run(args):
 
         # Confirm that group splits are correct
         if te_method=='group' and grp_by_col is not None:
-            tr_grps_unq = set(meta.loc[tr_id, grp_by_col])
-            vl_grps_unq = set(meta.loc[te_id, grp_by_col])
-            lg.logger.info(f'\tTotal group ({grp_by_col}) intersections btw tr and te: {len(tr_grps_unq.intersection(te_grps_unq))}.')
-            lg.logger.info(f'\tA few intersections : {list(tr_grps_unq.intersection(te_grps_unq))[:3]}.')
+            tr_grp_unq = set(meta.loc[tr_id, grp_by_col])
+            te_grp_unq = set(meta.loc[te_id, grp_by_col])
+            lg.logger.info(f'\tTotal group ({grp_by_col}) intersections btw tr and te: {len(tr_grp_unq.intersection(te_grp_unq))}.')
+            lg.logger.info(f'\tA few intersections : {list(tr_grp_unq.intersection(te_grp_unq))[:3]}.')
     
         del tr_id, te_id
 
@@ -290,14 +291,16 @@ def run(args):
         cv = cv_splitter(cv_method=cv_method, cv_folds=cv_folds, test_size=vl_size,
                          mltype=mltype, shuffle=False, random_state=SEED)
 
-        if cv_method=='simple':
-            cv_grp = None
-        elif cv_method=='group':
-            cv_grp = meta[grp_by_col].copy()
-            cv_grp = cv_grp.values[idx_vec]
+        cv_grp = meta[grp_by_col].values[idx_vec] if cv_method=='group' else None
+        if is_string_dtype(cv_grp): cv_grp = LabelEncoder().fit_transform(cv_grp)
 
-        if is_string_dtype(cv_grp):
-            cv_grp = LabelEncoder().fit_transform(cv_grp)
+        #if cv_method=='simple':
+        #    cv_grp = None
+        #elif cv_method=='group':
+        #    cv_grp = meta[grp_by_col].copy()
+        #    cv_grp = cv_grp.values[idx_vec]
+
+        #if is_string_dtype(cv_grp): cv_grp = LabelEncoder().fit_transform(cv_grp)
     
         tr_folds = {} 
         vl_folds = {} 
@@ -312,11 +315,11 @@ def run(args):
 
             # Confirm that group splits are correct
             if cv_method=='group' and grp_by_col is not None:
-                tr_grps_unq = set(meta.loc[tr_id, grp_by_col])
-                vl_grps_unq = set(meta.loc[vl_id, grp_by_col])
-                lg.logger.info(f'\tTotal group ({grp_by_col}) intersections btw tr and vl: {len(tr_grps_unq.intersection(vl_grps_unq))}.')
-                lg.logger.info(f'\tUnique cell lines in tr: {len(tr_grps_unq)}.')
-                lg.logger.info(f'\tUnique cell lines in vl: {len(vl_grps_unq)}.')
+                tr_grp_unq = set(meta.loc[tr_id, grp_by_col])
+                vl_grp_unq = set(meta.loc[vl_id, grp_by_col])
+                lg.logger.info(f'\tTotal group ({grp_by_col}) intersections btw tr and vl: {len(tr_grp_unq.intersection(vl_grp_unq))}.')
+                lg.logger.info(f'\tUnique cell lines in tr: {len(tr_grp_unq)}.')
+                lg.logger.info(f'\tUnique cell lines in vl: {len(vl_grp_unq)}.')
         
         # Convet to df
         # from_dict takes too long  -->  stackoverflow.com/questions/19736080/

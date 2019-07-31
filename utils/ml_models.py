@@ -25,7 +25,7 @@ from sklearn.externals import joblib
 import tensorflow as tf
 import keras
 from keras import backend as K
-from keras.layers import Input, Dense, Dropout, Activation, BatchNormalization, Lambda, merge
+from keras.layers import Input, Dense, Dropout, Activation, BatchNormalization, Embedding, Lambda, merge
 from keras import optimizers
 from keras.optimizers import SGD, Adam, RMSprop, Adadelta
 from keras.models import Sequential, Model, model_from_json, model_from_yaml
@@ -67,6 +67,10 @@ def get_model(model_name, init_kwargs=None):
         model = NN_REG3(**init_kwargs)
     elif model_name == 'nn_reg4':
         model = NN_REG4(**init_kwargs)
+    elif model_name == 'nn_reg5':
+        model = NN_REG5(**init_kwargs)
+    elif model_name == 'nn_reg6':
+        model = NN_REG6(**init_kwargs)
     else:
         raise ValueError('model_name is invalid.')
     return model
@@ -159,7 +163,6 @@ def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
         plt.close()
         
 
-
 class Attention(keras.layers.Layer):
     def __init__(self, output_dim, **kwargs):
         self.output_dim = output_dim
@@ -183,7 +186,6 @@ class Attention(keras.layers.Layer):
         return input_shape
 
 
-
 class BaseMLModel():
     """ A parent class with some general methods for children ML classes.
     The children classes are specific ML models such random forest regressor, lightgbm regressor, etc.
@@ -198,6 +200,18 @@ class BaseMLModel():
         adj_r2 = 1 - (1 - r2_score) * (self.x_size[0] - 1)/(self.x_size[0] - self.x_size[1] - 1)
         return adj_r2
 
+
+    def build_dense_block(self, layers, inputs, name=''):
+        """ This function only applicable to keras NNs. """
+        for i, l_size in enumerate(layers):
+            if i == 0:
+                x = Dense(l_size, kernel_initializer=self.initializer, name=f'{name}fc{i+1}')(inputs)
+            else:
+                x = Dense(l_size, kernel_initializer=self.initializer, name=f'{name}fc{i+1}')(x)
+            x = BatchNormalization(name=f'{name}bn{i+1}')(x)
+            x = Activation('relu', name=f'{name}a{i+1}')(x)
+            x = Dropout(self.dr_rate, name=f'{name}drp{i+1}')(x)        
+        return x
 
 
 class KERAS_REGRESSOR(BaseMLModel):
@@ -250,11 +264,10 @@ class KERAS_REGRESSOR(BaseMLModel):
         self.model = model
 
 
-    def dump_model(self, outdir='.'):
-        """ Dump trained model. """        
-        self.model.save( str(Path(outdir)/'model.h5') )
+    #def dump_model(self, outdir='.'):
+    #    """ Dump trained model. """        
+    #    self.model.save( str(Path(outdir)/'model.h5') )
         
-
 
 class NN_REG0(BaseMLModel):
     """ Neural network regressor.
@@ -263,79 +276,58 @@ class NN_REG0(BaseMLModel):
     model_name = 'nn_reg0'
 
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', initializer='he_uniform', logger=None):
-        inputs = Input(shape=(input_dim,), name='inputs')
+        self.input_dim = input_dim
+        self.dr_rate = dr_rate
+        self.opt_name = opt_name
+        self.initializer = initializer
 
         layers = [1000, 1000, 500, 250, 125, 60, 30]
-        # layers = [1000, 500, 250, 60]
-
-        for i, l_size in enumerate(layers):
-            if i == 0:
-                x = Dense(l_size, kernel_initializer=initializer, name=f'fc{i+1}')(inputs)
-            else:
-                x = Dense(l_size, kernel_initializer=initializer, name=f'fc{i+1}')(x)
-            x = BatchNormalization(name=f'bn{i+1}')(x)
-            x = Activation('relu', name=f'a{i+1}')(x)
-            x = Dropout(dr_rate, name=f'drp{i+1}')(x)        
-        
-#         inputs = Input(shape=(input_dim,))
-#         x = Dense(1000)(inputs)
-#         x = BatchNormalization()(x)
-#         x = Activation('relu')(x)
-
-#         x = Dense(1000)(x)
-#         x = BatchNormalization()(x)
-#         x = Activation('relu')(x)
-#         x = Dropout(dr_rate)(x)
-        
-#         x = Dense(500)(x)
-#         x = BatchNormalization()(x)
-#         x = Activation('relu')(x)
-#         x = Dropout(dr_rate)(x)
-        
-#         x = Dense(250)(x)
-#         x = BatchNormalization()(x)
-#         x = Activation('relu')(x)
-#         x = Dropout(dr_rate)(x)
-        
-#         x = Dense(125)(x)
-#         x = BatchNormalization()(x)
-#         x = Activation('relu')(x)
-#         x = Dropout(dr_rate)(x)
-
-#         x = Dense(60)(x)
-#         x = BatchNormalization()(x)
-#         x = Activation('relu')(x)
-#         x = Dropout(dr_rate)(x)
-        
-#         x = Dense(30)(x)
-#         x = BatchNormalization()(x)
-#         x = Activation('relu')(x)
-#         x = Dropout(dr_rate)(x)
+        inputs = Input(shape=(self.input_dim,), name='inputs')
+        x = self.build_dense_block(layers, inputs)
 
         outputs = Dense(1, activation='relu', name='outputs')(x)
         model = Model(inputs=inputs, outputs=outputs)
         
-        if opt_name == 'sgd':
+        if self.opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
-        elif opt_name == 'adam':
+        elif self.opt_name == 'adam':
             opt = Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
-        model.compile(loss='mean_squared_error',
-                      optimizer=opt,
-                      metrics=['mae', r2_krs])
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
         self.model = model
         
+
+class NN_REG4(BaseMLModel):
+    """ Neural network regressor.
+    Fully-connected NN.
+    """
+    model_name = 'nn_reg4'
+
+    def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', initializer='he_uniform', logger=None):
+        self.input_dim = input_dim
+        self.dr_rate = dr_rate
+        self.opt_name = opt_name
+        self.initializer = initializer
+
+        layers = [1000, 1000, 500, 500, 250, 250]
+        inputs = Input(shape=(self.input_dim,), name='inputs')
+        x = self.build_dense_block(layers, inputs)
+
+        outputs = Dense(1, activation='relu', name='outputs')(x)
+        model = Model(inputs=inputs, outputs=outputs)
         
-    def dump_model(self, outpath='.'):
-        """ Dump trained model. """        
-        if outpath is None:
-            self.model.save( str(Path(outpath)/f'{self.model_name}.h5') )
+        if self.opt_name == 'sgd':
+            opt = SGD(lr=1e-4, momentum=0.9)
+        elif self.opt_name == 'adam':
+            opt = Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
         else:
-            self.model.save( str(Path(outpath)) )
+            opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
-
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
+        self.model = model
+        
 
 class NN_REG1(BaseMLModel):
     """ Neural network regressor. 
@@ -397,22 +389,14 @@ class NN_REG1(BaseMLModel):
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
-        model.compile(loss='mean_squared_error',
-                      optimizer=opt,
-                      metrics=['mae', r2_krs])
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
         self.model = model
-
-
-    def dump_model(self, outdir='.'):
-        """ Dump trained model. """        
-        self.model.save( str(Path(outdir)/'model.h5') )
-        
 
 
 class NN_REG2(BaseMLModel):
     """ Neural network regressor. """
     model_name = 'nn_reg2'
-    # TODO: activation should come after batchnorm!!
+   
     def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
         x = Dense(1000, activation='relu')(inputs)
@@ -445,26 +429,80 @@ class NN_REG2(BaseMLModel):
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
-        model.compile(loss='mean_squared_error',
-                      optimizer=opt,
-                      metrics=['mae', r2_krs])
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
         self.model = model
 
 
-    def dump_model(self, outdir='.'):
-        """ Dump trained model. """        
-        self.model.save( str(Path(outdir)/'model.h5') )
-        
-
-
 class NN_REG3(BaseMLModel):
-    """ Neural network regressor. """
+    """ Neural network regressor.
+    Uno-style network.
+    """
     model_name = 'nn_reg3'
 
-    def __init__(self, in_dim_rna, in_dim_dsc, dr_rate=0.2, opt_name='sgd', logger=None):
+    def __init__(self, in_dim_rna, in_dim_dsc, dr_rate=0.2, opt_name='sgd', initializer='he_uniform', logger=None):
         # https://keras.io/getting-started/functional-api-guide/
         # Chollet book
+        
+        #def create_tower(layers, inputs, name):
 
+        #    for i, l_size in enumerate(layers):
+        #        if i == 0:
+        #            x = Dense(l_size, kernel_initializer=initializer, name=f'{name}_FC{i+1}')(inputs)
+        #        else:
+        #            x = Dense(l_size, kernel_initializer=initializer, name=f'{name}_FC{i+1}')(x)
+        #        x = BatchNormalization(name=f'{name}_BN{i+1}')(x)
+        #        x = Activation('relu', name=f'{name}_A{i+1}')(x)
+        #        x = Dropout(dr_rate, name=f'{name}_DRP{i+1}')(x)        
+
+        #    x = Model(inputs=inputs, outputs=x, name=f'out_{name}')
+        #    return x
+
+        in_rna = Input(shape=(in_dim_rna,), name='in_rna')
+        out_rna = self.build_dense_block(layers=[1000,800,600], inputs=in_rna, name='rna')
+        rna = Model(inputs=in_rna, outputs=out_rna, name=f'out_rna')
+        
+        in_dsc = Input(shape=(in_dim_dsc,), name='in_dsc')
+        out_dsc = self.build_dense_block(layers=[1000,800,600], inputs=in_dsc, name='dsc')
+        dsc = Model(inputs=in_dsc, outputs=out_dsc, name=f'out_dsc')
+
+        # merged = merge.concatenate([rna.output, dsc.output])
+        # x = create_tower(layers=[1000,800,600], input_dim=rna.output_shape[-1] + dsc.output_shape[-1], name='merged')
+
+        """
+        # RNA
+        in_rna = Input(shape=(in_dim_rna,), name='in_rna')
+        layers = [1000, 800, 600]
+
+        for i, l_size in enumerate(layers):
+            if i == 0:
+                x = Dense(l_size, kernel_initializer=initializer, name=f'FC{i+1}')(in_rna)
+            else:
+                x = Dense(l_size, kernel_initializer=initializer, name=f'FC{i+1}')(x)
+            x = BatchNormalization(name=f'BN{i+1}')(x)
+            x = Activation('relu', name=f'A{i+1}')(x)
+            x = Dropout(dr_rate, name=f'DRP{i+1}')(x)        
+
+        rna = Model(inputs=in_rna, outputs=x, name='out_rna')
+        del x
+
+        # DSC
+        in_dsc = Input(shape=(in_dim_dsc,), name='in_dsc')
+        layers = [1000, 800, 600]
+
+        for i, l_size in enumerate(layers):
+            if i == 0:
+                x = Dense(l_size, kernel_initializer=initializer, name=f'FC{i+1}')(in_dsc)
+            else:
+                x = Dense(l_size, kernel_initializer=initializer, name=f'FC{i+1}')(x)
+            x = BatchNormalization(name=f'BN{i+1}')(x)
+            x = Activation('relu', name=f'A{i+1}')(x)
+            x = Dropout(dr_rate, name=f'DRP{i+1}')(x)        
+
+        dsc = Model(inputs=in_dsc, outputs=x, name='out_dsc')
+        del x
+        """
+
+        """
         # Proc rna
         in_rna = Input(shape=(in_dim_rna,), name='in_rna')
         a = Dense(1000)(in_rna)
@@ -502,27 +540,28 @@ class NN_REG3(BaseMLModel):
         b = Dropout(dr_rate)(b)
         
         dsc = Model(inputs=in_dsc, outputs=b, name='out_dsc')
-
+        """
+        
         # Merge layers
-        x = concatenate([rna.output, dsc.output])
-
+        merged = merge.concatenate([rna.output, dsc.output])
+        
         # Dense layers
-        x = Dense(1000, name='in_merged')(x)
+        x = Dense(1000, name='in_merged')(merged)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
 
-        x = Dense(500)(x)
+        x = Dense(800)(x)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
 
-        x = Dense(250)(x)
+        x = Dense(600)(x)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
 
-        outputs = Dense(1, activation='relu', name='out_nn')(x)
+        outputs = Dense(1, activation='relu', name='output')(x)
         model = Model(inputs=[in_rna, in_dsc], outputs=[outputs])
         
         if opt_name == 'sgd':
@@ -532,9 +571,7 @@ class NN_REG3(BaseMLModel):
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
-        model.compile(loss='mean_squared_error',
-                      optimizer=opt,
-                      metrics=['mae', r2_krs])
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
         self.model = model
 
 
@@ -577,10 +614,96 @@ class NN_REG3(BaseMLModel):
         """
 
 
-    def dump_model(self, outdir='.'):
-        """ Dump trained model. """        
-        self.model.save( str(Path(outdir)/'model.h5') )
 
+class NN_REG5(BaseMLModel):
+    """ Neural network regressor.
+    Fully-connected NN.
+    """
+    model_name = 'nn_reg5'
+
+    def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', initializer='he_uniform', logger=None):
+        self.input_dim = input_dim
+        self.dr_rate = dr_rate
+        self.opt_name = opt_name
+        self.initializer = initializer
+
+        layers = [3000, 2000, 1000]
+        inputs = Input(shape=(self.input_dim,), name='inputs')
+        x = self.build_dense_block(layers)
+
+        outputs = Dense(1, activation='relu', name='outputs')(x)
+        model = Model(inputs=inputs, outputs=outputs)
+        
+        if self.opt_name == 'sgd':
+            opt = SGD(lr=1e-4, momentum=0.9)
+        elif self.opt_name == 'adam':
+            opt = Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+        else:
+            opt = SGD(lr=1e-4, momentum=0.9) # for clr
+
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
+        self.model = model
+        
+
+class NN_REG6(BaseMLModel):
+    """ Neural network regressor.
+    Embbeding for drugs.
+    """
+    model_name = 'nn_reg6'
+
+    def __init__(self, in_dim_rna, in_dim_drg_embd, dr_rate=0.2, opt_name='sgd', initializer='he_uniform', logger=None):
+        # https://keras.io/getting-started/functional-api-guide/
+        # Chollet book
+
+        # RNA
+        in_rna = Input(shape=(in_dim_rna,), name='in_rna')
+        out_rna = self.build_dense_block(layers=[1000,1000], inputs=in_rna, name='rna')
+        rna = Model(inputs=in_rna, outputs=out_rna, name=f'out_rna')
+
+        # Drug embedding 
+        # in_dim_drg_embd = len(drg_pdm)
+        # in_dim_drg_embd = len(drg_common)
+        # in_dim_drg_embd = len(drg)
+        out_dim_drg_embd = (in_dim_drg_embd+1)//2
+
+        in_drg_embd = Input(shape=(1,), name='in_drg_embd')
+        out_drg_embd = Embedding(input_dim = in_dim_drg_embd,
+                                 output_dim = out_dim_drg_embd,
+                                 input_length=1, name='out_drg_embd')(in_drg_embd)
+
+        drg_embd = Model(inputs=in_drg_embd, outputs=out_drg_embd, name='out_drg')
+
+        # Merge layers
+        merged = merge.concatenate([rna.output, drg_embd.output])
+        
+        # Dense layers
+        x = Dense(1000, name='in_merged')(merged)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
+        x = Dropout(dr_rate)(x)
+
+        x = Dense(800)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
+        x = Dropout(dr_rate)(x)
+
+        x = Dense(600)(x)
+        x = BatchNormalization()(x)
+        x = Activation('relu')(x)
+        x = Dropout(dr_rate)(x)
+
+        outputs = Dense(1, activation='relu', name='output')(x)
+        model = Model(inputs=[in_rna, in_drg_embd], outputs=[outputs])
+        
+        if opt_name == 'sgd':
+            opt = SGD(lr=1e-4, momentum=0.9)
+        elif opt_name == 'adam':
+            opt = Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+        else:
+            opt = SGD(lr=1e-4, momentum=0.9) # for clr
+
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
+        self.model = model
 
 
 class LGBM_REGRESSOR(BaseMLModel):
@@ -588,15 +711,14 @@ class LGBM_REGRESSOR(BaseMLModel):
     ml_objective = 'regression'
     model_name = 'lgb_reg'
 
-    def __init__(self, n_estimators=100, eval_metric=['l2', 'l1'], n_jobs=1, random_state=None,
-                 logger=None):
+    def __init__(self, n_estimators=100, eval_metric=['l2', 'l1'], n_jobs=1, random_state=None, logger=None):
         # TODO: use config file to set default parameters (like in candle)
         
         self.model = lgb.LGBMModel(
-            objective=LGBM_REGRESSOR.ml_objective,
-            n_estimators=n_estimators,
-            n_jobs=n_jobs,
-            random_state=random_state)
+            objective = LGBM_REGRESSOR.ml_objective,
+            n_estimators = n_estimators,
+            n_jobs = n_jobs,
+            random_state = random_state)
 
 
     # def fit(self, X, y, eval_set=None, **fit_params):
@@ -641,7 +763,6 @@ class LGBM_REGRESSOR(BaseMLModel):
     #     plt.savefig(os.path.join(run_outdir, model_name+'_learning_curve_'+m+'.png'))
     
 
-
 class RF_REGRESSOR(BaseMLModel):
     """ Random forest regressor. """
     # Define class attributes (www.toptal.com/python/python-class-attributes-an-overly-thorough-guide)
@@ -672,15 +793,13 @@ class RF_REGRESSOR(BaseMLModel):
         # model_ = joblib.load(filename=os.path.join(run_outdir, 'lgb_reg_model.pkl'))
 
 
-
 class LGBM_CLASSIFIER(BaseMLModel):
     # TODO: finish
     """ LightGBM classifier. """
     ml_objective = 'binary'
     model_name = 'lgb_cls'
 
-    def __init__(self, eval_metric=['l2', 'l1'], n_jobs=1, random_state=None,
-                 logger=None):
+    def __init__(self, eval_metric=['l2', 'l1'], n_jobs=1, random_state=None, logger=None):
         self.eval_metric = eval_metric
         self.n_jobs = n_jobs
         self.random_state = random_state
@@ -699,12 +818,10 @@ class LGBM_CLASSIFIER(BaseMLModel):
         # ----- lightgbm "sklearn API" - end
 
 
-
 class XGBM_REGRESSOR(BaseMLModel):
     """ xgboost regressor. """
     ml_objective = 'regression'
     model_name = 'xgb_reg'
-
 
 
 # # ========================================================================

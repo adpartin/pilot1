@@ -35,9 +35,15 @@ file_path = Path(__file__).resolve().parent
 
 
 # Utils
+#utils_path = file_path / '../../utils'
+#sys.path.append(str(utils_path))
+#import utils
+#from classlogger import Logger
+import utils
+
 utils_path = file_path / '../../utils'
 sys.path.append(str(utils_path))
-import utils
+#import utils
 from classlogger import Logger
 
 
@@ -46,7 +52,6 @@ OUTDIR = file_path/'../../data/yitan/Data/tidy'
 
 
 def parse_args(args):
-    # Args
     parser = argparse.ArgumentParser(description="Create tidy df from raw (Yitan's) data.")
     parser.add_argument('--src', default='GDSC', type=str, help='Data source (default: GDSC).')
     # parser.add_argument('--fold', default=0, type=int, help='Fold (default: 0).')
@@ -66,9 +71,6 @@ def parse_args(args):
 
 
 def create_outdir(outdir, args):
-    # t = datetime.now()
-    # t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
-    # t = ''.join([str(i) for i in t])
     if any([True for i in [args['ccl_pca_k'], args['drg_pca_k']] if i is not None]): 
         l = [args['src']] + args['ccl_fea'] + args['drg_fea'] + [f'drg_pca{drg_pca_k}'] + [f'ccl_pca{ccl_pca_k}']
     else:
@@ -126,7 +128,7 @@ def run(args):
     lg.logger.info(f'\n{pformat(args)}')
 
     # Dump args to file
-    utils.dump_args(args, run_outdir)     
+    utils.dump_dict(args, run_outdir/'args.txt')      
     
     
     # =====================================================
@@ -135,8 +137,8 @@ def run(args):
     datadir = Path(file_path/'../../data/yitan/Data')
     ccl_folds_dir = Path(file_path/'../../data/yitan/CCL_10Fold_Partition')
     pdm_folds_dir = Path(file_path/'../../data/yitan/PDM_10Fold_Partition')
-    # fea_data_name = 'CCL_PDM_TransferLearningData_rmFactor_0.0_ddNorm_std.pkl'
-    fea_data_name = 'CCL_PDM_TransferLearningData_rmFactor_0.1_ddNorm_quantile.pkl'
+    fea_data_name = 'CCL_PDM_TransferLearningData_rmFactor_0.0_ddNorm_std.pkl'
+    #fea_data_name = 'CCL_PDM_TransferLearningData_rmFactor_0.1_ddNorm_quantile.pkl'
     
     # Un-pickle files
     import _pickle as cp
@@ -229,19 +231,6 @@ def run(args):
     # =====================================================
     #       Extract xdata, ydata, meta and  dump to file
     # =====================================================
-    """
-    xdata = extract_subset_fea(df=mrg_df, fea_list=['cclname']+ccl_fea_list+drg_fea_list, fea_sep=fea_sep)
-    ydata = mrg_df[['auc']]
-    meta = mrg_df.drop(columns=xdata.columns)
-    meta = meta.drop(columns=['auc'])
-    
-    prfx = '.'.join( [src.lower()] + ccl_fea_list + drg_fea_list )
-    xdata.to_parquet(run_outdir/(prfx+'_xdata.parquet'), index=False)
-    ydata.to_parquet(run_outdir/(prfx+'_ydata.parquet'), index=False)
-    meta.to_parquet( run_outdir/(prfx+'_meta.parquet'),  index=False)
-
-    lg.logger.info('xdata memory usage: {:.2f} GB\n'.format(sys.getsizeof(xdata)/1e9))
-    """
     if any([True for i in [ccl_pca_k, drg_pca_k] if i is not None]): 
         prfx = '.'.join( [src.lower()] + ccl_fea_list + drg_fea_list + [f'drg_pca{drg_pca_k}'] + [f'ccl_pca{ccl_pca_k}'] )
     else:

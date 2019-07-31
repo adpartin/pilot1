@@ -1,5 +1,5 @@
 """
-Class CombinedRNASeqLINCS to load RNA-Seq LINCS data.
+Class CombinedRNASeqLINCS that loads RNA-Seq LINCS data.
 """
 import os
 import sys
@@ -13,11 +13,11 @@ class CombinedRNASeqLINCS():
     """ Combined LINCS dataset. """
     def __init__(self, datadir, cellmeta_fname, rna_norm='raw', sources=[],
                  na_values=['na', '-', ''], verbose=True):
-        """ Note that df_rna file must have the following structure:
-        df_rna.columns[0] --> 'Sample'
-        df_rna.columns[1:] --> gene names
-        df_rna.iloc[:, 0] --> strings of sample names
-        df_rna.iloc[:, 1:] --> gene expression values
+        """ Note that rna file must have the following structure:
+        rna.columns[0] --> 'Sample'
+        rna.columns[1:] --> gene names
+        rna.iloc[:, 0] --> strings of sample names
+        rna.iloc[:, 1:] --> gene expression values
         
         Example:
             DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
@@ -39,45 +39,45 @@ class CombinedRNASeqLINCS():
         path = datadir / DATASET
         cols = pd.read_table(path, nrows=0, sep='\t')
         dtype_dict = {c: data_type for c in cols.columns[1:]}
-        df_rna = pd.read_table(path, dtype=dtype_dict, sep='\t', na_values=na_values, warn_bad_lines=True)
-        df_rna = self._keep_sources(df_rna, sources=sources) 
+        rna = pd.read_table(path, dtype=dtype_dict, sep='\t', na_values=na_values, warn_bad_lines=True)
+        rna = self._keep_sources(rna, sources=sources) 
 
         # Load metadata
         meta = pd.read_table(datadir / cellmeta_fname, sep='\t')
         meta = self._update_metadata_comb_may2018(meta)
         
-        # Merge df_rna and meta
-        df_rna, meta = self._update_df_and_meta(df_rna, meta, on='Sample')
+        # Merge rna and meta
+        rna, meta = self._update_df_and_meta(rna, meta, on='Sample')
 
         if verbose:
             print(f'\nDataset: {DATASET}')
-            print(f'df_rna {df_rna.shape}')
+            print(f'rna {rna.shape}')
             if meta is not None:
                 print(f'meta   {meta.shape}')
-            print(df_rna['Sample'].map(lambda s: s.split('.')[0]).value_counts())
+            print(rna['Sample'].map(lambda s: s.split('.')[0]).value_counts())
             
-        self._df_rna, self._meta = df_rna, meta
+        self._rna, self._meta = rna, meta
 
 
-    def _keep_sources(self, df_rna, sources=[]):
+    def _keep_sources(self, rna, sources=[]):
         """ Keep specific data sources.
 		Args:
 			sources (list) : list of strings indicating the sources/studies to extract.
                 (e.g., source=['ccle', 'ctrp'])
 		"""
         if len(sources) == 0:
-            return df_rna
+            return rna
 
         if isinstance(sources, str):
             sources = [sources]
             
         if len(sources) > 0:
             sources = [s.lower() for s in sources]
-            df_rna = df_rna.loc[df_rna['Sample'].map(lambda s: s.split('.')[0].lower() in sources), :].reset_index(drop=True)
+            rna = rna.loc[rna['Sample'].map(lambda s: s.split('.')[0].lower() in sources), :].reset_index(drop=True)
         else:
             print('Empty list was passed to the arg `sources`. Returns the same dataframe.')
 
-        return df_rna  
+        return rna  
 
 
     def _update_metadata_comb_may2018(self, meta):
@@ -104,34 +104,30 @@ class CombinedRNASeqLINCS():
         return meta
 
     
-    def _update_df_and_meta(self, df_rna, meta, on='Sample'):
-        """ Merge df_rna and meta on a column specified by `on`.
+    def _update_df_and_meta(self, rna, meta, on='Sample'):
+        """ Merge rna and meta on a column specified by `on`.
         Args:
-            df_rna (df) : df rna
+            rna (df) : df rna
             meta (df) : df meta
         Returns:
-            df_rna (df) : df rna updated
+            rna (df) : df rna updated
             meta (df) : df meta updated
         """
-        df_rna = df_rna.copy()
+        rna = rna.copy()
         meta = meta.copy()
-        df = pd.merge(meta, df_rna, how='inner', on=on).reset_index(drop=True)
+        df = pd.merge(meta, rna, how='inner', on=on).reset_index(drop=True)
 
-        df_rna = df[['Sample'] + df_rna.columns[1:].tolist()]
-        meta = df.drop(columns=df_rna.columns[1:].tolist())
-        return df_rna, meta
+        rna = df[['Sample'] + rna.columns[1:].tolist()]
+        meta = df.drop(columns=rna.columns[1:].tolist())
+        return rna, meta
     
 
-    def df_rna(self):
-        """ df_rna getter. """
-        df_rna = self._df_rna.copy()
-        return df_rna
+    def get_rna(self):
+        return self._rna.copy()
     
     
-    def meta(self):
-        """ meta getter. """
-        meta = self._meta.copy()
-        return meta
+    def get_meta(self):
+        return self._meta.copy()
     
     
     def get_subset(self, sources=[]):
@@ -139,19 +135,19 @@ class CombinedRNASeqLINCS():
         Args:
             sources (list) : list of strings indicating the sources/studies to extract
         Returns:
-            df_rna (df) : df rna for the data sources specified by `sources`
+            rna (df) : df rna for the data sources specified by `sources`
             meta (df) : df meta for the data sources specified by `sources`
         Example:
             cells_rna, cells_meta = lincs.get_subset(sources=['ccle','nci60'])
         """
-        df_rna = self._df_rna.copy()
+        rna = self._rna.copy()
         meta = self._meta.copy()
 
         if len(sources) > 0:
             sources = [s.lower() for s in sources]
-            df_rna = df_rna.loc[df_rna['Sample'].map(lambda s: s.split('.')[0].lower() in sources), :].reset_index(drop=True)
-            df_rna, meta = self._update_df_and_meta(df_rna, meta, on='Sample')
+            rna = rna.loc[rna['Sample'].map(lambda s: s.split('.')[0].lower() in sources), :].reset_index(drop=True)
+            rna, meta = self._update_df_and_meta(rna, meta, on='Sample')
         else:
             print('Empty list was passed to the arg `sources`. Returns the same dataframe.')
 
-        return df_rna, meta
+        return rna, meta

@@ -12,9 +12,7 @@ warnings.filterwarnings('ignore')
 
 import os
 import sys
-import platform
 from pathlib import Path
-import psutil
 import argparse
 from datetime import datetime
 from time import time
@@ -239,11 +237,8 @@ def run(args):
         #       Logger
         # -----------------------------------------------
         run_outdir = create_outdir(OUTDIR, args, src)
-        logfilename = run_outdir/'logfile.log'
-        lg = Logger(logfilename)
-        lg.logger.info(datetime.now())
-        lg.logger.info(f'\nFile path: {file_path}')
-        lg.logger.info(f'Machine: {platform.node()} ({platform.system()}, {psutil.cpu_count()} CPUs)')
+        lg = Logger(run_outdir/'logfile.log')
+        lg.logger.info(f'File path: {file_path}')
         lg.logger.info(f'\n{pformat(args)}')
 
         # Dump args to file

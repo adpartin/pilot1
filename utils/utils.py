@@ -59,13 +59,14 @@ def dump_args(args, outdir='.'):
             file.write('{}: {}\n'.format(k, v))
 
 
-def dump_dict(args, outpath='./dict.txt'):
+def dump_dict(dct, outpath='./dict.txt'):
     """ Dump dict into file.
     Examples:
         utils.dump_dict(args, outdir=outdir)
     """
+    dct = sorted(dct)
     with open( Path(outpath), 'w' ) as file:
-        for k, v in args.items():
+        for k, v in dct.items():
             file.write('{}: {}\n'.format(k, v))            
             
             
