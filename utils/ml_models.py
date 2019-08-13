@@ -5,6 +5,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 import os
+import sys
 from pathlib import Path
 from time import time
 from collections import OrderedDict
@@ -25,7 +26,7 @@ from sklearn.externals import joblib
 import tensorflow as tf
 import keras
 from keras import backend as K
-from keras.layers import Input, Dense, Dropout, Activation, BatchNormalization, Embedding, Lambda, merge
+from keras.layers import Input, Dense, Dropout, Activation, BatchNormalization, Embedding, Flatten, Lambda, merge
 from keras import optimizers
 from keras.optimizers import SGD, Adam, RMSprop, Adadelta
 from keras.models import Sequential, Model, model_from_json, model_from_yaml
@@ -36,6 +37,21 @@ try:
     import lightgbm as lgb
 except ImportError:
     print('Module not found (lightgbm).')
+
+
+def clr_keras_callback(mode=None, base_lr=1e-4, max_lr=1e-3, gamma=0.999994):
+    """ Creates keras callback for cyclical learning rate. """
+    keras_contrib = '/vol/ml/apartin/projects/keras-contrib/keras_contrib/callbacks'
+    sys.path.append(keras_contrib)
+    from cyclical_learning_rate import CyclicLR
+
+    if mode == 'trng1':
+        clr = CyclicLR(base_lr=base_lr, max_lr=max_lr, mode='triangular')
+    elif mode == 'trng2':
+        clr = CyclicLR(base_lr=base_lr, max_lr=max_lr, mode='triangular2')
+    elif mode == 'exp':
+        clr = CyclicLR(base_lr=base_lr, max_lr=max_lr, mode='exp_range', gamma=clr_gamma) # 0.99994; 0.99999994; 0.999994
+    return clr
 
 
 def r2_krs(y_true, y_pred):
@@ -71,6 +87,10 @@ def get_model(model_name, init_kwargs=None):
         model = NN_REG5(**init_kwargs)
     elif model_name == 'nn_reg6':
         model = NN_REG6(**init_kwargs)
+    elif model_name == 'nn_reg_2layer':
+        model = NN_REG_2LAYER(**init_kwargs)
+    elif model_name == 'nn_reg_4layer':
+        model = NN_REG_4LAYER(**init_kwargs)
     else:
         raise ValueError('model_name is invalid.')
     return model
@@ -84,29 +104,28 @@ def save_krs_history(history, outdir='.'):
     return h
 
 
-def get_keras_prfrm_metrics(history):
-    """ Extract names of all the recorded performance metrics from keras `history` variable for
-    train and val sets. The performance metrics can be indentified as those starting with 'val'.
-    """
-    all_metrics = list(history.history.keys())  # all metrics including everything returned from callbacks
-    pr_metrics = []  # performance metrics recorded for train and val such as 'loss', etc. (excluding callbacks)
-    for m in all_metrics:
-        if 'val' in m:
-            pr_metrics.append('_'.join(m.split('_')[1:]))
-
-    return pr_metrics
+# def get_keras_prfrm_metrics(history):
+#     """ Extract names of all the recorded performance metrics from keras history for trina
+#     and val sets. The performance metrics can be indentified as those starting with 'val'.
+#     """
+#     # all metrics including everything returned from callbacks
+#     all_metrics = list(history.history.keys()) 
+#     # performance metrics recorded for train and val such as 'loss', etc. (excluding callbacks)
+#     pr_metrics = ['_'.join(m.split('_')[1:]) for m in all_metrics if 'val' in m]
+#     return pr_metrics
 
 
 def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
-    """ Plots keras training curves.
+    """ Plots keras training history.
     Args:
         skp_ep: number of epochs to skip when plotting metrics 
         add_lr: add curve of learning rate progression over epochs
     """
-    pr_metrics = get_keras_prfrm_metrics(history)
+    all_metrics = list(history.history.keys())
+    pr_metrics = ['_'.join(m.split('_')[1:]) for m in all_metrics if 'val' in m]
+
     epochs = np.asarray(history.epoch) + 1
-    if len(epochs) <= skp_ep:
-        skp_ep = 0
+    if len(epochs) <= skp_ep: skp_ep = 0
     eps = epochs[skp_ep:]
     hh = history.history
     
@@ -127,9 +146,10 @@ def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
         
         # Plot metrics
         ax1.plot(eps, y_tr, color='b', marker='.', linestyle='-', linewidth=1, alpha=0.6, label=metric_name)
-        ax1.plot(eps, y_vl, color='r', marker='.', linestyle='-', linewidth=1, alpha=0.6, label=metric_name_val)
-        ax1.set_xlabel('epoch')
-        ax1.set_ylabel(metric_name)
+        ax1.plot(eps, y_vl, color='r', marker='.', linestyle='--', linewidth=1, alpha=0.6, label=metric_name_val)
+        ax1.set_xlabel('Epoch')
+        ylabel = ' '.join(s.capitalize() for s in metric_name.split('_'))
+        ax1.set_ylabel(ylabel)
         ax1.set_xlim([min(eps)-1, max(eps)+1])
         ax1.set_ylim([ymin, ymax])
         ax1.tick_params('y', colors='k')
@@ -141,24 +161,22 @@ def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
         if (add_lr is True) and ('lr' in hh):            
             ax2 = ax1.twinx()
             ax2.plot(eps, hh['lr'][skp_ep:], color='g', marker='.', linestyle=':', linewidth=1,
-                     alpha=0.6, markersize=5, label='learning rate')
-            ax2.set_ylabel('learning rate', color='g', fontsize=12)
+                     alpha=0.6, markersize=5, label='LR')
+            ax2.set_ylabel('Learning rate', color='g', fontsize=12)
             
-            yscale = 'log'  # 'linear'
-            ax2.set_yscale(yscale)
+            ax2.set_yscale('log') # 'linear'
             ax2.tick_params('y', colors='g')
         
         ax1.grid(True)
-        #plt.legend([metric_name, metric_name_val], loc='best')
-        #https://medium.com/@samchaaa/how-to-plot-two-different-scales-on-one-plot-in-matplotlib-with-legend-46554ba5915a
+        # plt.legend([metric_name, metric_name_val], loc='best')
+        # medium.com/@samchaaa/how-to-plot-two-different-scales-on-one-plot-in-matplotlib-with-legend-46554ba5915a
         legend = ax1.legend(loc='best', prop={'size': 10})
         frame = legend.get_frame()
         frame.set_facecolor('0.95')
-        if title is not None:
-            plt.title(title)
+        if title is not None: plt.title(title)
         
         # fig.tight_layout()
-        figpath = Path(outdir) / (metric_name+'_curve.png')
+        figpath = Path(outdir) / (metric_name+'.png')
         plt.savefig(figpath, bbox_inches='tight')
         plt.close()
         
@@ -205,12 +223,12 @@ class BaseMLModel():
         """ This function only applicable to keras NNs. """
         for i, l_size in enumerate(layers):
             if i == 0:
-                x = Dense(l_size, kernel_initializer=self.initializer, name=f'{name}fc{i+1}')(inputs)
+                x = Dense(l_size, kernel_initializer=self.initializer, name=f'{name}.fc{i+1}.{l_size}')(inputs)
             else:
-                x = Dense(l_size, kernel_initializer=self.initializer, name=f'{name}fc{i+1}')(x)
-            x = BatchNormalization(name=f'{name}bn{i+1}')(x)
-            x = Activation('relu', name=f'{name}a{i+1}')(x)
-            x = Dropout(self.dr_rate, name=f'{name}drp{i+1}')(x)        
+                x = Dense(l_size, kernel_initializer=self.initializer, name=f'{name}.fc{i+1}.{l_size}')(x)
+            x = BatchNormalization(name=f'{name}.bn{i+1}')(x)
+            x = Activation('relu', name=f'{name}.a{i+1}')(x)
+            x = Dropout(self.dr_rate, name=f'{name}.drp{i+1}.{self.dr_rate}')(x)        
         return x
 
 
@@ -218,8 +236,7 @@ class KERAS_REGRESSOR(BaseMLModel):
     """ Neural network regressor. """
     model_name = 'nn_reg'
 
-    def __init__(self, input_dim, attn=False, dr_rate=0.2, opt_name='sgd',
-                 logger=None):
+    def __init__(self, input_dim, attn=False, dr_rate=0.2, opt_name='sgd', logger=None):
         inputs = Input(shape=(input_dim,))
         if attn:
             a = Dense(1000, activation='relu')(inputs)
@@ -258,9 +275,7 @@ class KERAS_REGRESSOR(BaseMLModel):
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
-        model.compile(loss='mean_squared_error',
-                      optimizer=opt,
-                      metrics=['mae', r2_krs])
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
         self.model = model
 
 
@@ -268,6 +283,66 @@ class KERAS_REGRESSOR(BaseMLModel):
     #    """ Dump trained model. """        
     #    self.model.save( str(Path(outdir)/'model.h5') )
         
+class NN_REG_2LAYER(BaseMLModel):
+    """ Neural network regressor.
+    Fully-connected NN.
+    """
+    model_name = 'nn_ref_2layer'
+
+    def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', initializer='he_uniform', logger=None):
+        self.input_dim = input_dim
+        self.dr_rate = dr_rate
+        self.opt_name = opt_name
+        self.initializer = initializer
+
+        layers = [1000, 500]
+        inputs = Input(shape=(self.input_dim,), name='inputs')
+        x = self.build_dense_block(layers, inputs)
+
+        outputs = Dense(1, activation='relu', name='outputs')(x)
+        model = Model(inputs=inputs, outputs=outputs)
+        
+        if self.opt_name == 'sgd':
+            opt = SGD(lr=1e-4, momentum=0.9)
+        elif self.opt_name == 'adam':
+            opt = Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+        else:
+            opt = SGD(lr=1e-4, momentum=0.9) # for clr
+
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae']) # r2_krs 
+        self.model = model
+
+
+class NN_REG_4LAYER(BaseMLModel):
+    """ Neural network regressor.
+    Fully-connected NN.
+    """
+    model_name = 'nn_reg_4layer'
+
+    def __init__(self, input_dim, dr_rate=0.2, opt_name='sgd', initializer='he_uniform', logger=None):
+        self.input_dim = input_dim
+        self.dr_rate = dr_rate
+        self.opt_name = opt_name
+        self.initializer = initializer
+
+        layers = [1000, 500, 250, 125]
+        inputs = Input(shape=(self.input_dim,), name='inputs')
+        x = self.build_dense_block(layers, inputs)
+
+        outputs = Dense(1, activation='relu', name='outputs')(x)
+        model = Model(inputs=inputs, outputs=outputs)
+        
+        if self.opt_name == 'sgd':
+            opt = SGD(lr=1e-4, momentum=0.9)
+        elif self.opt_name == 'adam':
+            opt = Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+        else:
+            opt = SGD(lr=1e-4, momentum=0.9) # for clr
+
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae']) # r2_krs 
+        self.model = model
+
+
 
 class NN_REG0(BaseMLModel):
     """ Neural network regressor.
@@ -295,7 +370,7 @@ class NN_REG0(BaseMLModel):
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
-        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae']) # r2_krs 
         self.model = model
         
 
@@ -325,7 +400,7 @@ class NN_REG4(BaseMLModel):
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
-        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae']) # r2_krs 
         self.model = model
         
 
@@ -389,7 +464,7 @@ class NN_REG1(BaseMLModel):
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
-        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae']) # r2_krs 
         self.model = model
 
 
@@ -429,7 +504,7 @@ class NN_REG2(BaseMLModel):
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
-        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae']) # r2_krs 
         self.model = model
 
 
@@ -571,7 +646,7 @@ class NN_REG3(BaseMLModel):
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
-        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae']) # r2_krs 
         self.model = model
 
 
@@ -641,59 +716,68 @@ class NN_REG5(BaseMLModel):
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
-        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae']) # r2_krs
         self.model = model
         
 
 class NN_REG6(BaseMLModel):
     """ Neural network regressor.
     Embbeding for drugs.
+    https://keras.io/getting-started/functional-api-guide/
+    https://machinelearningmastery.com/use-word-embedding-layers-deep-learning-keras/
+    https://medium.com/@chunduri11/deep-learning-part-1-fast-ai-rossman-notebook-7787bfbc309f
     """
     model_name = 'nn_reg6'
 
-    def __init__(self, in_dim_rna, in_dim_drg_embd, dr_rate=0.2, opt_name='sgd', initializer='he_uniform', logger=None):
+    def __init__(self, in_dim_rna, unq_drg_labels, dr_rate=0.2, opt_name='sgd', initializer='he_uniform', logger=None):
         # https://keras.io/getting-started/functional-api-guide/
         # Chollet book
+        self.in_dim_rna = in_dim_rna
+        self.unq_drg_labels = unq_drg_labels
+        self.dr_rate = dr_rate
+        self.opt_name = opt_name
+        self.initializer = initializer
 
         # RNA
         in_rna = Input(shape=(in_dim_rna,), name='in_rna')
-        out_rna = self.build_dense_block(layers=[1000,1000], inputs=in_rna, name='rna')
+        out_rna = self.build_dense_block(layers=[1000, 1000], inputs=in_rna, name='rna')
         rna = Model(inputs=in_rna, outputs=out_rna, name=f'out_rna')
 
         # Drug embedding 
         # in_dim_drg_embd = len(drg_pdm)
         # in_dim_drg_embd = len(drg_common)
         # in_dim_drg_embd = len(drg)
-        out_dim_drg_embd = (in_dim_drg_embd+1)//2
+        #dim_drg_embd = (in_dim_drg_lbl+1)//2
+        dim_drg_embd = (unq_drg_labels+1)//2
 
-        in_drg_embd = Input(shape=(1,), name='in_drg_embd')
-        out_drg_embd = Embedding(input_dim = in_dim_drg_embd,
-                                 output_dim = out_dim_drg_embd,
-                                 input_length=1, name='out_drg_embd')(in_drg_embd)
-
-        drg_embd = Model(inputs=in_drg_embd, outputs=out_drg_embd, name='out_drg')
+        in_drg_lbl = Input(shape=(1,), name='in_drg_lbl')
+        out_drg_embd = Embedding(input_dim = unq_drg_labels,
+                                 output_dim = dim_drg_embd,
+                                 input_length=1, name='out_drg_embd')(in_drg_lbl)
+        out_drg_embd = Flatten()(out_drg_embd)
+        drg_embd = Model(inputs=in_drg_lbl, outputs=out_drg_embd, name='out_drg')
 
         # Merge layers
         merged = merge.concatenate([rna.output, drg_embd.output])
         
         # Dense layers
-        x = Dense(1000, name='in_merged')(merged)
+        x = Dense(500, name='in_merged')(merged)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
 
-        x = Dense(800)(x)
+        x = Dense(250)(x)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
 
-        x = Dense(600)(x)
+        x = Dense(125)(x)
         x = BatchNormalization()(x)
         x = Activation('relu')(x)
         x = Dropout(dr_rate)(x)
 
         outputs = Dense(1, activation='relu', name='output')(x)
-        model = Model(inputs=[in_rna, in_drg_embd], outputs=[outputs])
+        model = Model(inputs=[in_rna, in_drg_lbl], outputs=[outputs])
         
         if opt_name == 'sgd':
             opt = SGD(lr=1e-4, momentum=0.9)
@@ -702,7 +786,7 @@ class NN_REG6(BaseMLModel):
         else:
             opt = SGD(lr=1e-4, momentum=0.9) # for clr
 
-        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae', r2_krs])
+        model.compile(loss='mean_squared_error', optimizer=opt, metrics=['mae']) # r2_krs
         self.model = model
 
 

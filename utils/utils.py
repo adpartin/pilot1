@@ -23,30 +23,30 @@ from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error
 # DATADIR = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1'
 
 
-def create_outdir(outdir='.', args=None):
-    """ Create output dir. """
-    t = datetime.datetime.now()
-    t = [t.year, '-', t.month, '-', t.day, '-', 'h', t.hour, '-', 'm', t.minute]
-    t = ''.join([str(i) for i in t])
-    
-    if args is not None:
-        l = [args['opt']] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']] 
-
-        if ('nn' in args['model_name']) and (args['attn'] is True): 
-            name_sffx = '.'.join( args['train_sources'] + [args['model_name']] + ['attn'] + l )
-
-        elif ('nn' in args['model_name']) and (args['attn'] is False): 
-            name_sffx = '.'.join( args['train_sources'] + [args['model_name']] + ['fc'] + l )
-
-        else:
-            name_sffx = '.'.join( args['train_sources'] + [args['model_name']] + l )
-
-    else:
-        name_sffx = 'out'
-        
-    run_outdir = Path(outdir) / (name_sffx + '_' + t)
-    os.makedirs(run_outdir)
-    return run_outdir
+# def create_outdir(outdir='.', args=None):
+#     """ Create output dir. """
+#     t = datetime.datetime.now()
+#     t = [t.year, '-', t.month, '-', t.day, '-', 'h', t.hour, '-', 'm', t.minute]
+#     t = ''.join([str(i) for i in t])
+#     
+#     if args is not None:
+#         l = [args['opt']] + [args['cv_method']] + [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']] 
+# 
+#         if ('nn' in args['model_name']) and (args['attn'] is True): 
+#             name_sffx = '.'.join( args['train_sources'] + [args['model_name']] + ['attn'] + l )
+# 
+#         elif ('nn' in args['model_name']) and (args['attn'] is False): 
+#             name_sffx = '.'.join( args['train_sources'] + [args['model_name']] + ['fc'] + l )
+# 
+#         else:
+#             name_sffx = '.'.join( args['train_sources'] + [args['model_name']] + l )
+# 
+#     else:
+#         name_sffx = 'out'
+#         
+#     run_outdir = Path(outdir) / (name_sffx + '_' + t)
+#     os.makedirs(run_outdir)
+#     return run_outdir
 
 
 def dump_args(args, outdir='.'):
@@ -64,10 +64,9 @@ def dump_dict(dct, outpath='./dict.txt'):
     Examples:
         utils.dump_dict(args, outdir=outdir)
     """
-    dct = sorted(dct)
     with open( Path(outpath), 'w' ) as file:
-        for k, v in dct.items():
-            file.write('{}: {}\n'.format(k, v))            
+        for k in sorted(dct.keys()):
+            file.write('{}: {}\n'.format(k, dct[k]))            
             
             
 def subsample(df, v, axis=0):

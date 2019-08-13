@@ -44,8 +44,8 @@ def my_learning_curve(
         X, Y,
         mltype: str,
         model_name: str='lgb_reg',
-        init_kwargs: dict=None, 
-        fit_kwargs: dict=None,
+        init_params: dict=None, 
+        fit_params: dict=None,
         cv=5,
         cv_splits=None,
         lc_ticks: int=5,
@@ -65,11 +65,9 @@ def my_learning_curve(
         cv_splits : tuple of 2 dicts cv_splits[0] and cv_splits[1] contain the tr and vl splits, respectively 
         lc_ticks : number of ticks in the learning curve (used if data_sz_frac is None)
         data_sz_frac : relative numbers of training samples that will be used to generate learning curves
-        fit_kwargs : dict of parameters to the estimator's "fit" method
-
+        fit_params : dict of parameters to the estimator's "fit" method
         metrics : allow to pass a string of metrics  TODO!
         args : command line args
-
     Examples:
         cv = sklearn.model_selection.KFold(n_splits=5, shuffle=False, random_state=0)
         lrn_curve.my_learning_curve(X=xdata, Y=ydata, mltype='reg', cv=cv, lc_ticks=5)
@@ -137,8 +135,7 @@ def my_learning_curve(
     elif cv_folds > 1:
         tr_sizes = [int(n) for n in (cv_folds-1)/cv_folds * X.shape[0] * data_sz_frac]
 
-    if logger is not None:
-        logger.info('Train sizes: {}\n'.format(tr_sizes))
+    if logger is not None: logger.info('Train sizes: {}\n'.format(tr_sizes))
 
     
     # Now start nested loop of train size and cv folds
@@ -147,8 +144,7 @@ def my_learning_curve(
 
     # CV loop
     for fold, (tr_k, vl_k) in enumerate(zip( tr_dct.keys(), vl_dct.keys() )):
-        if logger is not None:
-            logger.info(f'Fold {fold+1}/{cv_folds}')
+        if logger is not None: logger.info(f'Fold {fold+1}/{cv_folds}')
 
         tr_id = tr_dct[tr_k]
         vl_id = vl_dct[vl_k]
@@ -162,17 +158,17 @@ def my_learning_curve(
         yvl = np.squeeze(Y[vl_id, :])        
 
         # Start run across data sizes
+        np.random.seed(random_state)
         idx = np.random.permutation(len(xtr))
         for i, tr_sz in enumerate(tr_sizes):
-            if logger:
-                logger.info(f'\tTrain size: {tr_sz} ({i+1}/{len(tr_sizes)})')   
+            if logger: logger.info(f'\tTrain size: {tr_sz} ({i+1}/{len(tr_sizes)})')   
 
             # Sequentially get a subset of samples (the input dataset X must be shuffled)
             xtr_sub = xtr[idx[:tr_sz], :]
             ytr_sub = np.squeeze(ytr[idx[:tr_sz], :])            
 
             # Get the estimator
-            estimator = ml_models.get_model(model_name, init_kwargs=init_kwargs)
+            estimator = ml_models.get_model(model_name, init_kwargs=init_params)
 
             if 'nn' in model_name:
                 plot_model(estimator.model, to_file=outdir/'nn_model.png')
@@ -182,10 +178,10 @@ def my_learning_curve(
                 os.makedirs(out_nn_model, exist_ok=False)
                 
                 # Callbacks (custom)
-                clr = CyclicLR(base_lr=1e-4, max_lr=1e-3, mode='triangular')
+                clr = CyclicLR(base_lr=0.0001, max_lr=0.001, mode='triangular')
                 
                 # Keras callbacks
-                checkpointer = ModelCheckpoint(str(out_nn_model/'model_best.h5'), verbose=0, save_weights_only=False, save_best_only=True)
+                checkpointer = ModelCheckpoint(str(out_nn_model/'autosave.model.h5'), verbose=0, save_weights_only=False, save_best_only=True)
                 csv_logger = CSVLogger(out_nn_model/'training.log')
                 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
                                               min_delta=0.0001, cooldown=3, min_lr=0.000000001)
@@ -198,18 +194,17 @@ def my_learning_curve(
 
                 # Fit params
                 # TODO: which val set should be used??
-                fit_kwargs['validation_data'] = (xvl, yvl)
-                # fit_kwargs['validation_split'] = 0.2
-                fit_kwargs['callbacks'] = callback_list
+                fit_params['validation_data'] = (xvl, yvl)
+                # fit_params['validation_split'] = 0.2
+                fit_params['callbacks'] = callback_list
 
             # Train model
-            history = estimator.model.fit(xtr_sub, ytr_sub, **fit_kwargs)
+            history = estimator.model.fit(xtr_sub, ytr_sub, **fit_params)
 
             # If nn, load the best model
             if 'nn' in model_name:
-                model = keras.models.load_model(str(out_nn_model/'autosave.model.h5'), custom_objects={'r2_krs': r2_krs}) # https://github.com/keras-team/keras/issues/5916
+                model = keras.models.load_model(str(out_nn_model/'autosave.model.h5'), custom_objects={'r2_krs': r2_krs})
             else:
-                # If not NN model
                 model = estimator.model
 
             # Calc preds and scores TODO: dump preds
@@ -224,8 +219,7 @@ def my_learning_curve(
             dn = ((y_true - np.average(y_true, axis=0)) ** 2).sum(axis=0, dtype=np.float64)
 
             if 'nn' in model_name:
-                ml_models.plot_prfrm_metrics(history, title=f'Train size: {tr_sz}',
-                                             skp_ep=20, add_lr=True, outdir=out_nn_model)
+                ml_models.plot_prfrm_metrics(history, title=f'Train size: {tr_sz}', skp_ep=20, add_lr=True, outdir=out_nn_model)
 
             # Add info
             tr_scores['tr_set'] = True
@@ -326,14 +320,8 @@ def plt_lrn_crv(rslt, metric_name='score', ylim=None, title=None, path=None):
 
     plt.plot(tr_sizes, tr_scores_mean, 'o-', color='r', label='Train score')
     plt.plot(tr_sizes, te_scores_mean, 'o-', color='g', label='Val score')
-    plt.fill_between(tr_sizes,
-                     tr_scores_mean - tr_scores_std,
-                     tr_scores_mean + tr_scores_std,
-                     alpha=0.1, color='r')
-    plt.fill_between(tr_sizes,
-                     te_scores_mean - te_scores_std,
-                     te_scores_mean + te_scores_std,
-                     alpha=0.1, color='g')
+    plt.fill_between(tr_sizes, tr_scores_mean - tr_scores_std, tr_scores_mean + tr_scores_std, alpha=0.1, color='r')
+    plt.fill_between(tr_sizes, te_scores_mean - te_scores_std, te_scores_mean + te_scores_std, alpha=0.1, color='g')
     
     if title is not None:
         plt.title(title)
@@ -359,4 +347,3 @@ def scores_to_df(scores_all):
     df = df.reset_index(drop=False)
     df.columns.name = None
     return df
-

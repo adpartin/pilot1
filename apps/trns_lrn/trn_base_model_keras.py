@@ -174,14 +174,24 @@ def run(args):
     # =====================================================
     #       Scale (CV can start here) --> TODO: handle categorical features!
     # =====================================================
-    cols = xtr.columns
     # scaler = MinMaxScaler()
     scaler = StandardScaler()
 
-    cols = xtr.columns
-    xtr = pd.DataFrame(scaler.fit_transform(xtr), columns=cols, dtype=np.float32)
-    xvl = pd.DataFrame(scaler.transform(xvl), columns=cols, dtype=np.float32)
-    xte = pd.DataFrame(scaler.transform(xte), columns=cols, dtype=np.float32)
+    drg_lbl_cols = [c for c in xtr.columns if 'lbl_drg' in c]
+    num_cols = [c for c in xtr.columns if 'lbl_drg' not in c]
+
+    xtr, xtr_drg_lbl = xtr[num_cols], xtr[drg_lbl_cols]
+    xvl, xvl_drg_lbl = xvl[num_cols], xvl[drg_lbl_cols]
+    xte, xte_drg_lbl = xte[num_cols], xte[drg_lbl_cols]
+
+    xtr = pd.DataFrame(scaler.fit_transform(xtr), columns=num_cols, dtype=np.float32)
+    xvl = pd.DataFrame(scaler.transform(xvl), columns=num_cols, dtype=np.float32)
+    xte = pd.DataFrame(scaler.transform(xte), columns=num_cols, dtype=np.float32)
+
+    #cols = xtr.columns
+    #xtr = pd.DataFrame(scaler.fit_transform(xtr), columns=cols, dtype=np.float32)
+    #xvl = pd.DataFrame(scaler.transform(xvl), columns=cols, dtype=np.float32)
+    #xte = pd.DataFrame(scaler.transform(xte), columns=cols, dtype=np.float32)
 
     # Dump scaler
     joblib.dump(scaler, fold_outdir/'scaler.pkl')
@@ -199,9 +209,12 @@ def run(args):
         xtr_dct = {'in_rna': xtr_rna, 'in_dsc': xtr_dsc} 
         xvl_dct = {'in_rna': xvl_rna, 'in_dsc': xvl_dsc} 
         init_kwargs = {'in_dim_rna': xtr_rna.shape[1], 'in_dim_dsc': xtr_dsc.shape[1], 'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
+
     elif model_name == 'nn_reg6':
-        # TODO: uses RNA-seq and categorical drug embeddings
-        pass
+        xtr_dct = {'in_rna': xtr, 'in_drg_lbl': xtr_drg_lbl} 
+        xvl_dct = {'in_rna': xvl, 'in_drg_lbl': xvl_drg_lbl} 
+        init_kwargs = {'in_dim_rna': xtr.shape[1], 'unq_drg_labels': len(np.unique(xtr_drg_lbl)),
+                       'dr_rate': dr_rate, 'opt_name': opt_name, 'logger': lg.logger}
     else:
         xtr_dct = {'inputs': xtr} 
         xvl_dct = {'inputs': xvl} 
@@ -224,10 +237,12 @@ def run(args):
         clr = CyclicLR(base_lr=base_lr, max_lr=max_lr, mode='exp_range', gamma=gamma) # 0.99994; 0.99999994; 0.999994
                 
     # Checkpointer
-    #model_checkpoint_dir = fold_outdir/'models'
-    #os.makedirs(model_checkpoint_dir, exist_ok=True)
-    #checkpointer = ModelCheckpoint(str(model_checkpoint_dir/'model.ep_{epoch:d}-val_loss_{val_loss:.5f}.h5'), save_best_only=False)
-    checkpointer = ModelCheckpoint(str(fold_outdir/'best_model.h5'), monitor='mae', save_best_only=True)
+    model_checkpoint_dir = fold_outdir/'models'
+    os.makedirs(model_checkpoint_dir, exist_ok=True)
+    checkpointer = ModelCheckpoint(
+            str(model_checkpoint_dir/'model.ep_{epoch:d}-val_loss_{val_loss:.4f}-val_mae_{val_mean_absolute_error:.4f}.h5'),
+            save_best_only=False)
+    # checkpointer = ModelCheckpoint(str(fold_outdir/'model_best.h5'), monitor='mean_absolute_error', verbose=True, save_best_only=True)
 
     # Callbacks
     csv_logger = CSVLogger(fold_outdir/'training.log')
@@ -236,20 +251,27 @@ def run(args):
     early_stop = EarlyStopping(monitor='val_loss', patience=100, verbose=1, mode='auto')
                 
     # Callbacks list
-    callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
-    if 'clr' in opt_name: callback_list = callback_list + [clr]
+    callbacks = [checkpointer, csv_logger, early_stop, reduce_lr]
+    if 'clr' in opt_name: callbacks.append(clr)
 
     # Fit params
     fit_kwargs['validation_data'] = (xvl_dct, yvl)
-    fit_kwargs['callbacks'] = callback_list
+    fit_kwargs['callbacks'] = callbacks
 
     # Train
     t0 = time()
     history = model.fit(xtr_dct, ytr, **fit_kwargs)
     lg.logger.info('Train runtime: {:.1f} mins'.format( (time()-t0)/60 ))
 
-    # Dump model
-    model.save( str(fold_outdir/'final_model.h5') )
+    # Dump model and history
+    model.save( str(fold_outdir/'model_final.h5') )
+
+    # Load the best model to make preds
+    # load_model( str(fold_outdir/'model_best.h5') )
+    h = ml_models.save_krs_history(history, fold_outdir)
+    ep_best = h.loc[ h['val_mean_absolute_error']==h['val_mean_absolute_error'].min(), 'epoch' ].values[0]
+    mpath = glob(str(model_checkpoint_dir/f'model.ep_{ep_best}-val_loss*.h5'))[0]
+    model = load_model(mpath)
 
     # Predict
     pred_ytr = model.predict(xtr)
@@ -265,8 +287,6 @@ def run(args):
     ml_models.plot_prfrm_metrics(history, title=f'Train base model {model_name}',
                                  skp_ep=skp_ep, add_lr=True, outdir=fold_outdir)
 
-    ml_models.save_krs_history(history, fold_outdir)
-
 
     #tr_scores = utils.calc_scores_(ytr, pred_ytr)
     #vl_scores = utils.calc_scores_(yvl, pred_yvl)
@@ -279,7 +299,7 @@ def run(args):
     # CSV scores
     te_scores = utils.calc_scores_(yte, pred_yte)
     csv = utils.scores_to_csv(model, scaler, args, te_scores, file_path)
-    csv.to_csv( run_outdir/(f'csv_scores_nn_{src}.csv'), index=False )
+    csv.to_csv( fold_outdir/(f'csv_scores_nn_{src}.csv'), index=False )
 
 
     # =====================================================

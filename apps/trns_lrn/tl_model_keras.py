@@ -173,7 +173,7 @@ def run(args):
 
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
                                   min_delta=0.0001, cooldown=3, min_lr=0.000000001)
-    early_stop = EarlyStopping(monitor='val_loss', patience=100, verbose=1, mode='auto')
+    early_stop = EarlyStopping(monitor='val_loss', patience=100, verbose=1)
 
 
     # =====================================================
@@ -270,8 +270,10 @@ def run(args):
         # =====================================================
         #       Load base (pre-trained) model and predict w/o transfer learning
         # =====================================================    
-        modelpath = base_model_dir/f'cv{bs_fold}'/'final_model.h5'
-        model = load_model(str(modelpath), custom_objects={'r2_krs': r2_krs})
+        # modelpath = base_model_dir/f'cv{bs_fold}'/'final_model.h5'
+        # model = load_model(str(modelpath), custom_objects={'r2_krs': r2_krs})
+        modelpath = base_model_dir/f'cv{bs_fold}'/'model_best.h5'
+        model = load_model( str(modelpath) )
         plot_model(model, to_file=fold_outdir/'nn_model.png')
         
 
@@ -287,9 +289,9 @@ def run(args):
         csv_logger = CSVLogger(fold_outdir/'training.log')
 
         # Callbacks list
-        callback_list = [checkpointer, csv_logger, early_stop, reduce_lr]
-        if 'clr' in opt_name: callback_list = callback_list + [clr]      
-        
+        callbacks = [checkpointer, csv_logger, early_stop, reduce_lr]
+        if 'clr' in opt_name: callbacks.append(clr)
+
         # ------------------------------- 
         # Choose transfer learning method    
         # ------------------------------- 
@@ -360,7 +362,7 @@ def run(args):
             fit_kwargs = {'epochs': epochs, 'batch_size': batch_size, 'verbose': 1}
             # fit_kwargs['validation_data'] = (xvl, yvl)
             fit_kwargs['validation_split'] = 0.2
-            fit_kwargs['callbacks'] = callback_list  
+            fit_kwargs['callbacks'] = callbacks  
             
             t0 = time()
             history = model.fit(xtr, ytr, **fit_kwargs)

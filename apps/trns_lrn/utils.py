@@ -190,17 +190,14 @@ def extract_data(df, fea_list, matched_to=None):
 
 
 def load_data(file_path, src, ccl_fea_list, drg_fea_list, drg_subset='all', fea_sep='_', logger=None):
-    """ 
+    """ Load data (Yitan's data).
     Args:
         drg_subset : 
             'all' (any drug)
             'common' (intersection of drugs used in PDM and CCL)
             'pdm' (only drugs used in PDM study)
     """
-    #""" Load data (Yitan's data and splits) """
     datadir = Path(file_path/'../../data/yitan/Data')
-    #ccl_folds_dir = Path(file_path/'../../data/yitan/CCL_10Fold_Partition')
-    #pdm_folds_dir = Path(file_path/'../../data/yitan/PDM_10Fold_Partition')
     fea_data_name = 'CCL_PDM_TransferLearningData_rmFactor_0.0_ddNorm_std.pkl'
     
     # Un-pickle files
@@ -246,18 +243,14 @@ def load_data(file_path, src, ccl_fea_list, drg_fea_list, drg_subset='all', fea_
     if logger: cnt_fea(ccl, logger=logger);
 
     # Extract subset of drug features
+    if logger: cnt_fea(drg, logger=logger);
     if 'lbl' in drg_fea_list:
         # TODO: didn't finish; need to test
-        #drg_enc = drg.copy()
-        #drg_enc.insert(loc=0, column='drg_enc', value=LabelEncoder().fit_transform(drg_enc.index), allow_duplicates=False)
-        #drg = drg_enc[['drg_enc']]
-        
         drg = pd.DataFrame(index=drg.index)
         drg['lbl_drg'] = LabelEncoder().fit_transform(drg.index)
     else:
-        if logger: cnt_fea(drg, logger=logger);
         drg = extract_subset_fea(df=drg, fea_list=drg_fea_list, fea_sep=fea_sep)
-        if logger: cnt_fea(drg, logger=logger);
+    if logger: cnt_fea(drg, logger=logger);
 
     def merge_dfs(res_df, ccl_df, drg_df):
         """ Merge the following dfs: response, ccl fea, drug fea """
@@ -282,7 +275,7 @@ def load_data(file_path, src, ccl_fea_list, drg_fea_list, drg_subset='all', fea_
 
 
 def get_splits_per_fold(data, ids_path, logger=None):
-
+    """ ... """
     def get_file(fpath):
         return pd.read_csv(fpath, header=None).squeeze().values if fpath.is_file() else None
 

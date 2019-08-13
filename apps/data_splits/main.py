@@ -52,7 +52,7 @@ OUTDIR = file_path / '../../data/processed' / PRJ_NAME
 
         
 def parse_args(args):
-    parser = argparse.ArgumentParser(description="Generate and save dataset splits.")
+    parser = argparse.ArgumentParser(description='Generate and save dataset splits.')
 
     # Input data
     parser.add_argument('--dirpath', default=None, type=str, help='Full path to data (default: None).')
@@ -60,7 +60,7 @@ def parse_args(args):
     # Combined related params
     # Data name
     parser.add_argument('--dname', default=None, choices=['combined'], help='Data name (default: None).')
-    parser.add_argument('--rna_norm', default='raw', choices=['raw', 'combat'], help='RNA normalization (default: `raw`).')
+    parser.add_argument('--rna_norm', default='raw', choices=['raw', 'combat'], help='RNA normalization (default: raw).')
     parser.add_argument('--no_fibro', action='store_true', default=False, help='Default: False')
     parser.add_argument('--src', nargs='+', default=None, choices=['ccle', 'gcsi', 'gdsc', 'ctrp', 'nci60'],
         help='Data sources to use (default: None).')
@@ -71,21 +71,17 @@ def parse_args(args):
 
     # Feature types
     parser.add_argument('-cf', '--cell_fea', nargs='+', default=['rna'], choices=['rna', 'cnv', 'clb'],
-        help='Cell line features (default: `rna`).') # ['rna_latent']
+        help='Cell line features (default: rna).') # ['rna_latent']
     parser.add_argument('-df', '--drug_fea', nargs='+', default=['dsc'], choices=['dsc', 'fng', 'dlb'],
-        help='Drug features (default: `dsc`).') # ['fng', 'dsc_latent', 'fng_latent']
+        help='Drug features (default: dsc).') # ['fng', 'dsc_latent', 'fng_latent']
     parser.add_argument('-of', '--other_fea', default=[], choices=[],
         help='Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).') # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
 
     # Data split methods
-    parser.add_argument('-tem', '--te_method', default=None, choices=['simple', 'group'],
-        help='Test split method (default: None).')
-    parser.add_argument('--te_size', type=float, default=0.1, 
-        help='Test size split ratio (default: 0.1).')
-    parser.add_argument('-cvm', '--cv_method', default='simple', choices=['simple', 'group'],
-        help='Cross-val split method (default: `simple`).')
-    parser.add_argument('--vl_size', type=float, default=0.1, 
-        help='Val size split ratio for single split (default: 0.1).')
+    parser.add_argument('--te_method', default=None, choices=['simple', 'group'], help='Test split method (default: None).')
+    parser.add_argument('--te_size', type=float, default=0.1, help='Test size split ratio (default: 0.1).')
+    parser.add_argument('--cv_method', default='simple', choices=['simple', 'group'], help='Cross-val split method (default: simple).')
+    parser.add_argument('--vl_size', type=float, default=0.1, help='Val size split ratio for single split (default: 0.1).')
 
     # Define n_jobs
     parser.add_argument('--n_jobs', default=4,  type=int, help='Default: 4.')

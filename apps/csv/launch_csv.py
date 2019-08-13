@@ -42,7 +42,7 @@ PRJ_NAME = file_path.name
 OUTDIR = file_path / '../../out/' / PRJ_NAME
 
 
-def create_csv(df, outdir='.'):
+def create_csv_table(df, outdir='.'):
     """ Creates CSV table for each available metric. """
     # lg.logger.info('Create csv table ...')
     for m in df['metric'].unique():
@@ -131,7 +131,7 @@ def main(args):
 
 
     # Create csv table for each available metric
-    create_csv(df=csv_all, outdir=outdir)
+    create_csv_table(df=csv_all, outdir=outdir)
 
 
     # lg.logger.info('\nTotal CSV runtime {:.3f}\n'.format((time.time()-t0)/60))
