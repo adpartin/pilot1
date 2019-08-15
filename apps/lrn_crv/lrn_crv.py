@@ -52,9 +52,9 @@ class LearningCurve():
             X, Y,
             cv=5,
             cv_lists=None,
-            shard_frac=[],
             n_shards: int=5,
-            shard_step_scale: str='log2',
+            # shard_step_scale: str='log2',
+            # shard_frac=[],
             args=None,
             logger=None,
             outdir='./'):
@@ -64,13 +64,15 @@ class LearningCurve():
             Y : array-like (pd.DataFrame or np.ndarray)
             cv : (optional) number of cv folds (int) or sklearn cv splitter --> scikit-learn.org/stable/glossary.html#term-cv-splitter
             cv_lists : tuple of 2 dicts, cv_lists[0] and cv_lists[1], that contain the tr and vl folds, respectively 
-            shard_frac : list of relative numbers of training samples that are used to generate learning curves
-                e.g., shard_frac=[0.1, 0.2, 0.4, 0.7, 1.0].
-                If this arg is not provided, then the training shards are generated from n_shards and shard_step_scale.
             n_shards : number of dataset splits in the learning curve (used if shard_frac is None)
+            
             shard_step_scale : if n_shards is provided, this will generate a list of training set sizes with steps
                 specified by this arg. Available values: 'linear', 'log2', 'log10', 'log'.
                 e.g., if n_shards=5 and shard_step_scale='linear', then it generates ...
+            shard_frac : list of relative numbers of training samples that are used to generate learning curves
+                e.g., shard_frac=[0.1, 0.2, 0.4, 0.7, 1.0].
+                If this arg is not provided, then the training shards are generated from n_shards and shard_step_scale.
+                
             args : command line args
         """
         self.X = pd.DataFrame(X).values
@@ -78,8 +80,8 @@ class LearningCurve():
         self.cv = cv
         self.cv_lists = cv_lists
         self.n_shards = n_shards
-        self.shard_step_scale = shard_step_scale 
-        self.shard_frac = shard_frac
+        # self.shard_step_scale = shard_step_scale 
+        # self.shard_frac = shard_frac
         self.args = args
         self.logger = logger
         self.outdir = Path(outdir)
@@ -138,46 +140,57 @@ class LearningCurve():
 
     def create_tr_shards_list(self):
         """ Generate the list of training shard sizes. """
-        if len(self.shard_frac)==0:
-            # if any( [self.shard_step_scale.lower()==s for s in ['lin', 'linear']] ):
-            scale = self.shard_step_scale.lower()
-            if scale == 'linear':
-                self.shard_frac = np.linspace(0.1, 1.0, self.n_shards)
-            else:
-                if scale == 'log2':
-                    base = 2
-                elif scale == 'log10':
-                    base = 10
-                # In np.logspace the sequence starts at base ** start 
-                # self.shard_frac = np.logspace(start=0.0, stop=1.0, num=self.n_shards, endpoint=True, base=base)/base
-                # shard_frac_small = list(np.logspace(start=0.0, stop=1.0, num=2*self.n_shards, endpoint=True, base=base)/(self.X.shape[0]/10))
-                shard_frac_low_range = list(np.linspace(start=10, stop=int(0.1*self.X.shape[0]), num=2*self.n_shards, endpoint=False)/self.X.shape[0])
-                shard_frac = list(np.logspace(start=0.0, stop=1.0, num=self.n_shards, endpoint=True, base=base)/base)
-                shard_frac.extend(shard_frac_low_range)
-                self.shard_frac = np.array( sorted(list(set(shard_frac))) )
+#         if len(self.shard_frac)==0:
+#             # if any( [self.shard_step_scale.lower()==s for s in ['lin', 'linear']] ):
+#             scale = self.shard_step_scale.lower()
+#             if scale == 'linear':
+#                 self.shard_frac = np.linspace(0.1, 1.0, self.n_shards)
+#             else:
+#                 if scale == 'log2':
+#                     base = 2
+#                 elif scale == 'log10':
+#                     base = 10
+#                 # In np.logspace the sequence starts at base ** start 
+#                 # self.shard_frac = np.logspace(start=0.0, stop=1.0, num=self.n_shards, endpoint=True, base=base)/base
+#                 # shard_frac_small = list(np.logspace(start=0.0, stop=1.0, num=2*self.n_shards, endpoint=True, base=base)/(self.X.shape[0]/10))
+#                 # shard_frac_low_range = list(np.linspace(start=10, stop=int(0.1*self.X.shape[0]), num=2*self.n_shards, endpoint=False)/self.X.shape[0])
+#                 shard_frac = list(np.logspace(start=0.0, stop=1.0, num=self.n_shards, endpoint=True, base=base)/base)
+#                 # shard_frac.extend(shard_frac_low_range)
+#                 self.shard_frac = np.array( sorted(list(set(shard_frac))) )
 
-            if self.logger: self.logger.info(f'Shard step spacing: {self.shard_step_scale}.')
+#             if self.logger: self.logger.info(f'Shard step spacing: {self.shard_step_scale}.')
 
-        if self.cv_folds == 1:
-            self.tr_shards = [int(n) for n in (1-self.vl_size) * self.X.shape[0] * self.shard_frac if n>0]
-        else: 
-            self.tr_shards = [int(n) for n in (self.cv_folds-1)/self.cv_folds * self.X.shape[0] * self.shard_frac if n>0]
+#         if self.cv_folds == 1:
+#             self.tr_shards = [int(n) for n in (1-self.vl_size) * self.X.shape[0] * self.shard_frac if n>0]
+#         else: 
+#             self.tr_shards = [int(n) for n in (self.cv_folds-1)/self.cv_folds * self.X.shape[0] * self.shard_frac if n>0]
 
         # --------------------------------------------
-        # New (fixed) spacing
+        # Fixed spacing
         if self.cv_folds == 1:
             self.max_samples = int((1-self.vl_size) * self.X.shape[0])
         else: 
             self.max_samples = int((self.cv_folds-1)/self.cv_folds * self.X.shape[0])
-   
-        v = 2**np.array(np.arange(30))[1:]
+            
+        # TODO need to add self.max_samples to the training vector
+        v = 2 ** np.array(np.arange(30))[1:]
         idx = np.argmin( np.abs( v - self.max_samples ) )
-        if v[idx] > self.max_samples: idx -= 1
-        v = list(v[:idx+1])
-        v.append(self.max_samples)
-        self.tr_shards = v
+        
+        if v[idx] > max_samples:
+            v = list(v[:idx])
+            v.append(max_samples)
+        else:
+            # v = list(v[:idx])
+            v = list(v[:idx+1])
+            v.append(max_samples)
+            # If the diff btw max_samples and the latest shards (v[-1] - v[-2]) is "too small", then remove max_samples from the possible shards.
+            if 0.5*v[-3] > (v[-1] - v[-2]):
+                print('here')
+                v = v[:-1]
+        
+        self.tr_shards = v[:-self.n_shards]
         # --------------------------------------------
-
+        
         if self.logger is not None: self.logger.info('Train shards: {}\n'.format(self.tr_shards))
 
 
@@ -252,9 +265,9 @@ class LearningCurve():
                 eval_samples = int(self.eval_frac*xvl.shape[0])
                 eval_set = (xvl[:eval_samples, :], yvl[:eval_samples])
                 if self.framework=='lightgbm':
-                    model = self.trn_lgbm_model(model=model, xtr_sub=xtr_sub, ytr_sub=ytr_sub, fold=fold, tr_sz=tr_sz, eval_set=eval_set)
+                    model, trn_outdir = self.trn_lgbm_model(model=model, xtr_sub=xtr_sub, ytr_sub=ytr_sub, fold=fold, tr_sz=tr_sz, eval_set=eval_set)
                 elif self.framework=='keras':
-                    model = self.trn_keras_model(model=model, xtr_sub=xtr_sub, ytr_sub=ytr_sub, fold=fold, tr_sz=tr_sz, eval_set=eval_set)
+                    model, trn_outdir = self.trn_keras_model(model=model, xtr_sub=xtr_sub, ytr_sub=ytr_sub, fold=fold, tr_sz=tr_sz, eval_set=eval_set)
                 elif self.framework=='pytorch':
                     pass
                 else:
@@ -268,6 +281,7 @@ class LearningCurve():
                 y_pred, y_true = calc_preds(model, x=xvl, y=yvl, mltype=self.mltype)
                 vl_scores = calc_scores(y_true=y_true, y_pred=y_pred, mltype=self.mltype, metrics=None)
 
+                del estimator, model
                 # nm = ((y_true - y_pred) ** 2).sum(axis=0, dtype=np.float64)
                 # dn = ((y_true - np.average(y_true, axis=0)) ** 2).sum(axis=0, dtype=np.float64)
 
@@ -275,6 +289,7 @@ class LearningCurve():
                 tr_scores['tr_set'] = True
                 tr_scores['fold'] = 'fold'+str(fold)
                 tr_scores['tr_size'] = tr_sz
+                
                 vl_scores['tr_set'] = False
                 vl_scores['fold'] = 'fold'+str(fold)
                 vl_scores['tr_size'] = tr_sz
@@ -283,8 +298,17 @@ class LearningCurve():
                 tr_scores_all.append(tr_scores)
                 vl_scores_all.append(vl_scores)
 
-                # Delete the estimator/model
-                del estimator, model
+                # Dump intermediate scores
+                # TODO: test this!
+                scores_tmp = pd.concat([scores_to_df(tr_scores_all), scores_to_df(vl_scores_all)], axis=0)
+                scores_tmp.to_csv( trn_outdir / ('tmp_scores.csv'), index=False )
+                del trn_outdir, tmp_scores
+                
+            # Dump intermediate results (this is useful if the run terminates before run ends)
+            # tr_df_tmp = scores_to_df(tr_scores_all)
+            # vl_df_tmp = scores_to_df(vl_scores_all)
+            scores_all_df_tmp = pd.concat([scores_to_df(tr_scores_all), scores_to_df(vl_scores_all)], axis=0)
+            scores_all_df_tmp.to_csv( self.outdir / ('_lrn_crv_scores_cv' + str(fold+1) + '.csv'), index=False )
 
         # Scores to df
         tr_scores_df = scores_to_df( tr_scores_all )
@@ -292,9 +316,9 @@ class LearningCurve():
         scores_df = pd.concat([tr_scores_df, vl_scores_df], axis=0)
         
         # Dump final results
-        tr_scores_df.to_csv( self.outdir/('tr_lrn_crv_scores.csv'), index=False) 
-        vl_scores_df.to_csv( self.outdir/('vl_lrn_crv_scores.csv'), index=False) 
-        scores_df.to_csv( self.outdir/('lrn_crv_scores.csv'), index=False) 
+        tr_scores_df.to_csv( self.outdir/'tr_lrn_crv_scores.csv', index=False) 
+        vl_scores_df.to_csv( self.outdir/'vl_lrn_crv_scores.csv', index=False) 
+        scores_df.to_csv( self.outdir/'lrn_crv_scores.csv', index=False) 
         
         # Plot learning curves
         if plot:
@@ -332,7 +356,7 @@ class LearningCurve():
         # Load the best model (https://github.com/keras-team/keras/issues/5916)
         # model = keras.models.load_model(str(trn_outdir/'model_best.h5'), custom_objects={'r2_krs': ml_models.r2_krs})
         model = keras.models.load_model( str(trn_outdir/'model_best.h5') )
-        return model
+        return model, trn_outdir
 
 
     def trn_lgbm_model(self, model, xtr_sub, ytr_sub, fold, tr_sz, eval_set=None):
@@ -343,82 +367,20 @@ class LearningCurve():
         os.makedirs(trn_outdir, exist_ok=True)
 
         # Get a subset of samples for validation for early stopping
-        xtr_sub_, xvl_sub_, ytr_sub_, yvl_sub_ = train_test_split(xtr_sub, ytr_sub, test_size=self.val_split)
         fit_kwargs = self.fit_kwargs
-        if xvl_sub_.shape[0] > 0:
-            fit_kwargs['eval_set'] = (xvl_sub_, yvl_sub_)
-            fit_kwargs['early_stopping_rounds'] = 10
-
-
+        # xtr_sub, xvl_sub, ytr_sub, yvl_sub = train_test_split(xtr_sub, ytr_sub, test_size=self.val_split)
+        # if xvl_sub_.shape[0] > 0:
+        #     fit_kwargs['eval_set'] = (xvl_sub, yvl_sub)
+        #     fit_kwargs['early_stopping_rounds'] = 10
+        fit_kwargs['eval_set'] = eval_set
+        fit_kwargs['early_stopping_rounds'] = 10
 
         # Train and save model
-        model.fit(xtr_sub_, ytr_sub_, **fit_kwargs)
+        model.fit(xtr_sub, ytr_sub, **fit_kwargs)
         joblib.dump(model, filename = trn_outdir / ('model.'+self.model_name+'.pkl') )
-        return model
-
-
+        return model, trn_outdir
 
     
-# Define custom metric to calc auroc from regression
-# scikit-learn.org/stable/modules/model_evaluation.html#scoring
-def reg_auroc(y_true, y_pred, th=0.5):
-    """ Compute area under the ROC for regression. """
-    y_true = np.where(y_true < th, 1, 0)
-    y_score = np.where(y_pred < th, 1, 0)
-    reg_auroc_score = sklearn.metrics.roc_auc_score(y_true, y_score)
-    return reg_auroc_score
-
-
-def reg_auroc_score():
-    return sklearn.metrics.make_scorer(score_func=reg_auroc, greater_is_better=True)    
-
-
-def calc_preds(model, x, y, mltype):
-    """ Calc predictions. """
-    if mltype == 'cls':    
-        if y.ndim > 1 and y.shape[1] > 1:
-            y_pred = model.predict_proba(x)
-            y_pred = np.argmax(y_pred, axis=1)
-            y_true = np.argmax(ydata, axis=1)
-        else:
-            y_pred = model.predict_proba(x)
-            y_pred = np.argmax(y_pred, axis=1)
-            y_true = y
-            
-    elif mltype == 'reg':
-        y_pred = model.predict(x)
-        y_true = y
-
-    return y_pred, y_true
-
-
-def calc_scores(y_true, y_pred, mltype, metrics=None):
-    """ Create dict of scores.
-    Args:
-        metrics : TODO allow to pass a string of metrics
-    """
-    scores = {}
-
-    if mltype == 'cls':    
-        scores['auroc'] = sklearn.metrics.roc_auc_score(y_true, y_pred)
-        scores['f1_score'] = sklearn.metrics.f1_score(y_true, y_pred, average='micro')
-        scores['acc_blnc'] = sklearn.metrics.balanced_accuracy_score(y_true, y_pred)
-
-    elif mltype == 'reg':
-        scores['r2'] = sklearn.metrics.r2_score(y_true=y_true, y_pred=y_pred)
-        scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(y_true=y_true, y_pred=y_pred)
-        scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(y_true=y_true, y_pred=y_pred)
-        scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(y_true=y_true, y_pred=y_pred)
-        # scores['auroc_reg'] = reg_auroc(y_true=y_true, y_pred=y_pred)
-
-    # # https://scikit-learn.org/stable/modules/model_evaluation.html
-    # for metric_name, metric in metrics.items():
-    #     if isinstance(metric, str):
-    #         scorer = sklearn.metrics.get_scorer(metric_name) # get a scorer from string
-    #         scores[metric_name] = scorer(ydata, pred)
-    #     else:
-    #         scores[metric_name] = scorer(ydata, pred)
-    return scores
 
 
 def define_keras_callbacks(outdir):
@@ -503,7 +465,8 @@ def scale_ticks_params(tick_scale='linear'):
 
 def plot_lrn_crv(rslt:list, metric_name:str='score',
                  xtick_scale:str='log2', ytick_scale:str='log2',
-                 xlim:list=None, ylim:list=None, title:str=None, path:Path=None, figsize=(7,5)):
+                 xlim:list=None, ylim:list=None, title:str=None, path:Path=None,
+                 figsize=(7,5), ax=None):
     """ 
     Args:
         rslt : output from sklearn.model_selection.learning_curve()
@@ -522,7 +485,9 @@ def plot_lrn_crv(rslt:list, metric_name:str='score',
         ax.fill_between(tr_shards, scores_mean - scores_std, scores_mean + scores_std, alpha=0.1, color=color)
 
     # Plot learning curves
-    fig, ax = plt.subplots(figsize=figsize)
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        
     if tr_scores is not None:
         plot_single_crv(tr_shards, scores=tr_scores, ax=ax, color='b', phase='Train')
     if vl_scores is not None:
@@ -532,7 +497,7 @@ def plot_lrn_crv(rslt:list, metric_name:str='score',
     basex, xlabel_scale = scale_ticks_params(tick_scale=xtick_scale)
     basey, ylabel_scale = scale_ticks_params(tick_scale=ytick_scale)
 
-    ax.set_xlabel(f'Train dataset size ({xlabel_scale})')
+    ax.set_xlabel(f'Train Dataset Size ({xlabel_scale})')
     if 'log' in xlabel_scale.lower(): ax.set_xscale('log', basex=basex)
 
     ylbl = ' '.join(s.capitalize() for s in metric_name.split('_'))
@@ -551,7 +516,7 @@ def plot_lrn_crv(rslt:list, metric_name:str='score',
 
     # Save fig
     if path is not None: plt.savefig(path, bbox_inches='tight')
-    return fig, ax
+    return ax
 
 
 def power_law_func(x, alpha, beta, gamma):
@@ -559,23 +524,38 @@ def power_law_func(x, alpha, beta, gamma):
     return alpha * np.power(x, beta) + gamma
     
     
-def fit_power_law(x, y, p0: list=[30, -0.3, 0.5]):
-    """ Fit learning curve data (train set size vs ) to power-law.
+def power_law_func_(x, alpha, beta, gamma1, gamma2):
+    """ docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.power.html """
+    return alpha * np.power(x, beta) + gamma1 + gamma2
+    
+    
+def fit_power_law(x, y, p0:list=[30, -0.3, 0.06]):
+    """ Fit learning curve data (train set size vs metric) to power-law.
     TODO: How should we fit the data across multiple folds? This can
     be addressed using Bayesian methods (look at Bayesian linear regression).
     The uncertainty of parameters indicates the consistency of across folds.
     """
     prms, prms_cov = optimize.curve_fit(power_law_func, x, y, p0=p0)
     prms_dct = {}
-    prms_dct['alpha'] = prms[0]
-    prms_dct['beta'] = prms[1]
-    prms_dct['gamma'] = prms[2]
+    prms_dct['alpha'], prms_dct['beta'], prms_dct['gamma'] = prms[0], prms[1], prms[2]
+    return prms_dct
+
+
+def fit_power_law_(x, y, p0:list=[30, -0.3, 0.06, 0.12]):
+    """ Fit learning curve data (train set size vs metric) to power-law. """
+    prms, prms_cov = optimize.curve_fit(power_law_func_, x, y, p0=p0)
+    prms_dct = {}
+    prms_dct['alpha'], prms_dct['beta'], prms_dct['gamma1'], prms_dct['gamma2'] = prms[0], prms[1], prms[2], prms[3]
     return prms_dct
 
 
 def plot_lrn_crv_power_law(x, y, plot_fit:bool=True, metric_name:str='score',
                            xtick_scale:str='log2', ytick_scale:str='log2',
                            xlim:list=None, ylim:list=None, title:str=None, figsize=(7,5)):
+    """ ... """
+    x = x.ravel()
+    y = y.ravel()
+    
     fontsize = 13
     fig, ax = plt.subplots(figsize=figsize)
     ax.plot(x, y, '.-', color=None, label='data');
@@ -583,6 +563,8 @@ def plot_lrn_crv_power_law(x, y, plot_fit:bool=True, metric_name:str='score',
     # Fit power-law
     power_law_params = fit_power_law(x, y)
     yfit = power_law_func(x, **power_law_params)
+    # power_law_params_ = fit_power_law(x, y)
+    # yfit = power_law_func_(x, **power_law_params_)
     if plot_fit: ax.plot(x, yfit, '--', color=None, label='fit');    
         
     basex, xlabel_scale = scale_ticks_params(tick_scale=xtick_scale)
@@ -601,10 +583,12 @@ def plot_lrn_crv_power_law(x, y, plot_fit:bool=True, metric_name:str='score',
     # Add equation (text) on the plot
     # matplotlib.org/3.1.1/gallery/text_labels_and_annotations/usetex_demo.html#sphx-glr-gallery-text-labels-and-annotations-usetex-demo-py
     # eq = r"$\varepsilon_{mae}(m) = \alpha m^{\beta} + \gamma$" + rf"; $\alpha$={power_law_params['alpha']:.2f}, $\beta$={power_law_params['beta']:.2f}, $\gamma$={power_law_params['gamma']:.2f}"
-    eq = r"$\varepsilon(m) = \alpha m^{\beta}$" + rf"; $\alpha$={power_law_params['alpha']:.2f}, $\beta$={power_law_params['beta']:.2f}"
     # eq = rf"$\varepsilon(m) = {power_law_params['alpha']:.2f} m^{power_law_params['beta']:.2f} + {power_law_params['gamma']:.2f}$" # TODO: make this work
-    xloc = 1.4 * x.ravel().min()
-    yloc = y.ravel().min() + 0.9*(y.ravel().max()-y.ravel().min())
+    
+    eq = r"$\varepsilon(m) = \alpha m^{\beta}$" + rf"; $\alpha$={power_law_params['alpha']:.2f}, $\beta$={power_law_params['beta']:.2f}"
+    # xloc = 2.0 * x.ravel().min()
+    xloc = x.min() + 0.1*(x.max() - x.min())
+    yloc = y.min() + 0.9*(y.max() - y.min())
     ax.text(xloc, yloc, eq,
             {'color': 'black', 'fontsize': fontsize, 'ha': 'left', 'va': 'center',
              'bbox': {'boxstyle':'round', 'fc':'white', 'ec':'black', 'pad':0.2}})
@@ -619,6 +603,70 @@ def plot_lrn_crv_power_law(x, y, plot_fit:bool=True, metric_name:str='score',
     ax.legend(loc='best', frameon=True, fontsize=fontsize)
     ax.grid(True)
     return fig, ax, power_law_params
+
+
+
+
+# Define custom metric to calc auroc from regression
+# scikit-learn.org/stable/modules/model_evaluation.html#scoring
+def reg_auroc(y_true, y_pred, th=0.5):
+    """ Compute area under the ROC for regression. """
+    y_true = np.where(y_true < th, 1, 0)
+    y_score = np.where(y_pred < th, 1, 0)
+    reg_auroc_score = sklearn.metrics.roc_auc_score(y_true, y_score)
+    return reg_auroc_score
+
+
+def reg_auroc_score():
+    return sklearn.metrics.make_scorer(score_func=reg_auroc, greater_is_better=True)    
+
+
+def calc_preds(model, x, y, mltype):
+    """ Calc predictions. """
+    if mltype == 'cls':    
+        if y.ndim > 1 and y.shape[1] > 1:
+            y_pred = model.predict_proba(x)
+            y_pred = np.argmax(y_pred, axis=1)
+            y_true = np.argmax(ydata, axis=1)
+        else:
+            y_pred = model.predict_proba(x)
+            y_pred = np.argmax(y_pred, axis=1)
+            y_true = y
+            
+    elif mltype == 'reg':
+        y_pred = model.predict(x)
+        y_true = y
+
+    return y_pred, y_true
+
+
+def calc_scores(y_true, y_pred, mltype, metrics=None):
+    """ Create dict of scores.
+    Args:
+        metrics : TODO allow to pass a string of metrics
+    """
+    scores = {}
+
+    if mltype == 'cls':    
+        scores['auroc'] = sklearn.metrics.roc_auc_score(y_true, y_pred)
+        scores['f1_score'] = sklearn.metrics.f1_score(y_true, y_pred, average='micro')
+        scores['acc_blnc'] = sklearn.metrics.balanced_accuracy_score(y_true, y_pred)
+
+    elif mltype == 'reg':
+        scores['r2'] = sklearn.metrics.r2_score(y_true=y_true, y_pred=y_pred)
+        scores['mean_absolute_error'] = sklearn.metrics.mean_absolute_error(y_true=y_true, y_pred=y_pred)
+        scores['median_absolute_error'] = sklearn.metrics.median_absolute_error(y_true=y_true, y_pred=y_pred)
+        scores['mean_squared_error'] = sklearn.metrics.mean_squared_error(y_true=y_true, y_pred=y_pred)
+        # scores['auroc_reg'] = reg_auroc(y_true=y_true, y_pred=y_pred)
+
+    # # https://scikit-learn.org/stable/modules/model_evaluation.html
+    # for metric_name, metric in metrics.items():
+    #     if isinstance(metric, str):
+    #         scorer = sklearn.metrics.get_scorer(metric_name) # get a scorer from string
+    #         scores[metric_name] = scorer(ydata, pred)
+    #     else:
+    #         scores[metric_name] = scorer(ydata, pred)
+    return scores
 
 
 def scores_to_df(scores_all):

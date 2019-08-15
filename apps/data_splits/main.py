@@ -33,7 +33,6 @@ SEED = 42
 
 
 # File path
-# file_path = os.path.dirname(os.path.realpath(__file__))
 file_path = Path(__file__).resolve().parent
 
 
@@ -91,6 +90,18 @@ def parse_args(args):
     return args
 
 
+def create_outdir(outdir, args, src):
+    l = [('cvf'+str(args['cv_folds']))] + args['cell_fea'] + args['drug_fea'] + [args['target_name']] 
+    if args['clr_mode'] is not None: l = [args['clr_mode']] + l
+    if 'nn' in args['model_name']: l = [args['opt']] + l
+                
+    name_sffx = '.'.join( [src] + [args['model_name']] + l )
+    outdir = Path(outdir) / name_sffx
+    # os.makedirs(outdir)
+    os.makedirs(outdir, exist_ok=True)
+    return outdir
+
+
 def split_size(x):
     """ Split size can be float (0, 1) or int.
     This function casts this value as needed. 
@@ -100,10 +111,7 @@ def split_size(x):
 
 
 def run(args):
-    t0 = time()
-
-    # dirpath = Path(args['dirpath'])
-    dirpath = None if args['dirpath'] is None else Path(args['dirpath'])
+    if args['dirpath'] is not None: dirpath = Path(args['dirpath'])
 
     # Combined
     dname = args['dname']
@@ -122,7 +130,6 @@ def run(args):
 
     te_size = split_size(args['te_size'])
     vl_size = split_size(args['vl_size'])
-    
 
     # Features 
     cell_fea = args['cell_fea']
@@ -148,34 +155,24 @@ def run(args):
     # -----------------------------------------------
     #       Ourdir and Logger
     # -----------------------------------------------
-    # Outdir
-    """
-    if dpath is not None: 
-        prffx = Path(dpath).name.split('.')[:-1]
-        prffx = '_'.join(prffx)
-        prffx = 'top6' if 'top6' in prffx else prffx
-    """
     if dirpath is not None:
         prffx = dirpath.name
-
     elif dname == 'combined':
         prffx = '_'.join(src)
 
     # fname = prffx + '_' + rna_norm + '_cv_' + cv_method
     fname = prffx + '_cv_' + cv_method
-    if te_method is not None:
-        fname = fname + '_te_' + te_method
+    if te_method is not None: fname = fname + '_te_' + te_method
 
     if dname == 'combined':
         fname = fname + '_' + rna_norm
-        if no_fibro:
-            fname = fname + '_no_fibro'
+        if no_fibro: fname = fname + '_no_fibro'
 
+    # Outdir
     run_outdir = OUTDIR / fname
     os.makedirs(run_outdir, exist_ok=True)
 
     # Logger
-    run_outdir = create_outdir(OUTDIR, args)
     lg = Logger(run_outdir/'logfile.log')
     lg.logger.info(f'File path: {file_path}')
     lg.logger.info(f'\n{pformat(args)}')
@@ -187,17 +184,6 @@ def run(args):
     # -----------------------------------------------
     #       Load data and pre-proc
     # -----------------------------------------------
-    """
-    if dpath is not None: 
-        if dpath.split('.')[-1] == 'parquet': 
-            data = pd.read_parquet(dpath, engine='auto', columns=None)
-        else:
-            data = pd.read_csv(dpath)
-        
-        # Split features and traget
-        ydata = data.loc[:, [target_name]]
-        xdata = data.drop(columns=target_name)
-    """
     if dirpath is not None:
         if (dirpath/'xdata.parquet').is_file():
             xdata = pd.read_parquet( dirpath/'xdata.parquet', engine='auto', columns=None )
@@ -207,8 +193,8 @@ def run(args):
         DATADIR = file_path / '../../data/processed/from_combined'
         file_format = '.parquet'
         fname = 'tidy_' + rna_norm
-        if no_fibro:
-            fname = fname + '_no_fibro'
+        if no_fibro: fname = fname + '_no_fibro'
+            
         DATAFILENAME = fname + file_format
         datapath = DATADIR / DATAFILENAME
 
@@ -229,6 +215,7 @@ def run(args):
     # -----------------------------------------------
     #       Train-test split
     # -----------------------------------------------
+    np.random.seed(SEED)
     idx_vec = np.random.permutation(xdata.shape[0])
 
     if te_method is not None:
@@ -238,32 +225,24 @@ def run(args):
 
         te_grp = meta[grp_by_col].values[idx_vec] if te_method=='group' else None
         if is_string_dtype(te_grp): te_grp = LabelEncoder().fit_transform(te_grp)
-
-        #if te_method=='simple':
-        #    te_grp = None
-        #elif te_method=='group':
-        #    te_grp = meta[grp_by_col].copy()
-        #    te_grp = te_grp.values[idx_vec]
-
-        #if is_string_dtype(te_grp): te_grp = LabelEncoder().fit_transform(te_grp)
    
         # Split train/test
         tr_id, te_id = next(te_splitter.split(idx_vec, groups=te_grp))
         tr_id = idx_vec[tr_id] # adjust the indices!
         te_id = idx_vec[te_id] # adjust the indices!
 
-        pd.Series(tr_id).to_csv(run_outdir/f'tr_id.csv', index=False, header=False)
-        pd.Series(te_id).to_csv(run_outdir/f'te_id.csv', index=False, header=False)
-
-        #te_ydata = ydata.iloc[te_id, :] 
-        #tr_ydata = ydata.iloc[tr_id, :]  
+        pd.Series(tr_id).to_csv(run_outdir/f'tr_id.csv', index=False, header=[0])
+        pd.Series(te_id).to_csv(run_outdir/f'te_id.csv', index=False, header=[0])
+        
+        lg.logger.info('Train: {:.1f}'.format( len(tr_id)/xdata.shape[0] ))
+        lg.logger.info('Test:  {:.1f}'.format( len(te_id)/xdata.shape[0] ))
         
         # Update the master idx vector for the CV splits
         idx_vec = tr_id
 
         # Plot dist of responses (TODO: this can be done to all response metrics)
-        #plot_ytr_yvl_dist(ytr=tr_ydata.values, yvl=te_ydata.values,
-        #        title='tr and te', outpath=run_outdir/'tr_te_resp_dist.png')
+        # plot_ytr_yvl_dist(ytr=tr_ydata.values, yvl=te_ydata.values,
+        #         title='tr and te', outpath=run_outdir/'tr_te_resp_dist.png')
 
         # Confirm that group splits are correct
         if te_method=='group' and grp_by_col is not None:
@@ -271,7 +250,10 @@ def run(args):
             te_grp_unq = set(meta.loc[te_id, grp_by_col])
             lg.logger.info(f'\tTotal group ({grp_by_col}) intersections btw tr and te: {len(tr_grp_unq.intersection(te_grp_unq))}.')
             lg.logger.info(f'\tA few intersections : {list(tr_grp_unq.intersection(te_grp_unq))[:3]}.')
-    
+
+        # Update vl_size to effective vl_size
+        vl_size = vl_size * xdata.shape[0]/len(tr_id)
+
         del tr_id, te_id
 
 
@@ -280,7 +262,7 @@ def run(args):
     # -----------------------------------------------
     cv_folds_list = [1, 5, 7, 10, 15, 20]
     lg.logger.info(f'\nStart CV splits ...')
-
+    
     for cv_folds in cv_folds_list:
         lg.logger.info(f'\nCV folds: {cv_folds}')
 
@@ -289,17 +271,9 @@ def run(args):
 
         cv_grp = meta[grp_by_col].values[idx_vec] if cv_method=='group' else None
         if is_string_dtype(cv_grp): cv_grp = LabelEncoder().fit_transform(cv_grp)
-
-        #if cv_method=='simple':
-        #    cv_grp = None
-        #elif cv_method=='group':
-        #    cv_grp = meta[grp_by_col].copy()
-        #    cv_grp = cv_grp.values[idx_vec]
-
-        #if is_string_dtype(cv_grp): cv_grp = LabelEncoder().fit_transform(cv_grp)
     
-        tr_folds = {} 
-        vl_folds = {} 
+        tr_folds = {}
+        vl_folds = {}
 
         # Start CV iters
         for fold, (tr_id, vl_id) in enumerate(cv.split(idx_vec, groups=cv_grp)):
@@ -318,7 +292,7 @@ def run(args):
                 lg.logger.info(f'\tUnique cell lines in vl: {len(vl_grp_unq)}.')
         
         # Convet to df
-        # from_dict takes too long  -->  stackoverflow.com/questions/19736080/
+        # from_dict takes too long  -->  faster described here: stackoverflow.com/questions/19736080/
         # tr_folds = pd.DataFrame.from_dict(tr_folds, orient='index').T 
         # vl_folds = pd.DataFrame.from_dict(vl_folds, orient='index').T
         tr_folds = pd.DataFrame(dict([ (k, pd.Series(v)) for k, v in tr_folds.items() ]))
@@ -341,4 +315,3 @@ def main(args):
 if __name__ == '__main__':
     """ __name__ == '__main__' explained: www.youtube.com/watch?v=sugvnHA7ElY """
     main(sys.argv[1:])
-

@@ -67,9 +67,9 @@ def parse_args(args):
     parser.add_argument('-t', '--target_name', default='AUC', type=str, choices=['AUC', 'AUC1', 'IC50'], help='Name of target variable (default: AUC).')
 
     # Select feature types
-    parser.add_argument('-cf', '--cell_features', nargs='+', default=['rna'], choices=['rna', 'cnv', 'clb'], help='Cell line features (default: rna).')
-    parser.add_argument('-df', '--drug_features', nargs='+', default=['dsc'], choices=['dsc', 'fng', 'dlb'], help='Drug features (default: dsc).')
-    parser.add_argument('-of', '--other_features', default=[], choices=[],
+    parser.add_argument('-cf', '--cell_fea', nargs='+', default=['rna'], choices=['rna', 'cnv', 'clb'], help='Cell line features (default: rna).')
+    parser.add_argument('-df', '--drug_fea', nargs='+', default=['dsc'], choices=['dsc', 'fng', 'dlb'], help='Drug features (default: dsc).')
+    parser.add_argument('-of', '--other_fea', default=[], choices=[],
             help='Other feature types (derived from cell lines and drugs). E.g.: cancer type, etc).') # ['cell_labels', 'drug_labels', 'ctype', 'csite', 'rna_clusters']
 
     # Data split methods
@@ -111,7 +111,7 @@ def create_outdir(outdir, args, src):
     t = [t.year, '-', t.month, '-', t.day, '_', 'h', t.hour, '-', 'm', t.minute]
     t = ''.join([str(i) for i in t])
     
-    l = [('cvf'+str(args['cv_folds']))] + args['cell_features'] + args['drug_features'] + [args['target_name']] 
+    l = [('cvf'+str(args['cv_folds']))] + args['cell_fea'] + args['drug_fea'] + [args['target_name']] 
     if args['clr_mode'] is not None: l = [args['clr_mode']] + l
     if 'nn' in args['model_name']: l = [args['opt']] + l
                 
@@ -135,9 +135,9 @@ def run(args):
     cv_folds = args['cv_folds']
 
     # Features 
-    cell_fea = args['cell_features']
-    drug_fea = args['drug_features']
-    other_fea = args['other_features']
+    cell_fea = args['cell_fea']
+    drug_fea = args['drug_fea']
+    other_fea = args['other_fea']
     fea_list = cell_fea + drug_fea + other_fea    
 
     # NN params
