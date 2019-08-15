@@ -298,7 +298,7 @@ def run(args):
             init_kwargs=init_kwargs, fit_kwargs=fit_kwargs, clr_keras_kwargs=clr_keras_kwargs,
             n_jobs=n_jobs, random_state=SEED )
 
-        lg.logger.info('Runtime: {:.1f} hrs'.format( (time()-t0)/360) )
+        lg.logger.info('Runtime: {:.1f} hrs'.format( (time()-t0)/3600) )
 
 
         # -------------------------------------------------

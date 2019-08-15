@@ -228,7 +228,7 @@ def run(args):
             args = args,
             metrics = metrics,
             n_jobs = n_jobs, random_state = SEED, logger = lg.logger, outdir = run_outdir)
-        lg.logger.info('Runtime: {:.1f} hrs'.format( (time()-t0)/360) )
+        lg.logger.info('Runtime: {:.1f} hrs'.format( (time()-t0)/3600) )
 
         lg.kill_logger()
         del xdata, ydata

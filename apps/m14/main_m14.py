@@ -111,14 +111,21 @@ def create_outdir(outdir, args, src):
     return outdir
 
 
-def define_keras_callbacks(outdir):
-    checkpointer = ModelCheckpoint(str(outdir/'model_best.h5'), verbose=0, save_weights_only=False, save_best_only=True)
-    csv_logger = CSVLogger(outdir/'training.log')
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
-                                  min_delta=0.0001, cooldown=3, min_lr=0.000000001)
-    # early_stop = EarlyStopping(monitor='val_loss', patience=100, verbose=1)
-    early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1)
-    return [checkpointer, csv_logger, early_stop, reduce_lr]
+# def define_keras_callbacks(outdir):
+#     # checkpointer = ModelCheckpoint(str(outdir/'model_best.h5'), verbose=0, save_weights_only=False, save_best_only=True)
+    
+#     model_checkpoint_dir = outdir/'models'
+#     os.makedirs(model_checkpoint_dir, exist_ok=True)
+#     checkpointer = ModelCheckpoint(
+#             str(model_checkpoint_dir/'model.ep_{epoch:d}-val_loss_{val_loss:.4f}-val_mae_{val_mean_absolute_error:.4f}.h5'),
+#             save_best_only=False)    
+    
+#     csv_logger = CSVLogger(outdir/'training.log')
+#     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
+#                                   min_delta=0.0001, cooldown=3, min_lr=0.000000001)
+#     # early_stop = EarlyStopping(monitor='val_loss', patience=100, verbose=1)
+#     early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1)
+#     return [checkpointer, csv_logger, early_stop, reduce_lr]
 
 
 def calc_preds(model, x, y, mltype):
@@ -312,7 +319,20 @@ def run(args):
         model = estimator.model
         
         keras.utils.plot_model(model, to_file=run_outdir/'nn_model.png')
-        keras_callbacks = define_keras_callbacks(run_outdir)
+        
+        # keras_callbacks = define_keras_callbacks(run_outdir)
+
+        # Callbacks
+        model_checkpoint_dir = run_outdir/'models'
+        os.makedirs(model_checkpoint_dir, exist_ok=True)
+        checkpointer = ModelCheckpoint(
+                str(model_checkpoint_dir/'model.ep_{epoch:d}-val_loss_{val_loss:.4f}-val_mae_{val_mean_absolute_error:.4f}.h5'),
+                save_best_only=False)
+        csv_logger = CSVLogger(run_outdir/'training.log')
+        reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.75, patience=20, verbose=1, mode='auto',
+                                      min_delta=0.0001, cooldown=3, min_lr=0.000000001)
+        early_stop = EarlyStopping(monitor='val_loss', patience=60, verbose=1)
+        keras_callbacks = [checkpointer, csv_logger, early_stop, reduce_lr]        
         
         if clr_keras_kwargs['mode'] is not None:
             keras_callbacks.append( ml_models.clr_keras_callback(**clr_keras_kwargs) )        
@@ -324,15 +344,21 @@ def run(args):
         # Train
         t0 = time()
         history = model.fit(xtr, ytr, **fit_kwargs)
-        lg.logger.info('Runtime: {:.1f} hrs'.format( (time()-t0)/360) )
-       
-        # Multi-gpu training
-        keras.utils.multi_gpu_model(model, gpus=[0, 1], cpu_merge=True, cpu_relocation=False)
-
-        # Log
-        ml_models.save_krs_history(history, outdir=run_outdir)
+        lg.logger.info('Runtime: {:.1f} hrs'.format( (time()-t0)/3600 ) )
+    
+        # Dump model, history, plots
+        model.save( str(run_outdir/'model_final.h5') )
+        h = ml_models.save_krs_history(history, outdir=run_outdir)
         ml_models.plot_prfrm_metrics(history, title=f'Training', skp_ep=skp_ep, add_lr=True, outdir=run_outdir)
+    
+        # Multi-gpu training
+        # keras.utils.multi_gpu_model(model, gpus=[0, 1], cpu_merge=True, cpu_relocation=False)
 
+        # Load the best model to make preds
+        ep_best = h.loc[ h['val_mean_absolute_error']==h['val_mean_absolute_error'].min(), 'epoch' ].values[0]
+        mpath = glob(str(model_checkpoint_dir/f'model.ep_{ep_best}-val_loss*.h5'))[0]
+        model = load_model(mpath)        
+        
         # Calc preds and scores
         # ... training set
         y_pred, y_true = calc_preds(model, x=xtr, y=ytr, mltype=mltype)
