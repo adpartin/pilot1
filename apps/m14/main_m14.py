@@ -104,10 +104,10 @@ def create_outdir(outdir, args, src):
     if 'nn' in args['model_name']: l = [args['opt']] + l
                 
     name_sffx = '.'.join( [src] + [args['model_name']] + l )
-    # outdir = Path(outdir) / (name_sffx + '_' + t)
-    outdir = Path(outdir) / name_sffx
-    # os.makedirs(outdir)
-    os.makedirs(outdir, exist_ok=True)
+    outdir = Path(outdir) / (name_sffx + '_' + t)
+    # outdir = Path(outdir) / name_sffx
+    os.makedirs(outdir)
+    # os.makedirs(outdir, exist_ok=True)
     return outdir
 
 
@@ -160,11 +160,7 @@ def calc_scores(y_true, y_pred, mltype, metrics=None):
 
 def run(args):
     dirpath = Path(args['dirpath'])
-   
-    # Target
     target_name = args['target_name']
-
-    # Data split 
     cv_folds = args['cv_folds']
 
     # Features 
@@ -253,7 +249,7 @@ def run(args):
 
     # Test set
     xte = xdata.iloc[te_id, :]
-    yte = np.squeeze(ydata.iloc[te_id, :])   
+    yte = np.squeeze(ydata.iloc[te_id, :]).values 
 
 
     # -----------------------------------------------
@@ -305,11 +301,11 @@ def run(args):
 
         # Samples from this dataset are randomly sampled for training
         xtr = xdata.iloc[tr_id, :]
-        ytr = ydata.iloc[tr_id, :]
+        ytr = np.squeeze(ydata.iloc[tr_id, :]).values
 
         # A fixed set of validation samples for the current CV split
         xvl = xdata.iloc[vl_id, :]
-        yvl = np.squeeze(ydata.iloc[vl_id, :])   
+        yvl = np.squeeze(ydata.iloc[vl_id, :]).values 
         
         # Get the estimator
         estimator = ml_models.get_model(model_name, init_kwargs=init_kwargs)
@@ -331,7 +327,7 @@ def run(args):
         lg.logger.info('Runtime: {:.1f} hrs'.format( (time()-t0)/360) )
        
         # Multi-gpu training
-        # keras.utils.multi_gpu_model(model, gpus=[0, 1], cpu_merge=True, cpu_relocation=False)
+        keras.utils.multi_gpu_model(model, gpus=[0, 1], cpu_merge=True, cpu_relocation=False)
 
         # Log
         ml_models.save_krs_history(history, outdir=run_outdir)
@@ -341,17 +337,17 @@ def run(args):
         # ... training set
         y_pred, y_true = calc_preds(model, x=xtr, y=ytr, mltype=mltype)
         tr_scores = calc_scores(y_true=y_true, y_pred=y_pred, mltype=mltype, metrics=None)
-        pd.DataFrame({'y_true': y_true, 'y_pred': y_pred.reshape(-1)}).to_csv(run_outdir/'tr_preds.csv', index=False)
+        pd.DataFrame({'y_true': y_true.reshape(-1), 'y_pred': y_pred.reshape(-1,)}).to_csv(run_outdir/'tr_preds.csv', index=False)
         # ... val set
         y_pred, y_true = calc_preds(model, x=xvl, y=yvl, mltype=mltype)
         vl_scores = calc_scores(y_true=y_true, y_pred=y_pred, mltype=mltype, metrics=None)        
-        pd.DataFrame({'y_true': y_true, 'y_pred': y_pred.reshape(-1)}).to_csv(run_outdir/'vl_preds.csv', index=False)
+        pd.DataFrame({'y_true': y_true.reshape(-1,), 'y_pred': y_pred.reshape(-1,)}).to_csv(run_outdir/'vl_preds.csv', index=False)
 
         
     # Calc preds and scores for test set
     y_pred, y_true = calc_preds(model, x=xte, y=yte, mltype=mltype)
     te_scores = calc_scores(y_true=y_true, y_pred=y_pred, mltype=mltype, metrics=None)        
-    pd.DataFrame({'y_true': y_true, 'y_pred': y_pred.reshape(-1)}).to_csv(run_outdir/'te_preds.csv', index=False)
+    pd.DataFrame({'y_true': y_true.reshape(-1), 'y_pred': y_pred.reshape(-1,)}).to_csv(run_outdir/'te_preds.csv', index=False)
 
         
     lg.kill_logger()

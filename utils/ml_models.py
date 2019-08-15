@@ -181,6 +181,62 @@ def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
         plt.close()
         
 
+def plot_metrics_from_logs(path_to_logs, title=None, skp_ep=0, outdir='.', add_lr=False):
+    """ Plots keras training from logs.
+    Args:
+        skp_ep: number of epochs to skip when plotting metrics 
+    """
+    history = pd.read_csv(path_to_logs, sep=',', header=0)
+    
+    all_metrics = list(history.columns)
+    pr_metrics = ['_'.join(m.split('_')[1:]) for m in all_metrics if 'val' in m]
+
+    epochs = history['epoch'] + 1
+    if len(epochs) <= skp_ep: skp_ep = 0
+    eps = epochs[skp_ep:]
+    hh = history
+    
+    for p, m in enumerate(pr_metrics):
+        metric_name = m
+        metric_name_val = 'val_' + m
+
+        y_tr = hh[metric_name][skp_ep:]
+        y_vl = hh[metric_name_val][skp_ep:]
+        
+        ymin = min(set(y_tr).union(y_vl))
+        ymax = max(set(y_tr).union(y_vl))
+        lim = (ymax - ymin) * 0.1
+        ymin, ymax = ymin - lim, ymax + lim
+
+        # Start figure
+        fig, ax1 = plt.subplots()
+        
+        # Plot metrics
+        ax1.plot(eps, y_tr, color='b', marker='.', linestyle='-', linewidth=1, alpha=0.6, label=metric_name)
+        ax1.plot(eps, y_vl, color='r', marker='.', linestyle='--', linewidth=1, alpha=0.6, label=metric_name_val)
+        ax1.set_xlabel('Epoch')
+        ylabel = ' '.join(s.capitalize() for s in metric_name.split('_'))
+        ax1.set_ylabel(ylabel)
+        ax1.set_xlim([min(eps)-1, max(eps)+1])
+        ax1.set_ylim([ymin, ymax])
+        ax1.tick_params('y', colors='k')
+        
+        ax1.grid(True)
+        # plt.legend([metric_name, metric_name_val], loc='best')
+        # medium.com/@samchaaa/how-to-plot-two-different-scales-on-one-plot-in-matplotlib-with-legend-46554ba5915a
+        legend = ax1.legend(loc='best', prop={'size': 10})
+        frame = legend.get_frame()
+        frame.set_facecolor('0.95')
+        if title is not None: plt.title(title)
+        
+        # fig.tight_layout()
+        figpath = Path(outdir) / (metric_name+'.png')
+        plt.savefig(figpath, bbox_inches='tight')
+        plt.close()
+        
+    return history
+        
+        
 class Attention(keras.layers.Layer):
     def __init__(self, output_dim, **kwargs):
         self.output_dim = output_dim
