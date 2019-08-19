@@ -173,7 +173,7 @@ def run(args):
     # Features 
     cell_fea = args['cell_fea']
     drug_fea = args['drug_fea']
-    fea_list = cell_fea + drug_fea # + other_fea
+    fea_list = cell_fea + drug_fea
 
     # NN params
     epochs = args['epochs']
@@ -200,6 +200,18 @@ def run(args):
         raise ValueError("model_name must contain 'reg' or 'cls'.")
 
     src = dirpath.name.split('_')[0]
+    
+
+    # -----------------------------------------------
+    #       Create outdir and logger
+    # -----------------------------------------------
+    run_outdir = create_outdir(OUTDIR, args, src)
+    lg = Logger(run_outdir/'logfile.log')
+    lg.logger.info(f'File path: {file_path}')
+    lg.logger.info(f'\n{pformat(args)}')
+
+    # Dump args to file
+    utils.dump_dict(args, outpath=run_outdir/'args.txt')        
     
     
     # -----------------------------------------------
@@ -235,13 +247,15 @@ def run(args):
     te_id = te_id.iloc[:, 0].dropna().values.astype(int).tolist() 
         
 
-    # Load data    
+    # Load data
+    lg.logger.info(f'\nLoading data ...')
     xdata = read_data_file( dirpath/'xdata.parquet', 'parquet' )
     meta  = read_data_file( dirpath/'meta.parquet', 'parquet' )
     ydata = meta[[target_name]]
         
 
     # Scale
+    lg.logger.info(f'\nScaling data ...')
     scaler = args['scaler']
     if scaler is not None:
         if scaler == 'stnd':
@@ -256,19 +270,7 @@ def run(args):
 
     # Test set
     xte = xdata.iloc[te_id, :]
-    yte = np.squeeze(ydata.iloc[te_id, :]).values 
-
-
-    # -----------------------------------------------
-    #       Create outdir and logger
-    # -----------------------------------------------
-    run_outdir = create_outdir(OUTDIR, args, src)
-    lg = Logger(run_outdir/'logfile.log')
-    lg.logger.info(f'File path: {file_path}')
-    lg.logger.info(f'\n{pformat(args)}')
-
-    # Dump args to file
-    utils.dump_dict(args, outpath=run_outdir/'args.txt')        
+    yte = np.squeeze(ydata.iloc[te_id, :]).values     
 
 
     # -----------------------------------------------
@@ -319,10 +321,9 @@ def run(args):
         model = estimator.model
         
         keras.utils.plot_model(model, to_file=run_outdir/'nn_model.png')
-        
-        # keras_callbacks = define_keras_callbacks(run_outdir)
 
         # Callbacks
+        # keras_callbacks = define_keras_callbacks(run_outdir)
         model_checkpoint_dir = run_outdir/'models'
         os.makedirs(model_checkpoint_dir, exist_ok=True)
         checkpointer = ModelCheckpoint(

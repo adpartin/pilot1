@@ -50,7 +50,7 @@ def clr_keras_callback(mode=None, base_lr=1e-4, max_lr=1e-3, gamma=0.999994):
     elif mode == 'trng2':
         clr = CyclicLR(base_lr=base_lr, max_lr=max_lr, mode='triangular2')
     elif mode == 'exp':
-        clr = CyclicLR(base_lr=base_lr, max_lr=max_lr, mode='exp_range', gamma=clr_gamma) # 0.99994; 0.99999994; 0.999994
+        clr = CyclicLR(base_lr=base_lr, max_lr=max_lr, mode='exp_range', gamma=gamma) # 0.99994; 0.99999994; 0.999994
     return clr
 
 
@@ -100,6 +100,13 @@ def save_krs_history(history, outdir='.'):
     fname = 'krs_history.csv'
     h = pd.DataFrame(history.history)
     h['epoch'] = np.asarray(history.epoch) + 1
+    
+    if 'lr' in hh:
+        h['epoch']
+        ax2 = ax1.twinx()
+        ax2.plot(eps, hh['lr'][skp_ep:], color='g', marker='.', linestyle=':', linewidth=1,
+                 alpha=0.6, markersize=5, label='LR')
+    
     h.to_csv( Path(outdir)/fname, index=False )
     return h
 
@@ -115,8 +122,12 @@ def save_krs_history(history, outdir='.'):
 #     return pr_metrics
 
 
+def capitalize_metric(met):
+    return ' '.join(s.capitalize() for s in met.split('_'))
+
+
 def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
-    """ Plots keras training history.
+    """ Plots keras training curves history.
     Args:
         skp_ep: number of epochs to skip when plotting metrics 
         add_lr: add curve of learning rate progression over epochs
@@ -128,7 +139,7 @@ def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
     if len(epochs) <= skp_ep: skp_ep = 0
     eps = epochs[skp_ep:]
     hh = history.history
-    
+        
     for p, m in enumerate(pr_metrics):
         metric_name = m
         metric_name_val = 'val_' + m
@@ -145,11 +156,13 @@ def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
         fig, ax1 = plt.subplots()
         
         # Plot metrics
-        ax1.plot(eps, y_tr, color='b', marker='.', linestyle='-', linewidth=1, alpha=0.6, label=metric_name)
-        ax1.plot(eps, y_vl, color='r', marker='.', linestyle='--', linewidth=1, alpha=0.6, label=metric_name_val)
+        # ax1.plot(eps, y_tr, color='b', marker='.', linestyle='-', linewidth=1, alpha=0.6, label=metric_name)
+        # ax1.plot(eps, y_vl, color='r', marker='.', linestyle='--', linewidth=1, alpha=0.6, label=metric_name_val)
+        ax1.plot(eps, y_tr, color='b', marker='.', linestyle='-', linewidth=1, alpha=0.6, label=capitalize_metric(metric_name))
+        ax1.plot(eps, y_vl, color='r', marker='.', linestyle='--', linewidth=1, alpha=0.6, label=capitalize_metric(metric_name_val))
         ax1.set_xlabel('Epoch')
-        ylabel = ' '.join(s.capitalize() for s in metric_name.split('_'))
-        ax1.set_ylabel(ylabel)
+        # ylabel = ' '.join(s.capitalize() for s in metric_name.split('_'))
+        ax1.set_ylabel(capitalize_metric(metric_name))
         ax1.set_xlim([min(eps)-1, max(eps)+1])
         ax1.set_ylim([ymin, ymax])
         ax1.tick_params('y', colors='k')
@@ -181,9 +194,10 @@ def plot_prfrm_metrics(history, title=None, skp_ep=0, outdir='.', add_lr=False):
         plt.close()
         
 
-def plot_metrics_from_logs(path_to_logs, title=None, skp_ep=0, outdir='.', add_lr=False):
+def plot_metrics_from_logs(path_to_logs, title=None, name=None, skp_ep=0, outdir='.'):
     """ Plots keras training from logs.
     Args:
+        path_to_logs : full path to log file
         skp_ep: number of epochs to skip when plotting metrics 
     """
     history = pd.read_csv(path_to_logs, sep=',', header=0)
@@ -212,10 +226,13 @@ def plot_metrics_from_logs(path_to_logs, title=None, skp_ep=0, outdir='.', add_l
         fig, ax1 = plt.subplots()
         
         # Plot metrics
-        ax1.plot(eps, y_tr, color='b', marker='.', linestyle='-', linewidth=1, alpha=0.6, label=metric_name)
-        ax1.plot(eps, y_vl, color='r', marker='.', linestyle='--', linewidth=1, alpha=0.6, label=metric_name_val)
+        # ax1.plot(eps, y_tr, color='b', marker='.', linestyle='-', linewidth=1, alpha=0.6, label=metric_name)
+        # ax1.plot(eps, y_vl, color='r', marker='.', linestyle='--', linewidth=1, alpha=0.6, label=metric_name_val)
+        ax1.plot(eps, y_tr, color='b', marker='.', linestyle='-', linewidth=1, alpha=0.6, label=capitalize_metric(metric_name))
+        ax1.plot(eps, y_vl, color='r', marker='.', linestyle='--', linewidth=1, alpha=0.6, label=capitalize_metric(metric_name_val))        
         ax1.set_xlabel('Epoch')
-        ylabel = ' '.join(s.capitalize() for s in metric_name.split('_'))
+        # ylabel = ' '.join(s.capitalize() for s in metric_name.split('_'))
+        ax1.set_ylabel(capitalize_metric(metric_name))
         ax1.set_ylabel(ylabel)
         ax1.set_xlim([min(eps)-1, max(eps)+1])
         ax1.set_ylim([ymin, ymax])
@@ -230,7 +247,11 @@ def plot_metrics_from_logs(path_to_logs, title=None, skp_ep=0, outdir='.', add_l
         if title is not None: plt.title(title)
         
         # fig.tight_layout()
-        figpath = Path(outdir) / (metric_name+'.png')
+        if name is not None:
+            fname = name + '_' + metric_name + '.png'
+        else:
+            fname = metric_name + '.png'
+        figpath = Path(outdir) / fname
         plt.savefig(figpath, bbox_inches='tight')
         plt.close()
         
